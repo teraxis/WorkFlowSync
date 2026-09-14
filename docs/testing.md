@@ -32,6 +32,7 @@ If a command cannot run, record the exact reason and the next step needed.
 ## Current Status (2026-09-14, Stage 4 + per-pair controls)
 
 - `dotnet build -warnaserror`: OK.
+- UI reviewed on screenshots in both themes (folders / activity / settings); `--page <0|1|2>` opens a page directly.
 - `dotnet test`: 73 passed — adds `AutoCheckPersistenceTests` (4: checker follows the pair states, toggle persists and survives a restart, other unsaved edits defer it, legacy default), `PerPairControlTests` (5: paused pair skipped, explicit single-pair run overrides pause,
   unknown pair reported, `enabled` round-trip and legacy default, run-one-pair from the view-model), `TrayModeTests` (3: background loop start/pause/resume against real folders,
   Startup shortcut mode round-trip, app.ico structure). The tray icon itself needs a running Avalonia app, so it is

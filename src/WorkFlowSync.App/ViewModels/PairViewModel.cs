@@ -1,3 +1,5 @@
+
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using WorkFlowSync.Core.Config;
 
@@ -26,10 +28,28 @@ public sealed partial class PairViewModel : ObservableObject
     /// <summary>True while this very pair is being synchronised (drives the row's buttons).</summary>
     [ObservableProperty] private bool _isBusy;
 
-    /// <summary>Play/pause glyph of the single state button.</summary>
+    /// <summary>Play/pause icon of the single state button (geometry from Styles/Icons.axaml).</summary>
+    public Geometry? ToggleIcon => Icon(Enabled ? "IconPauseFill" : "IconPlayFill");
     public string ToggleGlyph => Enabled ? "⏸" : "▶";
     public string ToggleTip => Enabled ? "Призупинити автоматичну перевірку цієї пари" : "Запустити: перевіряти цю пару автоматично за інтервалом";
     public string StateSummary => IsBusy ? "перевіряється…" : Enabled ? "виконується" : "на паузі";
+
+    /// <summary>One line of secondary facts under the paths.</summary>
+    public string Facts
+    {
+        get
+        {
+            var parts = new List<string> { LinksSummary, $"зберігати: {RetentionSummary}" };
+            if (ExcludeCount > 0) parts.Add($"виключень: {ExcludeCount}");
+            return string.Join("   ·   ", parts);
+        }
+    }
+
+    private static Geometry? Icon(string key)
+    {
+        var app = Avalonia.Application.Current;
+        return app is not null && app.TryGetResource(key, app.ActualThemeVariant, out var value) ? value as Geometry : null;
+    }
 
     public string LinksSummary => Links switch
     {
@@ -81,6 +101,8 @@ public sealed partial class PairViewModel : ObservableObject
 
     public void RaiseSummaries()
     {
+        OnPropertyChanged(nameof(Facts));
+        OnPropertyChanged(nameof(ToggleIcon));
         OnPropertyChanged(nameof(ToggleGlyph));
         OnPropertyChanged(nameof(ToggleTip));
         OnPropertyChanged(nameof(StateSummary));
@@ -94,6 +116,7 @@ public sealed partial class PairViewModel : ObservableObject
 
     partial void OnEnabledChanged(bool value)
     {
+        OnPropertyChanged(nameof(ToggleIcon));
         OnPropertyChanged(nameof(ToggleGlyph));
         OnPropertyChanged(nameof(ToggleTip));
         OnPropertyChanged(nameof(StateSummary));
@@ -101,8 +124,14 @@ public sealed partial class PairViewModel : ObservableObject
 
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(StateSummary));
 
-    partial void OnHasRetentionChanged(bool value) => OnPropertyChanged(nameof(RetentionSummary));
-    partial void OnRetentionDaysChanged(int value) => OnPropertyChanged(nameof(RetentionSummary));
-    partial void OnLinksChanged(LinkMode value) => OnPropertyChanged(nameof(LinksSummary));
-    partial void OnExcludeTextChanged(string value) => OnPropertyChanged(nameof(ExcludeCount));
+    partial void OnHasRetentionChanged(bool value) => RaiseFacts(nameof(RetentionSummary));
+    partial void OnRetentionDaysChanged(int value) => RaiseFacts(nameof(RetentionSummary));
+    partial void OnLinksChanged(LinkMode value) => RaiseFacts(nameof(LinksSummary));
+    partial void OnExcludeTextChanged(string value) => RaiseFacts(nameof(ExcludeCount));
+
+    private void RaiseFacts(string name)
+    {
+        OnPropertyChanged(name);
+        OnPropertyChanged(nameof(Facts));
+    }
 }

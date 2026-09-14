@@ -22,6 +22,7 @@ public partial class PairDialog : Window
         InitializeComponent();
         DataContext = draft;
         Title = editing is null ? "Нова пара папок" : $"Пара папок — {editing.Name}";
+        HeaderText.Text = editing is null ? "Нова пара" : $"Пара «{editing.Name}»";
     }
 
     private async void OnBrowseSource(object? sender, RoutedEventArgs e)

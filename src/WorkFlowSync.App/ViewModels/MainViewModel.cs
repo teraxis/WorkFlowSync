@@ -15,10 +15,37 @@ public sealed partial class MainViewModel : ObservableObject
 {
     public string ConfigPath { get; }
     public string Title => $"{WorkFlowSyncInfo.Name} {WorkFlowSyncInfo.Version}";
+    public string Version => $"версія {WorkFlowSyncInfo.Version}";
 
     public ObservableCollection<PairViewModel> Pairs { get; } = new();
 
     [ObservableProperty] private PairViewModel? _selectedPair;
+
+    /// <summary>Which page the navigation rail shows: 0 folders, 1 activity, 2 settings.</summary>
+    [ObservableProperty] private int _selectedPage;
+
+    public bool IsFoldersPage => SelectedPage == 0;
+    public bool IsActivityPage => SelectedPage == 1;
+    public bool IsSettingsPage => SelectedPage == 2;
+
+    public string PageTitle => SelectedPage switch
+    {
+        0 => "Папки",
+        1 => "Синхронізація",
+        _ => "Налаштування",
+    };
+
+    public string PageSubtitle => SelectedPage switch
+    {
+        0 => "Мережеві папки, за якими стежимо, і їхні локальні дзеркала",
+        1 => "Поточний стан, ручний запуск і журнал проходів",
+        _ => "Розклад, автозапуск, вигляд і службові файли",
+    };
+
+    public IReadOnlyList<AppTheme> Themes { get; } = new[] { AppTheme.System, AppTheme.Light, AppTheme.Dark };
+
+    /// <summary>Applied immediately and remembered in the config.</summary>
+    [ObservableProperty] private AppTheme _theme = AppTheme.System;
 
     // Settings tab
     [ObservableProperty] private int _intervalMinutes = 30;
@@ -75,8 +102,11 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    private bool _loading;
+
     private void Apply(SyncConfig cfg)
     {
+        _loading = true;
         Pairs.Clear();
         foreach (var p in cfg.Pairs) Pairs.Add(PairViewModel.FromModel(p));
         IntervalMinutes = Math.Max(1, (int)Math.Round(cfg.Interval.TotalMinutes));
@@ -84,6 +114,8 @@ public sealed partial class MainViewModel : ObservableObject
         LogPath = cfg.LogPath;
         ScanParallelism = cfg.ScanParallelism;
         ScanBufferKb = Math.Max(4, cfg.ScanBufferSize / 1024);
+        Theme = cfg.Theme;
+        _loading = false;
         FollowPairStates();
     }
 
@@ -107,6 +139,7 @@ public sealed partial class MainViewModel : ObservableObject
         LogPath = LogPath.Trim(),
         ScanParallelism = ScanParallelism,
         ScanBufferSize = ScanBufferKb * 1024,
+        Theme = Theme,
     };
 
     /// <summary>Returns validation problems (empty = OK) and reflects them in the status line.</summary>
@@ -155,6 +188,16 @@ public sealed partial class MainViewModel : ObservableObject
     {
         target.CopyFrom(edited);
         MarkDirty();
+    }
+
+    /// <summary>Removes a pair from the list (its state rows stay, so re-adding it keeps the memory).</summary>
+    public void RemovePair(PairViewModel pair)
+    {
+        Pairs.Remove(pair);
+        if (ReferenceEquals(SelectedPair, pair)) SelectedPair = null;
+        MarkDirty();
+        FollowPairStates();
+        SetStatus($"Пару «{pair.Name}» видалено зі списку. Натисніть «Зберегти», щоб застосувати.", error: false);
     }
 
     [RelayCommand]
@@ -294,6 +337,26 @@ public sealed partial class MainViewModel : ObservableObject
         StatusText = text;
         StatusIsError = error;
     }
+
+    partial void OnSelectedPageChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsFoldersPage));
+        OnPropertyChanged(nameof(IsActivityPage));
+        OnPropertyChanged(nameof(IsSettingsPage));
+        OnPropertyChanged(nameof(PageTitle));
+        OnPropertyChanged(nameof(PageSubtitle));
+        if (IsActivityPage) Run.RefreshSummary();
+    }
+
+    partial void OnThemeChanged(AppTheme value)
+    {
+        ThemeApplied?.Invoke(value);
+        if (_loading) return;
+        MarkDirty();
+    }
+
+    /// <summary>Raised when the theme must be applied to the running application (wired in App.axaml.cs).</summary>
+    public event Action<AppTheme>? ThemeApplied;
 
     partial void OnSelectedPairChanged(PairViewModel? value) => OnPropertyChanged(nameof(HasSelection));
     partial void OnIntervalMinutesChanged(int value) => MarkDirty();

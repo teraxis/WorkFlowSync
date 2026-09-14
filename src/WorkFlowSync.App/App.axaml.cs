@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using WorkFlowSync.App.Services;
 using WorkFlowSync.App.ViewModels;
@@ -31,8 +32,14 @@ public partial class App : Application
                 if (args[i] == "--config") configPath = args[i + 1];
             // --tray: start hidden in the notification area and run the loop in the background.
             var trayMode = args.Contains("--tray") || args.Contains("--minimized");
+            // --page <0|1|2>: open on a given page (used when documenting or debugging the UI).
+            var page = 0;
+            for (var i = 0; i + 1 < args.Length; i++)
+                if (args[i] == "--page" && int.TryParse(args[i + 1], out var n)) page = Math.Clamp(n, 0, 2);
 
             _vm = new MainViewModel(configPath);
+            _vm.ThemeApplied += ApplyTheme;
+            ApplyTheme(_vm.Theme);
             _vm.Background.Changed += UpdateTray;
             _window = new MainWindow { DataContext = _vm };
             _window.Closing += OnWindowClosing;
@@ -50,10 +57,22 @@ public partial class App : Application
             {
                 _window.Show();
             }
+
+            // After the window exists: the nav ListBox writes its own SelectedIndex into the binding while it
+            // initialises, so setting the page earlier would be overwritten.
+            if (page != 0) Dispatcher.UIThread.Post(() => _vm!.SelectedPage = page);
         }
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    /// <summary>Light / dark / follow Windows (docs/product/features/design-system.md).</summary>
+    private void ApplyTheme(AppTheme theme) => RequestedThemeVariant = theme switch
+    {
+        AppTheme.Light => ThemeVariant.Light,
+        AppTheme.Dark => ThemeVariant.Dark,
+        _ => ThemeVariant.Default,
+    };
 
     // ------------------------------------------------------------------ tray
 

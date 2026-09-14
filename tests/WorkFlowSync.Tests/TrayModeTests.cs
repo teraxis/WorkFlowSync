@@ -39,11 +39,11 @@ public sealed class TrayModeTests : IDisposable
         Assert.Equal("a", File.ReadAllText(Path.Combine(_root, "dst", "a.txt")));
         Assert.True(loop.IsActive);
         Assert.Contains("скопійовано/оновлено: 1", loop.LastResult);
-        Assert.Contains("Останній прохід", loop.StatusText);
+        Assert.Contains("останній прохід", loop.StatusText);
 
         loop.Pause();
         Assert.Equal(LoopState.Paused, loop.State);
-        Assert.Contains("на паузі", loop.StatusText);
+        Assert.Contains("На паузі", loop.StatusText);
 
         loop.Resume();
         Assert.True(loop.IsActive);

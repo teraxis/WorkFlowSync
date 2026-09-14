@@ -40,12 +40,12 @@ public sealed class AutoCheckPersistenceTests : IDisposable
     {
         var vm = new MainViewModel(_configPath);
         Assert.True(vm.Background.IsActive);                       // pair "a" plays → checking is on by itself
-        Assert.Contains("виконується", vm.Run.BackgroundStatus);
+        Assert.Contains("пар: 1", vm.Run.BackgroundStatus);
 
         vm.Pairs[0].Enabled = false;
         vm.FollowPairStates();
         Assert.False(vm.Background.IsActive);
-        Assert.Contains("на паузі", vm.Run.BackgroundStatus);
+        Assert.Contains("Усі пари на паузі", vm.Run.BackgroundStatus);
 
         vm.Pairs[1].Enabled = true;
         vm.FollowPairStates();

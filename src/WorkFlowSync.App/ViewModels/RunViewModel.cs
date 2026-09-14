@@ -28,6 +28,9 @@ public sealed partial class RunViewModel : ObservableObject
     [ObservableProperty] private bool _isRunning;
 
     [ObservableProperty] private string _backgroundStatus = "";
+
+    /// <summary>Drives the dot in the navigation rail.</summary>
+    public bool IsCheckerRunning => _background.IsActive;
     [ObservableProperty] private string _summary = "";
     [ObservableProperty] private string _logText = "";
     [ObservableProperty] private string _lastResult = "";
@@ -50,7 +53,7 @@ public sealed partial class RunViewModel : ObservableObject
         _activePairs = activePairs;
         if (activePairs > 0 && _isDirty())
         {
-            Set($"Пар у стані «виконується»: {activePairs}. Є незбережені зміни — натисніть «Зберегти», щоб перевірка їх врахувала.");
+            Set($"Пар у роботі: {activePairs} · є незбережені зміни — натисніть «Зберегти»");
             return;
         }
         OnBackgroundChanged();
@@ -63,15 +66,19 @@ public sealed partial class RunViewModel : ObservableObject
     {
         var text = _background.State switch
         {
-            LoopState.Stopped when _activePairs == 0 => "Усі пари на паузі — автоматична перевірка не виконується. Натисніть ▶ у рядку пари.",
-            LoopState.Stopped => "Автоматичну перевірку зупинено.",
-            LoopState.Paused => "Автоматичну перевірку призупинено зі значка в області сповіщень.",
-            _ => $"{_background.StatusText}   Пар у стані «виконується»: {_activePairs}.",
+            LoopState.Stopped when _activePairs == 0 => "Усі пари на паузі — нічого не перевіряється",
+            LoopState.Stopped => "Зупинено",
+            LoopState.Paused => "Призупинено зі значка в області сповіщень",
+            _ => $"{_background.StatusText} · пар: {_activePairs}",
         };
         Set(text);
     }
 
-    private void Set(string text) => OnUi(() => BackgroundStatus = text);
+    private void Set(string text) => OnUi(() =>
+    {
+        BackgroundStatus = text;
+        OnPropertyChanged(nameof(IsCheckerRunning));
+    });
 
     /// <summary>
     /// Updates from background threads are marshalled to the UI thread; calls already on it apply straight away

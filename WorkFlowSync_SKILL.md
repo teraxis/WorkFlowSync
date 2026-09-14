@@ -17,7 +17,8 @@ src/WorkFlowSync.Core/   Config/ (SyncConfig, FolderPair, LinkMode, ConfigFile) 
                          Execution/ (SyncExecutor, RecycleBin)  Logging/SyncLog (+Prune)  Ffs/FfsBatchImporter
                          SyncRunner (one pass)  LoopRunner (resident)  PassLock (cross-process)  Autostart (Startup .lnk, schtasks)
 src/WorkFlowSync.Cli/    wfs.exe: Program.cs (commands), ConsoleOwner.cs (pause on double-click), app.manifest (asInvoker + longPathAware + UTF-8)
-src/WorkFlowSync.App/    WorkFlowSync.exe: Avalonia 11.3 GUI - Views/ (MainWindow, PairDialog), ViewModels/ (Main, Pair, Run, Autostart; no Avalonia types),
+src/WorkFlowSync.App/    WorkFlowSync.exe: Avalonia 11.3 GUI - Styles/ (Palette, Controls, Icons = design system, docs F12),
+                         Views/ (MainWindow, PairDialog, ConfirmDialog), ViewModels/ (Main, Pair, Run, Autostart; no Avalonia types),
                          Services/BackgroundLoop.cs (tray loop), App.axaml.cs (TrayIcon+NativeMenu), Assets/app.ico, Converters.cs
 tests/WorkFlowSync.Tests/
 scripts/                 build.ps1, test.ps1, publish.ps1
@@ -79,6 +80,13 @@ src\WorkFlowSync.App\bin\Debug\net8.0\win-x64\WorkFlowSync.exe --config config.e
 - There is NO global auto-check switch: `MainViewModel.FollowPairStates()` starts/stops the shared `BackgroundLoop`
   from the pair states (`FolderPair.Enabled`). `TogglePairAsync` writes config.json at once (when nothing else is dirty),
   re-evaluates the loop and runs that pair immediately. The tray's pause is a separate global pause (LoopState.Paused).
+- Design system: colours ONLY from Styles/Palette.axaml (ThemeDictionaries Light/Dark); style classes in Controls.axaml.
+  Icons: `<Path Classes="ico">` (stroked outline) or `Classes="icof"` (filled); PathIcon FILLS its geometry and turns
+  outline icons into black blobs — do not use it. Icon colour comes from `Button.<class> Path.ico` rules.
+- Nav rail writes its own SelectedIndex into the binding at init: set `SelectedPage` AFTER the window is shown
+  (that is why `--page` posts to the dispatcher).
+- Long paths need `Classes="oneline"` (NoWrap + ellipsis); a ListBox inside a ScrollViewer is measured unbounded and
+  columns stop constraining — let the ListBox scroll itself.
 - Autostart gating: the Startup shortcut needs WorkFlowSync.exe (tray mode) OR wfs.exe (windowless); the scheduled task needs wfs.exe.
   In the App Debug folder only the GUI exists — tray autostart must stay available there.
 - A running GUI locks WorkFlowSync.Core.dll: `dotnet build` fails with MSB3026. Ask the user before killing their app; a compile check

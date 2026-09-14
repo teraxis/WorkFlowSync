@@ -34,6 +34,8 @@ Antigravity IDE / VS Code with `ms-dotnettools.csharp` (installed): open the fol
 provides `GUI (WorkFlowSync.exe, example config)`, `wfs config validate (example)`,
 `wfs sync --once --dry-run (example)` and `wfs custom args (prompt)`; each runs the `build` task first. Breakpoints work in both Core and Cli.
 
+`WorkFlowSync.exe --page <0|1|2>` opens Folders / Activity / Settings directly — handy when reviewing the UI.
+
 Without an IDE: `dotnet run --project src/WorkFlowSync.App` (GUI) or
 `dotnet run --project src/WorkFlowSync.Cli -- config validate --config config.example.json`
 runs the Debug build; `dotnet watch --project src/WorkFlowSync.Cli -- <args>` rebuilds on save.

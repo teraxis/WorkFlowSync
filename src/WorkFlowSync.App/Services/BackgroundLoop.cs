@@ -101,11 +101,11 @@ public sealed class BackgroundLoop : IDisposable
     public string StatusText => State switch
     {
         LoopState.Idle => LastPassUtc is { } t
-            ? $"Фоновий режим: очікування. Останній прохід {t.ToLocalTime():HH:mm}, {LastResult}"
-            : "Фоновий режим: очікування першого проходу",
-        LoopState.Running => "Фоновий режим: виконується прохід…",
-        LoopState.Paused => "Фоновий режим: на паузі",
-        _ => "Фоновий режим: вимкнено",
+            ? $"Очікування · останній прохід {t.ToLocalTime():HH:mm} · {LastResult}"
+            : "Очікування першого проходу",
+        LoopState.Running => "Виконується прохід…",
+        LoopState.Paused => "На паузі",
+        _ => "Вимкнено",
     };
 
     private void Set(LoopState state)
