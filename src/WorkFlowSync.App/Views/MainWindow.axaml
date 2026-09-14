@@ -35,6 +35,7 @@
                         <Button Content="Додати пару…" Click="OnAddPair" />
                         <Button Content="Редагувати…" Click="OnEditPair" IsEnabled="{Binding HasSelection}" />
                         <Button Content="Видалити" Command="{Binding RemoveSelectedCommand}" IsEnabled="{Binding HasSelection}" />
+                        <Button Content="Імпорт із FreeFileSync…" Click="OnImportFfs" Margin="16,0,0,0" IsEnabled="{Binding HasPairs}" />
                     </StackPanel>
 
                     <Panel>

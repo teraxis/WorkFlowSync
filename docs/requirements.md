@@ -29,13 +29,13 @@ OneDrive (ціль, власна).
 |---|--------|--------|--------------|
 | F1 | Правила дзеркалювання (три правила замовника) | Реалізовано (Етап 1) | [mirror-rules.md](product/features/mirror-rules.md) |
 | F2 | База стану, tombstone, локальні зміни | Реалізовано (Етап 1) | [state-and-tombstones.md](product/features/state-and-tombstones.md) |
-| F3 | Дата появи (`first_seen`) і ретенція | `first_seen` + backfill реалізовано; ретенція — Етап 2 | [first-seen-and-retention.md](product/features/first-seen-and-retention.md) |
+| F3 | Дата появи (`first_seen`) і ретенція | Реалізовано (Етап 2): файли старіють, порожні папки прибираються й забуваються | [first-seen-and-retention.md](product/features/first-seen-and-retention.md) |
 | F4 | Обробка лінків (symlink/junction/DFS) | follow/skip реалізовано; recreate — відкладено | [links-handling.md](product/features/links-handling.md) |
 | F5 | Сканер: продуктивність на великих деревах | Реалізовано (Етап 1; 206 тис. файлів за 0,8–1,8 с локально) | [scanner-performance.md](product/features/scanner-performance.md) |
 | F6 | Конфігурація | Затверджено (скелет реалізовано) | [configuration.md](product/features/configuration.md) |
 | F7 | CLI, режими запуску, автозапуск | `sync --once/--dry-run`, `status`, mutex реалізовано; `--loop`, автозапуск — Етап 3 | [cli-and-scheduling.md](product/features/cli-and-scheduling.md) |
 | F8 | Журнал і діагностика | Лог і `status` реалізовано; ротація — Етап 3 | [logging-and-diagnostics.md](product/features/logging-and-diagnostics.md) |
-| F9 | Міграція з FreeFileSync | Затверджено | [ffs-migration.md](product/features/ffs-migration.md) |
+| F9 | Міграція з FreeFileSync | Реалізовано (Етап 2): `wfs import-excludes`, кнопка в GUI, `wfs forget` | [ffs-migration.md](product/features/ffs-migration.md) |
 | F10 | Трей-режим (опційно) | Відкладено | — |
 | F11 | Графічний інтерфейс (пари папок + налаштування) | Реалізовано (Етап 0.2) | [gui.md](product/features/gui.md) |
 
@@ -58,7 +58,7 @@ OneDrive (ціль, власна).
 | 0 ✅ | Каркас проєкту, модель даних, конфіг, CLI-каркас, publish single-file | `wfs.exe` (консоль), `config validate` працює |
 | 0.2 ✅ | GUI `WorkFlowSync.exe` (Avalonia 11.3): вкладки Папки / Налаштування / Стан, діалог пари з вибором папок, збереження `config.json` | Конфіг створюється й редагується без ручного JSON |
 | 1 ✅ | Сканер джерела (паралельний, великий буфер, лінки), SQLite-стан, копіювання нових/оновлених, tombstone/local_modified, `sync --once`, `--dry-run`, лог, вкладка «Стан» у GUI з запуском | Робоче дзеркало за правилами 1–3; 43 тести, з них наскрізні на temp-папках і junction-циклі |
-| 2 | Ретенція (у Кошик), `import-excludes` з `.ffs_batch`, `forget <шлях>` | Повна заміна FreeFileSync |
+| 2 ✅ | Ретенція (у Кошик), `import-excludes` з `.ffs_batch` (консоль + кнопка в GUI), `forget <шлях>` | Повна заміна FreeFileSync; 55 тестів; бойовий `batch.ffs_batch` імпортується за 0,3 с |
 | 3 | `--loop` (резидент), автозапуск (Startup/`schtasks`), контроль паралельних запусків, ротація логів | Автономна робота |
 | 4 (опц.) | Трей-іконка, сповіщення, пауза | Зручність |
 
@@ -93,6 +93,10 @@ OneDrive (ціль, власна).
 
 ## 7. Журнал змін специфікації
 
+- `2026-09-14`: Етап 2 виконано — ретенція (лише файли; порожні папки в Кошик і забуваються, щоб
+  повернутися з новим файлом), імпорт FreeFileSync (16 шаблонів + 22 551 «не повертати» з бойового
+  файлу), `forget`. Виправлено: `Pack=1` у `SHFILEOPSTRUCT` на x64 (AV), пул з'єднань SQLite тримав
+  `state.db` відкритим.
 - `2026-09-14`: Етап 1 виконано — двигун синхронізації (сканер, SQLite-стан, planner за таблицею F1,
   executor, `wfs sync --once [--dry-run]`, `wfs status`, вкладка «Стан» у GUI). Закрито відкриті
   питання 1–2. Ретенцію перенесено в Етап 2.

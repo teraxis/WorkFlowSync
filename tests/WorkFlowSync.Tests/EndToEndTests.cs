@@ -178,6 +178,39 @@ public sealed class EndToEndTests : IDisposable
     }
 
     [Fact]
+    public void Retention_recycles_expired_files_and_empty_folders_and_never_brings_them_back()
+    {
+        var old = new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        WriteSrc(@"2024\old.txt", "old", old);
+        File.SetCreationTimeUtc(Path.Combine(_src, @"2024\old.txt"), old);
+        WriteSrc(@"2026\new.txt", "new");
+        _config.Pairs[0].Retention = TimeSpan.FromDays(365);
+
+        // First pass: backfill makes old.txt "first seen" in 2024 → already expired, but it must be mirrored first?
+        // No: it is copied on this pass (new to us) and recycled on the next one, once it is an active row.
+        Pass();
+        Assert.Equal("old", ReadDst(@"2024\old.txt"));
+        Assert.True(State(@"2024\old.txt").FirstSeenUtc <= new DateTimeOffset(old));
+
+        var p2 = Pass();
+        Assert.Equal(1, p2.Pairs[0].Execution!.FilesRecycled);
+        Assert.Equal(1, p2.Pairs[0].Execution!.DirectoriesRecycled);
+        Assert.False(DstExists(@"2024\old.txt"));
+        Assert.False(DstExists("2024"));
+        Assert.Equal("new", ReadDst(@"2026\new.txt"));
+        Assert.Equal(EntryStatus.Tombstone, State(@"2024\old.txt").Status);
+        using (var store = new StateStore(Path.Combine(_root, "state.db")))
+            Assert.False(store.Load("t").ContainsKey("2024"));           // folder forgotten, not tombstoned
+
+        // Source still has old.txt → never returns; a NEW file in the old folder does arrive (folder comes back).
+        WriteSrc(@"2024\addendum.txt", "late");
+        var p3 = Pass();
+        Assert.False(DstExists(@"2024\old.txt"));
+        Assert.Equal("late", ReadDst(@"2024\addendum.txt"));
+        Assert.Equal(0, p3.Pairs[0].Execution!.FilesRecycled);
+    }
+
+    [Fact]
     public void Junction_is_followed_once_and_cycles_are_skipped()
     {
         WriteSrc(@"real\inner.txt", "inner");

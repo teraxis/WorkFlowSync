@@ -29,13 +29,15 @@ Requires .NET SDK 8.0.x on PATH (`C:\Program Files\dotnet`). No other services.
 
 If a command cannot run, record the exact reason and the next step needed.
 
-## Current Status (2026-09-14, Stage 1)
+## Current Status (2026-09-14, Stage 2)
 
 - `dotnet build -warnaserror`: OK.
-- `dotnet test`: 43 passed — `SyncPlannerTests` (17, one per decision-table row), `ExcludeMatcherTests` (14),
+- `dotnet test`: 55 passed — adds `RetentionTests` (7), `FfsImportTests` (4), e2e retention with the real Recycle Bin;
+  previously `SyncPlannerTests` (17, one per decision-table row), `ExcludeMatcherTests` (14),
   `EndToEndTests` (6, temp folders incl. junction cycle via `mklink /J`, hidden/system, unavailable source, dry-run),
   `RunViewModelTests` (GUI run tab), `SyncConfigTests`, `PairViewModelTests`.
 - Perf dry-run over `C:\Program Files` (206k files): scan 0.8–1.8 s, 0 warnings.
+- `wfs import-excludes --dry-run` on the user's real `batch.ffs_batch`: 22,548 items → 16 patterns + 22,551 tombstones in 0.3 s.
 - NB: `dotnet test` does not rebuild `WorkFlowSync.Cli` (not in the test dependency graph) — run `scripts\build.ps1`
   before using `wfs.exe` after Core changes.
 - GUI launched with `config.example.json`: window opens on the «Папки» tab, pair list renders, pair dialog

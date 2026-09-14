@@ -18,11 +18,11 @@ WorkFlowSync.sln
 | `Model/` | `StateEntry`, `EntryStatus`, `EntryKind` — реалізовано |
 | `Scanning/` | ✅ `TreeScanner` (черга папок + N воркерів через `Channel`, `FileSystemEnumerable`, буфер з конфігу, reparse points з ланцюжковою перевіркою циклів), `ExcludeMatcher` (FFS-шаблони → regex), `ScanEntry`/`ScanResult` |
 | `State/` | ✅ `StateStore` (SQLite, WAL, `Load(pair)` → `Dictionary`, `Upsert` однією транзакцією, `meta`) |
-| `Planning/` | ✅ `SyncPlanner`: чиста функція (source, target, state, now, backfill) → `SyncPlan` (Actions з `Proposed` рядком стану + StateUpdates + Stats) за таблицею F1; ретенція F3 — Етап 2 |
-| `Execution/` | ✅ `SyncExecutor`: mkdir, copy/update через tmp-файл + rename зі збереженням mtime з листингу, `copied_*` читаються з цілі після запису; `--dry-run` лише логує; Кошик — Етап 2 |
+| `Planning/` | ✅ `SyncPlanner`: чиста функція (source, target, state, now, backfill, retention) → `SyncPlan` (Actions з `Proposed` рядком стану + StateUpdates + Stats) за таблицею F1 + ретенція F3 (файли → tombstone, порожні папки → forget) |
+| `Execution/` | ✅ `SyncExecutor`: mkdir, copy/update через tmp-файл + rename зі збереженням mtime з листингу, `copied_*` читаються з цілі після запису; recycle file / empty dir; `--dry-run` лише логує. `RecycleBin`: SHFileOperationW |
 | `Logging/` | ✅ `FileSyncLog` (щоденний файл + sink для консолі/GUI), `MemorySyncLog` (тести) |
 | `SyncRunner` | ✅ оркестратор проходу: стан → скан джерела (недоступне = skip) → скан цілі → plan → execute → upsert; `PassResult` |
-| `Ffs/` | парсер `.ffs_batch` для імпорту |
+| `Ffs/` | ✅ `FfsBatch` (XDocument-парсер), `FfsBatchImporter` (шаблони → exclude, шляхи → tombstone, зіставлення пар за джерелом) |
 
 Ключова межа: **Planner не торкається файлової системи**. Уся логіка правил живе там і
 перевіряється юніт-тестами на змодельованих деревах; Scanner і Executor — тонкі, перевіряються

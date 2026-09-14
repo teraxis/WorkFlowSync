@@ -10,6 +10,10 @@ public enum SyncActionKind
     CopyFile,
     /// <summary>Overwrite an unchanged local copy with a newer source version.</summary>
     UpdateFile,
+    /// <summary>Retention: move an expired, untouched local file to the Recycle Bin; its row becomes a tombstone.</summary>
+    RecycleFile,
+    /// <summary>Retention: move a directory left empty by expired files to the Recycle Bin; its row is forgotten.</summary>
+    RecycleEmptyDirectory,
 }
 
 /// <summary>A file-system action plus the state row to persist once it succeeds.</summary>
@@ -24,10 +28,12 @@ public sealed class PlanStats
     public int LocalModified { get; set; }
     public int Unchanged { get; set; }
     public int IgnoredLocalOnly { get; set; }
+    public int Expired { get; set; }
+    public int EmptyDirs { get; set; }
     public long BytesToCopy { get; set; }
 
     public override string ToString() =>
-        $"new={New} update={Updated} adopt={Adopted} tombstone={Tombstoned} local_modified={LocalModified} unchanged={Unchanged} local_only={IgnoredLocalOnly} bytes={BytesToCopy}";
+        $"new={New} update={Updated} adopt={Adopted} tombstone={Tombstoned} local_modified={LocalModified} unchanged={Unchanged} local_only={IgnoredLocalOnly} expired={Expired} empty_dirs={EmptyDirs} bytes={BytesToCopy}";
 }
 
 public sealed class SyncPlan

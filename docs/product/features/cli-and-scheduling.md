@@ -10,7 +10,8 @@
 wfs sync [--once | --loop] [--config <path>] [--dry-run]
 wfs status [--config <path>]
 wfs config validate [--config <path>]
-wfs import-excludes <batch.ffs_batch> [--config <path>]
+wfs import-excludes <batch.ffs_batch> [--pair <name>] [--dry-run] [--no-probe] [--config <path>]
+wfs forget <relative-path> [--pair <name>] [--config <path>]
 wfs version
 ```
 
@@ -23,7 +24,8 @@ wfs version
 | `sync --dry-run` | розрахувати й вивести дії, нічого не змінювати (ні файлів, ні бази) |
 | `status` | лічильники стану за парами, час і результат останнього проходу, розмір бази |
 | `config validate` | F6 |
-| `import-excludes` | F9 |
+| `import-excludes` | F9 (реалізовано) |
+| `forget <шлях>` | забути запис(и) стану — F9 (реалізовано) |
 
 Коди виходу: `0` ок; `1` помилка виконання; `2` помилка використання/конфігу; `3` не реалізовано;
 `4` інший прохід уже виконується для цього конфігу.

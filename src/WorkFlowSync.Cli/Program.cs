@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
+using WorkFlowSync.Core.Ffs;
 using WorkFlowSync.Core.Logging;
 using WorkFlowSync.Core.Model;
 using WorkFlowSync.Core.State;
@@ -44,7 +45,8 @@ internal static class Program
                 "config" => ConfigCommand(opts),
                 "sync" => SyncCommand(opts),
                 "status" => StatusCommand(opts),
-                "import-excludes" => NotImplemented("import-excludes"),
+                "import-excludes" => ImportExcludesCommand(opts),
+                "forget" => ForgetCommand(opts),
                 _ => Usage(2),
             };
         }
@@ -172,6 +174,86 @@ internal static class Program
         return 0;
     }
 
+    private static int ImportExcludesCommand(Options opts)
+    {
+        if (opts.Positional.Count == 0)
+        {
+            Console.Error.WriteLine("usage: wfs import-excludes <batch.ffs_batch> [--pair <name>] [--dry-run] [--no-probe] [--config <path>]");
+            return 2;
+        }
+        var batchPath = opts.Positional[0];
+        if (!File.Exists(batchPath)) { Console.Error.WriteLine($"file not found: {batchPath}"); return 2; }
+        var cfg = LoadConfig(opts, out var code);
+        if (cfg is null) return code;
+
+        var batch = FfsBatch.Load(batchPath);
+        Console.WriteLine($"FreeFileSync: {batch.Pairs.Count} pair(s), {batch.GlobalExcludes.Count:N0} global exclude items");
+        if (batch.Pairs.Count == 0) { Console.Error.WriteLine("no folder pairs in the batch file"); return 2; }
+
+        var runner = new SyncRunner(cfg, opts.ConfigPath, new MemorySyncLog());
+        // Dry-run must not even create state.db.
+        using var store = opts.DryRun && !File.Exists(runner.StatePath) ? null : new StateStore(runner.StatePath);
+        var now = DateTimeOffset.UtcNow;
+        var configChanged = false;
+        var exit = 0;
+
+        foreach (var ffsPair in batch.Pairs)
+        {
+            var target = opts.PairName is { } name
+                ? cfg.Pairs.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                : FfsBatchImporter.MatchPair(cfg, ffsPair);
+            if (target is null)
+            {
+                Console.Error.WriteLine($"  ! no config pair for FFS pair {ffsPair.Left} -> {ffsPair.Right}. Add it (GUI or config.json) or pass --pair <name>.");
+                exit = 2;
+                continue;
+            }
+            Console.WriteLine($"  FFS {ffsPair.Left} -> {ffsPair.Right}   =>   [{target.Name}] {target.Source} -> {target.Target}");
+            var state = store?.Load(target.Name) ?? new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
+            var r = FfsBatchImporter.Prepare(batch, ffsPair, target, state, now, probeSource: !opts.NoProbe,
+                new FileSyncLog(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(opts.ConfigPath))!, cfg.LogPath), (_, l) => Console.WriteLine(l)));
+            Console.WriteLine($"    patterns: +{r.Patterns} (already {r.PatternsAlreadyPresent})   tombstones: +{r.Tombstones} (already {r.TombstonesAlreadyPresent}, converted from active {r.ActiveConverted})   probed in source: {r.Probed:N0}");
+            foreach (var p in r.NewPatterns) Console.WriteLine($"      exclude: {p}");
+            if (opts.DryRun) continue;
+            if (r.Rows.Count > 0) store!.Upsert(r.Rows);
+            if (r.Patterns > 0) configChanged = true;
+        }
+
+        if (opts.DryRun) { Console.WriteLine("dry-run: nothing written"); return exit; }
+        if (configChanged)
+        {
+            ConfigFile.Save(cfg, opts.ConfigPath);
+            Console.WriteLine($"config updated: {opts.ConfigPath}");
+        }
+        Console.WriteLine("import done");
+        return exit;
+    }
+
+    private static int ForgetCommand(Options opts)
+    {
+        if (opts.Positional.Count == 0)
+        {
+            Console.Error.WriteLine("usage: wfs forget <relative-path> [--pair <name>] [--config <path>]");
+            return 2;
+        }
+        var cfg = LoadConfig(opts, out var code);
+        if (cfg is null) return code;
+        var runner = new SyncRunner(cfg, opts.ConfigPath, new MemorySyncLog());
+        if (!File.Exists(runner.StatePath)) { Console.WriteLine("no state yet"); return 0; }
+        using var store = new StateStore(runner.StatePath);
+        var pairs = opts.PairName is { } n ? cfg.Pairs.Where(p => p.Name.Equals(n, StringComparison.OrdinalIgnoreCase)).ToList() : cfg.Pairs;
+        if (pairs.Count == 0) { Console.Error.WriteLine($"unknown pair: {opts.PairName}"); return 2; }
+        var total = 0;
+        foreach (var pair in pairs)
+        {
+            var n2 = store.DeleteSubtree(pair.Name, opts.Positional[0]);
+            Console.WriteLine($"[{pair.Name}] forgot {n2:N0} row(s) under \\{opts.Positional[0].Trim('\\')}");
+            total += n2;
+        }
+        Console.WriteLine(total == 0 ? "nothing matched" : "the item(s) will be treated as new on the next pass");
+        return 0;
+    }
+
     private static int NotImplemented(string command)
     {
         Console.Error.WriteLine($"'{command}' is not implemented yet (see docs/requirements.md, stage plan).");
@@ -194,7 +276,8 @@ internal static class Program
               wfs sync [--once | --loop] [--config <path>] [--dry-run] [--backfill] [--verbose]
               wfs status [--config <path>]
               wfs config validate [--config <path>]
-              wfs import-excludes <batch.ffs_batch> [--config <path>]
+              wfs import-excludes <batch.ffs_batch> [--pair <name>] [--dry-run] [--no-probe] [--config <path>]
+              wfs forget <relative-path> [--pair <name>] [--config <path>]
               wfs version
 
             options:
@@ -204,6 +287,8 @@ internal static class Program
               --dry-run         report planned actions without touching the file system or the state
               --backfill        take first_seen from min(ctime, mtime) even when state already exists
               --verbose         per-directory DEBUG lines in the log
+              --pair <name>     limit import-excludes / forget to one pair
+              --no-probe        import-excludes: do not stat items in the source to tell files from folders
 
             exit codes: 0 ok, 1 error, 2 usage/config, 3 not implemented, 4 another pass is running
             """);
@@ -226,6 +311,10 @@ internal static class Program
                 case "--dry-run": o.DryRun = true; break;
                 case "--backfill": o.Backfill = true; break;
                 case "--verbose": o.Verbose = true; break;
+                case "--no-probe": o.NoProbe = true; break;
+                case "--pair" when i + 1 < list.Count:
+                    o.PairName = list[++i];
+                    break;
                 default: o.Positional.Add(list[i]); break;
             }
         }
@@ -240,6 +329,8 @@ internal static class Program
         public bool DryRun { get; set; }
         public bool Backfill { get; set; }
         public bool Verbose { get; set; }
+        public bool NoProbe { get; set; }
+        public string? PairName { get; set; }
         public List<string> Positional { get; } = new();
     }
 }

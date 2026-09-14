@@ -121,7 +121,7 @@ public sealed class SyncRunner
         _log.Info($"{tag} scan target  dirs={target.DirectoryCount} files={target.FileCount} took={target.Elapsed.TotalSeconds:0.0}s");
 
         // 4. Plan (pure).
-        var plan = new SyncPlanner(pair.Name, now, backfill).Plan(source.Entries, target.Entries, state);
+        var plan = new SyncPlanner(pair.Name, now, backfill, pair.Retention).Plan(source.Entries, target.Entries, state);
         foreach (var w in plan.Warnings) _log.Warn($"{tag} plan: {w}");
         result.Plan = plan.Stats;
         _log.Info($"{tag} plan  {plan.Stats}");
@@ -140,11 +140,12 @@ public sealed class SyncRunner
             rows.AddRange(plan.StateUpdates);
             rows.AddRange(exec.Completed);
             if (rows.Count > 0) store.Upsert(rows);
-            _log.Info($"{tag} state  rows_written={rows.Count}");
+            if (exec.Forgotten.Count > 0) store.Delete(pair.Name, exec.Forgotten);
+            _log.Info($"{tag} state  rows_written={rows.Count} rows_deleted={exec.Forgotten.Count}");
         }
 
         result.Elapsed = sw.Elapsed;
-        _log.Info($"{tag} done  copied={exec.FilesCopied} updated={exec.FilesUpdated} mkdir={exec.DirectoriesCreated} bytes={SyncExecutor.FormatSize(exec.BytesCopied)} errors={exec.Errors} took={result.Elapsed.TotalSeconds:0.0}s");
+        _log.Info($"{tag} done  copied={exec.FilesCopied} updated={exec.FilesUpdated} mkdir={exec.DirectoriesCreated} recycled={exec.FilesRecycled}+{exec.DirectoriesRecycled}dirs bytes={SyncExecutor.FormatSize(exec.BytesCopied)} errors={exec.Errors} took={result.Elapsed.TotalSeconds:0.0}s");
         return result;
     }
 }

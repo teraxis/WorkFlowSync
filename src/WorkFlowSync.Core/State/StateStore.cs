@@ -21,7 +21,8 @@ public sealed class StateStore : IDisposable
         Path = System.IO.Path.GetFullPath(path);
         var dir = System.IO.Path.GetDirectoryName(Path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-        _conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path, Mode = SqliteOpenMode.ReadWriteCreate }.ToString());
+        // Pooling=false: release the file handle on Dispose (otherwise the pool keeps state.db open after a pass).
+        _conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path, Mode = SqliteOpenMode.ReadWriteCreate, Pooling = false }.ToString());
         _conn.Open();
         Exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
         Exec("""
@@ -141,6 +142,18 @@ public sealed class StateStore : IDisposable
         pPair.Value = pair;
         foreach (var p in paths) { pPath.Value = p; cmd.ExecuteNonQuery(); }
         tx.Commit();
+    }
+
+    /// <summary>Forgets a path and everything below it (case-insensitive), so it can be mirrored again as new. Returns rows removed.</summary>
+    public int DeleteSubtree(string pair, string relativePath)
+    {
+        var rel = relativePath.Trim().Trim('\\', '/');
+        var prefix = rel + "\\";
+        var victims = Load(pair).Keys
+            .Where(k => k.Equals(rel, StringComparison.OrdinalIgnoreCase) || k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (victims.Count > 0) Delete(pair, victims);
+        return victims.Count;
     }
 
     public string? GetMeta(string key)

@@ -15,13 +15,16 @@ public sealed class SyncPlanner
     private readonly string _pair;
     private readonly DateTimeOffset _now;
     private readonly bool _backfillFirstSeen;
+    private readonly TimeSpan? _retention;
 
     /// <param name="backfillFirstSeen">First pass: use min(ctime, mtime) of the source item as first_seen (docs F3).</param>
-    public SyncPlanner(string pair, DateTimeOffset now, bool backfillFirstSeen)
+    /// <param name="retention">Keep only files first seen within this window; null = forever (docs F3).</param>
+    public SyncPlanner(string pair, DateTimeOffset now, bool backfillFirstSeen, TimeSpan? retention = null)
     {
         _pair = pair;
         _now = now;
         _backfillFirstSeen = backfillFirstSeen;
+        _retention = retention;
     }
 
     public SyncPlan Plan(IReadOnlyDictionary<string, ScanEntry> source, IReadOnlyDictionary<string, ScanEntry> target,
@@ -39,6 +42,8 @@ public sealed class SyncPlanner
         all.UnionWith(target.Keys);
         all.UnionWith(state.Keys);
         var ordered = all.OrderBy(Depth).ThenBy(p => p, StringComparer.OrdinalIgnoreCase);
+
+        var expiredFiles = new List<StateEntry>();
 
         foreach (var path in ordered)
         {
@@ -79,7 +84,13 @@ public sealed class SyncPlanner
                         Tombstone(plan, db, tombstoneDirs, s is null ? "gone on both sides" : "removed locally");
                         break;
                     }
-                    if (s is null) { plan.Stats.Unchanged++; break; }         // rule 1: deleted in source → keep
+                    if (s is null)
+                    {
+                        // rule 1: deleted in source → keep (unless retention says otherwise)
+                        if (db.Kind == EntryKind.File && LocalIntact(l, db) && IsExpired(db)) expiredFiles.Add(db);
+                        else plan.Stats.Unchanged++;
+                        break;
+                    }
                     if (s.Kind != db.Kind || l.Kind != db.Kind)
                     {
                         plan.Warnings.Add($"{path}: kind changed (state={db.Kind}, source={s.Kind}, target={l.Kind}); skipped");
@@ -91,6 +102,12 @@ public sealed class SyncPlanner
                     {
                         plan.StateUpdates.Add(db with { Status = EntryStatus.LocalModified, StatusChangedUtc = _now, LastSeenUtc = _now });
                         plan.Stats.LocalModified++;
+                        break;
+                    }
+                    if (IsExpired(db))
+                    {
+                        // Retention beats update: an expired file is recycled even if the source changed it.
+                        expiredFiles.Add(db);
                         break;
                     }
                     if (!Same(s, db.SourceSize, db.SourceMtimeUtc))
@@ -106,8 +123,51 @@ public sealed class SyncPlanner
             }
         }
 
+        ApplyRetention(plan, expiredFiles, target, state);
         return plan;
     }
+
+    /// <summary>
+    /// Expired files → Recycle Bin + tombstone. Directories never expire on their own (a new file in an old folder must
+    /// still arrive); a directory left with nothing but recycled/absent children is recycled too and its row forgotten,
+    /// so it can come back with the next new file. Deepest paths first so the executor empties folders bottom-up.
+    /// </summary>
+    private void ApplyRetention(SyncPlan plan, List<StateEntry> expiredFiles, IReadOnlyDictionary<string, ScanEntry> target,
+        IReadOnlyDictionary<string, StateEntry> state)
+    {
+        if (expiredFiles.Count == 0) return;
+
+        var removed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var f in expiredFiles)
+        {
+            plan.Actions.Add(new SyncAction(SyncActionKind.RecycleFile, f.RelativePath, f with { Status = EntryStatus.Tombstone, StatusChangedUtc = _now }));
+            removed.Add(f.RelativePath);
+            plan.Stats.Expired++;
+        }
+
+        // Remaining local items after the recycle: anything in the target not being removed.
+        var remaining = target.Keys.Where(k => !removed.Contains(k)).ToList();
+        var candidates = state.Values
+            .Where(e => e.Kind == EntryKind.Directory && e.Status == EntryStatus.Active && target.ContainsKey(e.RelativePath))
+            .OrderByDescending(e => Depth(e.RelativePath)).ThenByDescending(e => e.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var dir in candidates)
+        {
+            var prefix = dir.RelativePath + "\\";
+            var hasChildren = remaining.Any(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            if (hasChildren) continue;
+            // Only directories that actually lost something to retention (or are below such a directory) are touched.
+            var lostSomething = removed.Any(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            if (!lostSomething) continue;
+            plan.Actions.Add(new SyncAction(SyncActionKind.RecycleEmptyDirectory, dir.RelativePath, dir));
+            removed.Add(dir.RelativePath);
+            remaining.Remove(dir.RelativePath);
+            plan.Stats.EmptyDirs++;
+        }
+    }
+
+    private bool IsExpired(StateEntry db) =>
+        _retention is { } r && db.Kind == EntryKind.File && db.FirstSeenUtc < _now - r;
 
     private void AddNew(SyncPlan plan, ScanEntry s)
     {

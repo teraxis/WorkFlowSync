@@ -10,10 +10,15 @@ public sealed class ExecutionResult
     public int FilesCopied { get; set; }
     public int FilesUpdated { get; set; }
     public int Errors { get; set; }
+    public int FilesRecycled { get; set; }
+    public int DirectoriesRecycled { get; set; }
     public long BytesCopied { get; set; }
 
     /// <summary>State rows to persist: successful actions with copied_* filled in.</summary>
     public List<StateEntry> Completed { get; } = new();
+
+    /// <summary>State rows to delete (directories recycled by retention — they may legitimately come back).</summary>
+    public List<string> Forgotten { get; } = new();
 }
 
 /// <summary>
@@ -71,6 +76,25 @@ public sealed class SyncExecutor
                         }
                         if (action.Kind == SyncActionKind.CopyFile) result.FilesCopied++; else result.FilesUpdated++;
                         result.BytesCopied += action.Proposed.SourceSize ?? 0;
+                        break;
+
+                    case SyncActionKind.RecycleFile:
+                        _log.Info($"{prefix}recycle  \\{action.RelativePath}  (expired, first seen {action.Proposed.FirstSeenUtc.ToLocalTime():yyyy-MM-dd})");
+                        if (!_dryRun) RecycleBin.Send(dst);
+                        result.FilesRecycled++;
+                        result.Completed.Add(action.Proposed);
+                        break;
+
+                    case SyncActionKind.RecycleEmptyDirectory:
+                        if (!_dryRun && Directory.Exists(dst) && Directory.EnumerateFileSystemEntries(dst).Any())
+                        {
+                            _log.Warn($"{pairTag} rmdir  \\{action.RelativePath}: not empty any more, kept");
+                            break;
+                        }
+                        _log.Info($"{prefix}rmdir  \\{action.RelativePath}  (empty after retention)");
+                        if (!_dryRun && Directory.Exists(dst)) RecycleBin.Send(dst);
+                        result.DirectoriesRecycled++;
+                        result.Forgotten.Add(action.RelativePath);
                         break;
                 }
             }

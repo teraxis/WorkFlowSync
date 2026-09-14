@@ -150,6 +150,48 @@ public sealed partial class MainViewModel : ObservableObject
         return name;
     }
 
+    /// <summary>
+    /// Imports a FreeFileSync batch: wildcard excludes go into the matching pair (unsaved until «Зберегти»),
+    /// concrete paths become tombstones in the state database immediately. Returns a human-readable summary.
+    /// </summary>
+    public string ImportFreeFileSync(string batchPath)
+    {
+        var batch = Core.Ffs.FfsBatch.Load(batchPath);
+        if (batch.Pairs.Count == 0) return "У файлі FreeFileSync немає пар папок.";
+
+        var cfg = ToConfig();
+        var runner = new SyncRunner(cfg, ConfigPath, new Core.Logging.MemorySyncLog());
+        using var store = new Core.State.StateStore(runner.StatePath);
+        var now = DateTimeOffset.UtcNow;
+        var lines = new List<string>();
+        var anyPatterns = false;
+
+        foreach (var ffsPair in batch.Pairs)
+        {
+            var target = Core.Ffs.FfsBatchImporter.MatchPair(cfg, ffsPair);
+            if (target is null)
+            {
+                lines.Add($"Пропущено {ffsPair.Left}: додайте пару з таким джерелом і повторіть імпорт.");
+                continue;
+            }
+            var r = Core.Ffs.FfsBatchImporter.Prepare(batch, ffsPair, target, store.Load(target.Name), now, probeSource: true);
+            if (r.Rows.Count > 0) store.Upsert(r.Rows);
+            if (r.NewPatterns.Count > 0)
+            {
+                var vm = Pairs.First(p => p.Name.Equals(target.Name, StringComparison.OrdinalIgnoreCase));
+                vm.ExcludeText = string.Join(Environment.NewLine, vm.ExcludeText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Concat(r.NewPatterns));
+                vm.RaiseSummaries();
+                anyPatterns = true;
+            }
+            lines.Add($"[{target.Name}] шаблонів +{r.Patterns}, «не повертати» +{r.Tombstones:N0} (уже було {r.TombstonesAlreadyPresent:N0}).");
+        }
+        if (anyPatterns) MarkDirty();
+        Run.RefreshSummary();
+        var text = string.Join(" ", lines) + (anyPatterns ? " Натисніть «Зберегти», щоб зберегти нові шаблони." : "");
+        SetStatus(text, error: false);
+        return text;
+    }
+
     public void MarkDirty()
     {
         IsDirty = true;
