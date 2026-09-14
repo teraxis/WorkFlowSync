@@ -33,11 +33,15 @@ public sealed partial class MainViewModel : ObservableObject
     public bool HasPairs => Pairs.Count > 0;
     public bool HasSelection => SelectedPair is not null;
 
+    public RunViewModel Run { get; }
+
     public MainViewModel(string configPath)
     {
         ConfigPath = configPath;
         Pairs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasPairs));
+        Run = new RunViewModel(ToConfig, () => ConfigPath);
         Load();
+        Run.RefreshSummary();
     }
 
     public void Load()

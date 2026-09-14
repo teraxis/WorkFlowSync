@@ -1,6 +1,7 @@
 # F1. Правила дзеркалювання
 
-**Статус**: затверджено (2026-09-14). Реалізація — Етап 1.
+**Статус**: реалізовано (Етап 1, 2026-09-14) — `src/WorkFlowSync.Core/Planning/SyncPlanner.cs`; кожен рядок
+таблиці покрито тестом у `tests/WorkFlowSync.Tests/SyncPlannerTests.cs`, наскрізні сценарії 1–6 — у `EndToEndTests`.
 
 ## Мета
 

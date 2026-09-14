@@ -12,7 +12,9 @@ plus `first_seen` timestamps and a retention window. Replaces FreeFileSync + a 2
 ## Layout
 
 ```
-src/WorkFlowSync.Core/   Config/ (SyncConfig, FolderPair, LinkMode)  Model/ (StateEntry, EntryStatus, EntryKind)
+src/WorkFlowSync.Core/   Config/ (SyncConfig, FolderPair, LinkMode, ConfigFile)  Model/ (StateEntry, EntryStatus, EntryKind)
+                         Scanning/ (TreeScanner, ExcludeMatcher, ScanEntry)  State/StateStore  Planning/ (SyncPlanner, SyncPlan)
+                         Execution/SyncExecutor  Logging/SyncLog  SyncRunner (one pass over all pairs)
 src/WorkFlowSync.Cli/    wfs.exe: Program.cs (commands), ConsoleOwner.cs (pause on double-click), app.manifest (asInvoker + longPathAware + UTF-8)
 src/WorkFlowSync.App/    WorkFlowSync.exe: Avalonia 11.3 GUI - Views/ (MainWindow, PairDialog), ViewModels/ (Main, Pair; no Avalonia types), Converters.cs
 tests/WorkFlowSync.Tests/
@@ -20,7 +22,7 @@ scripts/                 build.ps1, test.ps1, publish.ps1
 config.example.json      reference config
 ```
 
-Stage plan: `docs/requirements.md` §4. Stage 0 and 0.2 (GUI) done; Stage 1 = scanner + state + planner + executor + `sync --once`.
+Stage plan: `docs/requirements.md` §4. Stages 0, 0.2 (GUI) and 1 (sync engine) done. Stage 2 = retention (Recycle Bin) + import-excludes + forget.
 
 ## Commands
 
@@ -57,6 +59,11 @@ src\WorkFlowSync.App\bin\Debug\net8.0\win-x64\WorkFlowSync.exe --config config.e
 - Cli and App csproj set `RuntimeIdentifier=win-x64`, so Debug output is under `bin\Debug\net8.0\win-x64\` (`wfs.exe`, `WorkFlowSync.exe`).
 - Tests reference the App project (WinExe) to test view-models; fine for xUnit.
 - `Path.GetFileName(@"\\srv\share")` returns "" - split segments by hand when naming pairs (bug caught by test).
+- `dotnet test` builds only the test dependency graph: `wfs.exe` keeps a stale Core.dll until `scripts\build.ps1` runs.
+- Cycle detection in TreeScanner must be per-path (target is ancestor of current physical dir or of any dir a link was
+  followed from), NOT a global visited set — the global set was order-dependent under parallel scanning and dropped real folders.
+- OneDrive placeholders carry ReparsePoint + RecallOnDataAccess; only reparse points WITHOUT recall/offline flags are treated as links.
+- Dry-run over a huge tree spends most time printing the plan (226k lines ≈ 6 s); the scan itself is ~1-2 s.
 - Edit `.cs`/`.md`/`.json` with Edit/Write only; PowerShell 5.1 `Set-Content` without `-Encoding utf8` corrupts Cyrillic.
 - Bash heredocs in the agent tool choke on C# raw strings / quotes — use Write for code files.
 - `Microsoft.Data.Sqlite` 10.0.12 (bundle_e_sqlite3) is compatible with net8.0 and single-file publish (`IncludeNativeLibrariesForSelfExtract`).

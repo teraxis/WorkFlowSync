@@ -10,17 +10,18 @@ WorkFlowSync.sln
 └── tests/WorkFlowSync.Tests   xUnit: юніт-тести Core + e2e на тимчасових папках
 ```
 
-Заплановані модулі Core (Етап 1+):
+Модулі Core (✅ = реалізовано в Етапі 1):
 
 | Модуль | Відповідальність |
 |--------|------------------|
 | `Config/` | `SyncConfig`, `FolderPair`, `LinkMode` — реалізовано |
 | `Model/` | `StateEntry`, `EntryStatus`, `EntryKind` — реалізовано |
-| `Scanning/` | `TreeScanner`: паралельний обхід з `FileSystemEnumerable`, великий буфер, reparse points, виключення, пропуск tombstone-папок; віддає `ScanEntry` (шлях, kind, size, mtime, viaLink) |
-| `State/` | `StateStore` (SQLite, WAL, завантаження в `Dictionary`, транзакційний запис), міграції схеми |
-| `Planning/` | `SyncPlanner`: чиста функція (scanSource, scanTarget, state, now, config) → список `SyncAction` за таблицею F1 + ретенція F3. Без I/O — повністю тестується |
-| `Execution/` | `SyncExecutor`: копіювання (з збереженням mtime), створення папок, Кошик, оновлення записів; `--dry-run` = виконавець-принтер |
-| `Logging/` | простий файловий логер (без зовнішніх залежностей) |
+| `Scanning/` | ✅ `TreeScanner` (черга папок + N воркерів через `Channel`, `FileSystemEnumerable`, буфер з конфігу, reparse points з ланцюжковою перевіркою циклів), `ExcludeMatcher` (FFS-шаблони → regex), `ScanEntry`/`ScanResult` |
+| `State/` | ✅ `StateStore` (SQLite, WAL, `Load(pair)` → `Dictionary`, `Upsert` однією транзакцією, `meta`) |
+| `Planning/` | ✅ `SyncPlanner`: чиста функція (source, target, state, now, backfill) → `SyncPlan` (Actions з `Proposed` рядком стану + StateUpdates + Stats) за таблицею F1; ретенція F3 — Етап 2 |
+| `Execution/` | ✅ `SyncExecutor`: mkdir, copy/update через tmp-файл + rename зі збереженням mtime з листингу, `copied_*` читаються з цілі після запису; `--dry-run` лише логує; Кошик — Етап 2 |
+| `Logging/` | ✅ `FileSyncLog` (щоденний файл + sink для консолі/GUI), `MemorySyncLog` (тести) |
+| `SyncRunner` | ✅ оркестратор проходу: стан → скан джерела (недоступне = skip) → скан цілі → plan → execute → upsert; `PassResult` |
 | `Ffs/` | парсер `.ffs_batch` для імпорту |
 
 Ключова межа: **Planner не торкається файлової системи**. Уся логіка правил живе там і

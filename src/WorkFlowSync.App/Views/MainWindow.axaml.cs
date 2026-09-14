@@ -9,6 +9,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // Keep the run log scrolled to the newest line.
+        RunLog.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == TextBox.TextProperty && RunLog.Text is { Length: > 0 } t)
+                RunLog.CaretIndex = t.Length;
+        };
     }
 
     private MainViewModel Vm => (MainViewModel)DataContext!;

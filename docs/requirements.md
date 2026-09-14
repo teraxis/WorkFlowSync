@@ -27,14 +27,14 @@ OneDrive (ціль, власна).
 
 | # | Напрям | Статус | Специфікація |
 |---|--------|--------|--------------|
-| F1 | Правила дзеркалювання (три правила замовника) | Затверджено | [mirror-rules.md](product/features/mirror-rules.md) |
-| F2 | База стану, tombstone, локальні зміни | Затверджено | [state-and-tombstones.md](product/features/state-and-tombstones.md) |
-| F3 | Дата появи (`first_seen`) і ретенція | Затверджено | [first-seen-and-retention.md](product/features/first-seen-and-retention.md) |
-| F4 | Обробка лінків (symlink/junction/DFS) | Затверджено | [links-handling.md](product/features/links-handling.md) |
-| F5 | Сканер: продуктивність на великих деревах | Затверджено | [scanner-performance.md](product/features/scanner-performance.md) |
+| F1 | Правила дзеркалювання (три правила замовника) | Реалізовано (Етап 1) | [mirror-rules.md](product/features/mirror-rules.md) |
+| F2 | База стану, tombstone, локальні зміни | Реалізовано (Етап 1) | [state-and-tombstones.md](product/features/state-and-tombstones.md) |
+| F3 | Дата появи (`first_seen`) і ретенція | `first_seen` + backfill реалізовано; ретенція — Етап 2 | [first-seen-and-retention.md](product/features/first-seen-and-retention.md) |
+| F4 | Обробка лінків (symlink/junction/DFS) | follow/skip реалізовано; recreate — відкладено | [links-handling.md](product/features/links-handling.md) |
+| F5 | Сканер: продуктивність на великих деревах | Реалізовано (Етап 1; 206 тис. файлів за 0,8–1,8 с локально) | [scanner-performance.md](product/features/scanner-performance.md) |
 | F6 | Конфігурація | Затверджено (скелет реалізовано) | [configuration.md](product/features/configuration.md) |
-| F7 | CLI, режими запуску, автозапуск | Затверджено (скелет реалізовано) | [cli-and-scheduling.md](product/features/cli-and-scheduling.md) |
-| F8 | Журнал і діагностика | Затверджено | [logging-and-diagnostics.md](product/features/logging-and-diagnostics.md) |
+| F7 | CLI, режими запуску, автозапуск | `sync --once/--dry-run`, `status`, mutex реалізовано; `--loop`, автозапуск — Етап 3 | [cli-and-scheduling.md](product/features/cli-and-scheduling.md) |
+| F8 | Журнал і діагностика | Лог і `status` реалізовано; ротація — Етап 3 | [logging-and-diagnostics.md](product/features/logging-and-diagnostics.md) |
 | F9 | Міграція з FreeFileSync | Затверджено | [ffs-migration.md](product/features/ffs-migration.md) |
 | F10 | Трей-режим (опційно) | Відкладено | — |
 | F11 | Графічний інтерфейс (пари папок + налаштування) | Реалізовано (Етап 0.2) | [gui.md](product/features/gui.md) |
@@ -57,8 +57,8 @@ OneDrive (ціль, власна).
 |------|-------|-----------|
 | 0 ✅ | Каркас проєкту, модель даних, конфіг, CLI-каркас, publish single-file | `wfs.exe` (консоль), `config validate` працює |
 | 0.2 ✅ | GUI `WorkFlowSync.exe` (Avalonia 11.3): вкладки Папки / Налаштування / Стан, діалог пари з вибором папок, збереження `config.json` | Конфіг створюється й редагується без ручного JSON |
-| 1 | Сканер джерела (паралельний, великий буфер, лінки), SQLite-стан, копіювання нових/оновлених, tombstone/local_modified, `sync --once`, `--dry-run`, лог | Робоче дзеркало за правилами 1–3 |
-| 2 | `first_seen` + ретенція (у Кошик), backfill на першому проході, `import-excludes` з `.ffs_batch`, `status` | Повна заміна FreeFileSync |
+| 1 ✅ | Сканер джерела (паралельний, великий буфер, лінки), SQLite-стан, копіювання нових/оновлених, tombstone/local_modified, `sync --once`, `--dry-run`, лог, вкладка «Стан» у GUI з запуском | Робоче дзеркало за правилами 1–3; 43 тести, з них наскрізні на temp-папках і junction-циклі |
+| 2 | Ретенція (у Кошик), `import-excludes` з `.ffs_batch`, `forget <шлях>` | Повна заміна FreeFileSync |
 | 3 | `--loop` (резидент), автозапуск (Startup/`schtasks`), контроль паралельних запусків, ротація логів | Автономна робота |
 | 4 (опц.) | Трей-іконка, сповіщення, пауза | Зручність |
 
@@ -83,16 +83,19 @@ OneDrive (ціль, власна).
 
 ## 6. Відкриті питання
 
-1. Джерела на момент старту: у FFS-конфігу `E:\vrp` → `E:\OneDrive\Робоча папка`; OneDrive нині
-   на `D:`. Уточнити фактичні шляхи всіх пар перед Етапом 1.
-2. `first_seen` для об'єктів, що вже є в джерелі на першому проході: пропозиція —
-   `min(ctime, mtime)` як наближення (див. F3). Потрібне погодження.
+1. ~~Джерела на момент старту~~ — вирішено 2026-09-14: тестова пара `S:\tmp\test\Засідання ВРП` →
+   `D:\OneDrive\tmp\test` (у `config.example.json`); бойові пари додаються через GUI.
+2. ~~`first_seen` на першому проході~~ — вирішено 2026-09-14: `min(ctime, mtime)` (реалізовано:
+   автоматично, коли база для пари порожня, або `--backfill`).
 3. Чи потрібен режим `recreate` для лінків узагалі (для OneDrive — ні). Пропозиція: лишити в
    конфігу, реалізувати після `follow`/`skip`.
 4. Ліміт паралелізму за замовчуванням (8) — підібрати емпірично на реальному сервері.
 
 ## 7. Журнал змін специфікації
 
+- `2026-09-14`: Етап 1 виконано — двигун синхронізації (сканер, SQLite-стан, planner за таблицею F1,
+  executor, `wfs sync --once [--dry-run]`, `wfs status`, вкладка «Стан» у GUI). Закрито відкриті
+  питання 1–2. Ретенцію перенесено в Етап 2.
 - `2026-09-14`: додано F11 — графічний інтерфейс (вибір папок для відстеження і місця
   збереження, налаштування); консольний exe перейменовано на `wfs.exe`; Етап 0.2 виконано.
 - `2026-09-14`: початкова специфікація за результатами обговорення (три правила, дата появи і

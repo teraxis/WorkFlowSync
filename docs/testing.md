@@ -29,10 +29,15 @@ Requires .NET SDK 8.0.x on PATH (`C:\Program Files\dotnet`). No other services.
 
 If a command cannot run, record the exact reason and the next step needed.
 
-## Current Status (2026-09-14, Stage 0.2)
+## Current Status (2026-09-14, Stage 1)
 
 - `dotnet build -warnaserror`: OK.
-- `dotnet test`: 5 passed (`SyncConfigTests`, `PairViewModelTests` incl. save/reload round-trip).
+- `dotnet test`: 43 passed — `SyncPlannerTests` (17, one per decision-table row), `ExcludeMatcherTests` (14),
+  `EndToEndTests` (6, temp folders incl. junction cycle via `mklink /J`, hidden/system, unavailable source, dry-run),
+  `RunViewModelTests` (GUI run tab), `SyncConfigTests`, `PairViewModelTests`.
+- Perf dry-run over `C:\Program Files` (206k files): scan 0.8–1.8 s, 0 warnings.
+- NB: `dotnet test` does not rebuild `WorkFlowSync.Cli` (not in the test dependency graph) — run `scripts\build.ps1`
+  before using `wfs.exe` after Core changes.
 - GUI launched with `config.example.json`: window opens on the «Папки» tab, pair list renders, pair dialog
   loads all fields (screenshot-verified once; do not automate mouse/screenshots on the user's desktop —
   see WorkFlowSync_SKILL.md).

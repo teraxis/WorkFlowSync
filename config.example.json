@@ -1,15 +1,17 @@
 {
-  // WorkFlowSync configuration. Copy to config.json next to WorkFlowSync.exe and adjust.
+  // WorkFlowSync configuration. Copy to config.json next to WorkFlowSync.exe / wfs.exe and adjust,
+  // or simply start WorkFlowSync.exe and use the «Папки» / «Налаштування» tabs.
   // Times use .NET TimeSpan format: "d.hh:mm:ss" (365 days = "365.00:00:00", 30 minutes = "00:30:00").
   "pairs": [
     {
-      "name": "vrp",
-      "source": "E:\\vrp",
-      "target": "D:\\OneDrive\\Робоча папка",
+      "name": "test",
+      "source": "S:\\tmp\\test\\Засідання ВРП",
+      "target": "D:\\OneDrive\\tmp\\test",
       "links": "follow",
-      "retention": "365.00:00:00",
+      "retention": null,
       "exclude": [
-        "\\Друга дисциплінарна палата\\*Робочий.docx"
+        "~$*",
+        "*.tmp"
       ]
     }
   ],
