@@ -22,6 +22,9 @@ WorkFlowSync.sln
 | `Execution/` | ✅ `SyncExecutor`: mkdir, copy/update через tmp-файл + rename зі збереженням mtime з листингу, `copied_*` читаються з цілі після запису; recycle file / empty dir; `--dry-run` лише логує. `RecycleBin`: SHFileOperationW |
 | `Logging/` | ✅ `FileSyncLog` (щоденний файл + sink для консолі/GUI), `MemorySyncLog` (тести) |
 | `SyncRunner` | ✅ оркестратор проходу: стан → скан джерела (недоступне = skip) → скан цілі → plan → execute → upsert; `PassResult` |
+| `LoopRunner` | ✅ резидент: перечитати конфіг → `PassLock` → прохід → `Task.Delay(interval)`; помилки логуються, цикл живе |
+| `PassLock` | ✅ міжпроцесний замок на конфіг (іменований Mutex + облік у процесі, бо Mutex реентерабельний у потоці) |
+| `Autostart` | ✅ ярлик у Startup (WScript.Shell COM) і завдання Планувальника (`schtasks`, без /RU і /RL) |
 | `Ffs/` | ✅ `FfsBatch` (XDocument-парсер), `FfsBatchImporter` (шаблони → exclude, шляхи → tombstone, зіставлення пар за джерелом) |
 
 Ключова межа: **Planner не торкається файлової системи**. Уся логіка правил живе там і
@@ -86,3 +89,5 @@ USN-журнал по SMB недоступний, локально — лише 
 - Файли проєкту редагувати лише інструментами з коректним UTF-8 (без BOM для `.cs`, `.md`);
   PowerShell 5.1 `Set-Content` без `-Encoding utf8` ламає кирилицю (грабля з PathShortener).
 - `make` на Windows може бути відсутній — еквіваленти у `scripts\*.ps1`.
+- CA1416 (platform compatibility) вимкнено по суті: усі збірки мають `[assembly: SupportedOSPlatform("windows")]`
+  через `Directory.Build.props`; продукт Windows-only за визначенням.

@@ -12,4 +12,11 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <DebugType>embedded</DebugType>
   </PropertyGroup>
+
+  <!-- Windows-only product (win-x64 RID, Recycle Bin, WScript.Shell, schtasks): every assembly declares it, so CA1416 is satisfied. -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>windows</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

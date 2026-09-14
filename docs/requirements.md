@@ -33,8 +33,8 @@ OneDrive (ціль, власна).
 | F4 | Обробка лінків (symlink/junction/DFS) | follow/skip реалізовано; recreate — відкладено | [links-handling.md](product/features/links-handling.md) |
 | F5 | Сканер: продуктивність на великих деревах | Реалізовано (Етап 1; 206 тис. файлів за 0,8–1,8 с локально) | [scanner-performance.md](product/features/scanner-performance.md) |
 | F6 | Конфігурація | Затверджено (скелет реалізовано) | [configuration.md](product/features/configuration.md) |
-| F7 | CLI, режими запуску, автозапуск | `sync --once/--dry-run`, `status`, mutex реалізовано; `--loop`, автозапуск — Етап 3 | [cli-and-scheduling.md](product/features/cli-and-scheduling.md) |
-| F8 | Журнал і діагностика | Лог і `status` реалізовано; ротація — Етап 3 | [logging-and-diagnostics.md](product/features/logging-and-diagnostics.md) |
+| F7 | CLI, режими запуску, автозапуск | Реалізовано (Етап 3): `--loop`, автозапуск (ярлик Startup / Планувальник) з консолі та GUI, спільний замок | [cli-and-scheduling.md](product/features/cli-and-scheduling.md) |
+| F8 | Журнал і діагностика | Реалізовано (ротація 30 днів — Етап 3) | [logging-and-diagnostics.md](product/features/logging-and-diagnostics.md) |
 | F9 | Міграція з FreeFileSync | Реалізовано (Етап 2): `wfs import-excludes`, кнопка в GUI, `wfs forget` | [ffs-migration.md](product/features/ffs-migration.md) |
 | F10 | Трей-режим (опційно) | Відкладено | — |
 | F11 | Графічний інтерфейс (пари папок + налаштування) | Реалізовано (Етап 0.2) | [gui.md](product/features/gui.md) |
@@ -59,7 +59,7 @@ OneDrive (ціль, власна).
 | 0.2 ✅ | GUI `WorkFlowSync.exe` (Avalonia 11.3): вкладки Папки / Налаштування / Стан, діалог пари з вибором папок, збереження `config.json` | Конфіг створюється й редагується без ручного JSON |
 | 1 ✅ | Сканер джерела (паралельний, великий буфер, лінки), SQLite-стан, копіювання нових/оновлених, tombstone/local_modified, `sync --once`, `--dry-run`, лог, вкладка «Стан» у GUI з запуском | Робоче дзеркало за правилами 1–3; 43 тести, з них наскрізні на temp-папках і junction-циклі |
 | 2 ✅ | Ретенція (у Кошик), `import-excludes` з `.ffs_batch` (консоль + кнопка в GUI), `forget <шлях>` | Повна заміна FreeFileSync; 55 тестів; бойовий `batch.ffs_batch` імпортується за 0,3 с |
-| 3 | `--loop` (резидент), автозапуск (Startup/`schtasks`), контроль паралельних запусків, ротація логів | Автономна робота |
+| 3 ✅ | `--loop` (резидент, конфіг перечитується перед кожним проходом), автозапуск без адміністратора (ярлик у Startup або завдання Планувальника — `wfs autostart/task`, перемикачі в GUI), спільний міжпроцесний замок GUI↔консоль↔резидент, ротація логів | Автономна робота; 61 тест |
 | 4 (опц.) | Трей-іконка, сповіщення, пауза | Зручність |
 
 ## 5. Нефункціональні вимоги
@@ -93,6 +93,9 @@ OneDrive (ціль, власна).
 
 ## 7. Журнал змін специфікації
 
+- `2026-09-14`: Етап 3 виконано — резидентний режим, автозапуск, замок, ротація логів. Граблі:
+  Windows-м'ютекс реентерабельний у потоці (додано облік у процесі); CA1416 вирішено атрибутом
+  збірки `SupportedOSPlatform("windows")` для всіх проєктів.
 - `2026-09-14`: Етап 2 виконано — ретенція (лише файли; порожні папки в Кошик і забуваються, щоб
   повернутися з новим файлом), імпорт FreeFileSync (16 шаблонів + 22 551 «не повертати» з бойового
   файлу), `forget`. Виправлено: `Pack=1` у `SHFILEOPSTRUCT` на x64 (AV), пул з'єднань SQLite тримав

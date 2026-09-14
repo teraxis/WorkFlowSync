@@ -5,6 +5,7 @@
     <AssemblyName>wfs</AssemblyName>
     <RootNamespace>WorkFlowSync.Cli</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <!-- Portable single-file publish: no separately installed runtime, normal user, no installer. -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>

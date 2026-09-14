@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
@@ -47,6 +46,8 @@ internal static class Program
                 "status" => StatusCommand(opts),
                 "import-excludes" => ImportExcludesCommand(opts),
                 "forget" => ForgetCommand(opts),
+                "autostart" => AutostartCommand(opts),
+                "task" => TaskCommand(opts),
                 _ => Usage(2),
             };
         }
@@ -117,16 +118,8 @@ internal static class Program
 
     private static int SyncCommand(Options opts)
     {
-        if (opts.Loop) return NotImplemented("sync --loop");
         var cfg = LoadConfig(opts, out var code);
         if (cfg is null) return code;
-
-        using var mutex = new Mutex(false, InstanceMutexName(opts.ConfigPath));
-        if (!mutex.WaitOne(0))
-        {
-            Console.Error.WriteLine("another WorkFlowSync pass is running for this config");
-            return 4;
-        }
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
@@ -138,14 +131,68 @@ internal static class Program
             w.WriteLine(line);
         }, opts.Verbose);
 
-        try
+        if (opts.Loop)
         {
-            var pass = new SyncRunner(cfg, opts.ConfigPath, log).Run(opts.DryRun, opts.Backfill, cts.Token);
-            return pass.Errors == 0 ? 0 : 1;
+            // Resident mode: the loop itself takes the pass lock per pass, so a scheduled --once can interleave safely.
+            var loop = new LoopRunner(opts.ConfigPath, log, opts.DryRun);
+            loop.RunAsync(cts.Token).GetAwaiter().GetResult();
+            return 0;
         }
-        finally
+
+        using var gate = PassLock.TryAcquire(opts.ConfigPath);
+        if (!gate.Acquired)
         {
-            mutex.ReleaseMutex();
+            Console.Error.WriteLine("another WorkFlowSync pass is running for this config");
+            return 4;
+        }
+        var pass = new SyncRunner(cfg, opts.ConfigPath, log).Run(opts.DryRun, opts.Backfill, cts.Token);
+        return pass.Errors == 0 ? 0 : 1;
+    }
+
+    private static int AutostartCommand(Options opts)
+    {
+        var verb = opts.Positional.FirstOrDefault() ?? "status";
+        switch (verb)
+        {
+            case "on":
+                if (LoadConfig(opts, out var c1) is null) return c1;
+                Autostart.EnableStartupShortcut(opts.ConfigPath);
+                Console.WriteLine($"autostart: enabled  ({Autostart.ShortcutPath()})");
+                return 0;
+            case "off":
+                Autostart.DisableStartupShortcut();
+                Console.WriteLine("autostart: disabled");
+                return 0;
+            case "status":
+                Console.WriteLine($"autostart: {(Autostart.IsStartupShortcutEnabled() ? "enabled" : "disabled")}  ({Autostart.ShortcutPath()})");
+                return 0;
+            default:
+                Console.Error.WriteLine("usage: wfs autostart on|off|status [--config <path>]");
+                return 2;
+        }
+    }
+
+    private static int TaskCommand(Options opts)
+    {
+        var verb = opts.Positional.FirstOrDefault() ?? "status";
+        switch (verb)
+        {
+            case "on":
+                var cfg = LoadConfig(opts, out var c1);
+                if (cfg is null) return c1;
+                Autostart.EnableScheduledTask(opts.ConfigPath, (int)Math.Round(cfg.Interval.TotalMinutes));
+                Console.WriteLine($"task: enabled  ({Autostart.TaskName}, every {cfg.Interval.TotalMinutes:0} min, current user, only when logged on)");
+                return 0;
+            case "off":
+                Autostart.DisableScheduledTask();
+                Console.WriteLine("task: disabled");
+                return 0;
+            case "status":
+                Console.WriteLine($"task: {(Autostart.IsScheduledTaskEnabled() ? "enabled" : "disabled")}  ({Autostart.TaskName})");
+                return 0;
+            default:
+                Console.Error.WriteLine("usage: wfs task on|off|status [--config <path>]");
+                return 2;
         }
     }
 
@@ -260,12 +307,6 @@ internal static class Program
         return 3;
     }
 
-    private static string InstanceMutexName(string configPath)
-    {
-        var hash = Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(configPath).ToUpperInvariant())));
-        return $"Local\\WorkFlowSync.{hash[..16]}";
-    }
-
     private static int Usage(int code)
     {
         var w = code == 0 ? Console.Out : Console.Error;
@@ -278,12 +319,14 @@ internal static class Program
               wfs config validate [--config <path>]
               wfs import-excludes <batch.ffs_batch> [--pair <name>] [--dry-run] [--no-probe] [--config <path>]
               wfs forget <relative-path> [--pair <name>] [--config <path>]
+              wfs autostart on|off|status [--config <path>]   Startup-folder shortcut running `sync --loop` at logon
+              wfs task on|off|status [--config <path>]        Task Scheduler task running `sync --once` every <interval>
               wfs version
 
             options:
               --config <path>   config file (default: config.json next to the executable)
               --once            run one pass and exit (default; Task Scheduler mode)
-              --loop            stay resident and repeat every configured interval (not yet)
+              --loop            stay resident and repeat every configured interval (config is re-read each pass)
               --dry-run         report planned actions without touching the file system or the state
               --backfill        take first_seen from min(ctime, mtime) even when state already exists
               --verbose         per-directory DEBUG lines in the log

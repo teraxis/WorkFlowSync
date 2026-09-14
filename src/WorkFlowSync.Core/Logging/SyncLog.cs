@@ -28,11 +28,39 @@ public sealed class FileSyncLog : ISyncLog, IDisposable
     private StreamWriter? _writer;
     private string? _writerDate;
 
+    /// <summary>Daily files older than this many days are deleted when the logger opens (docs F8).</summary>
+    public const int KeepDays = 30;
+
     public FileSyncLog(string directory, Action<LogLevel, string>? sink = null, bool verbose = false)
     {
         _dir = directory;
         _sink = sink;
         _verbose = verbose;
+        Prune(directory, KeepDays);
+    }
+
+    /// <summary>Deletes `wfs-YYYY-MM-DD.log` files older than <paramref name="keepDays"/>. Best effort. Returns the number removed.</summary>
+    public static int Prune(string directory, int keepDays, DateTime? today = null)
+    {
+        try
+        {
+            if (!Directory.Exists(directory)) return 0;
+            var cutoff = (today ?? DateTime.Today).AddDays(-keepDays);
+            var removed = 0;
+            foreach (var f in Directory.EnumerateFiles(directory, "wfs-????-??-??.log"))
+            {
+                var stamp = Path.GetFileNameWithoutExtension(f)[4..];
+                if (DateTime.TryParseExact(stamp, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) && d < cutoff)
+                {
+                    try { File.Delete(f); removed++; } catch { /* in use */ }
+                }
+            }
+            return removed;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     public void Write(LogLevel level, string message)

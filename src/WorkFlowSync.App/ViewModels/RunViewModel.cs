@@ -100,6 +100,9 @@ public sealed partial class RunViewModel : ObservableObject
             var token = _cts.Token;
             var result = await Task.Run(() =>
             {
+                // Same cross-process lock as wfs.exe: never overlap with a scheduled or resident pass.
+                using var gate = PassLock.TryAcquire(configPath);
+                if (!gate.Acquired) throw new InvalidOperationException("Інший прохід уже виконується для цього конфігу (Планувальник або резидентний режим). Спробуйте пізніше.");
                 using var log = new FileSyncLog(logDir, (_, line) => AppendLog(line));
                 return new SyncRunner(cfg, configPath, log).Run(dryRun, forceBackfill: false, token);
             }, _cts.Token);

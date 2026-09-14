@@ -34,12 +34,14 @@ public sealed partial class MainViewModel : ObservableObject
     public bool HasSelection => SelectedPair is not null;
 
     public RunViewModel Run { get; }
+    public AutostartViewModel Autostart { get; }
 
     public MainViewModel(string configPath)
     {
         ConfigPath = configPath;
         Pairs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasPairs));
         Run = new RunViewModel(ToConfig, () => ConfigPath);
+        Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
         Load();
         Run.RefreshSummary();
     }

@@ -76,7 +76,21 @@
                             <NumericUpDown Grid.Column="1" Value="{Binding IntervalMinutes}" Minimum="1" Maximum="1440" Increment="5" FormatString="0" Width="140" HorizontalAlignment="Left" />
                         </Grid>
                         <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                                   Text="Використовується у резидентному режимі (sync --loop). Автозапуск з Windows і трей — наступні етапи." />
+                                   Text="Період між проходами в резидентному режимі та для завдання Планувальника. Зміну інтервалу резидент підхопить сам; завдання Планувальника — перестворіть перемикачем нижче." />
+
+                        <TextBlock Text="Автоматичний запуск" FontWeight="SemiBold" FontSize="16" Margin="0,8,0,0" />
+                        <StackPanel DataContext="{Binding Autostart}" x:DataType="vm:AutostartViewModel" Spacing="6">
+                            <CheckBox IsChecked="{Binding StartupEnabled}" IsEnabled="{Binding ConsoleAvailable}"
+                                      Content="Запускати при вході в Windows і перевіряти за інтервалом (резидентний режим)" />
+                            <TextBlock Opacity="0.7" TextWrapping="Wrap" Text="{Binding StartupHint}" Margin="28,0,0,4" />
+                            <CheckBox IsChecked="{Binding TaskEnabled}" IsEnabled="{Binding ConsoleAvailable}"
+                                      Content="Завдання Планувальника Windows: один прохід за інтервалом" />
+                            <TextBlock Opacity="0.7" TextWrapping="Wrap" Text="{Binding TaskHint}" Margin="28,0,0,4" />
+                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
+                                       Foreground="{Binding MessageIsError, Converter={x:Static app:Converters.ErrorBrush}}" />
+                            <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                                       Text="Достатньо одного способу. Резидентний режим не показує вікон (мінімізована консоль wfs.exe); стан видно на вкладці «Стан». Обидва працюють від звичайного користувача." />
+                        </StackPanel>
 
                         <TextBlock Text="Файли програми" FontWeight="SemiBold" FontSize="16" Margin="0,8,0,0" />
                         <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,8,Auto">
