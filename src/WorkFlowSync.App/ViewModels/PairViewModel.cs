@@ -7,6 +7,7 @@ namespace WorkFlowSync.App.ViewModels;
 public sealed partial class PairViewModel : ObservableObject
 {
     [ObservableProperty] private string _name = "";
+    [ObservableProperty] private bool _enabled = true;
     [ObservableProperty] private string _source = "";
     [ObservableProperty] private string _target = "";
     [ObservableProperty] private LinkMode _links = LinkMode.Follow;
@@ -22,6 +23,12 @@ public sealed partial class PairViewModel : ObservableObject
 
     public string RetentionSummary => HasRetention ? $"{RetentionDays} дн." : "назавжди";
 
+    /// <summary>True while this very pair is being synchronised (drives the row's buttons).</summary>
+    [ObservableProperty] private bool _isBusy;
+
+    public string PauseButtonText => Enabled ? "Пауза" : "Відновити";
+    public string StateSummary => Enabled ? "активна" : "на паузі";
+
     public string LinksSummary => Links switch
     {
         LinkMode.Follow => "лінки: проходити",
@@ -35,6 +42,7 @@ public sealed partial class PairViewModel : ObservableObject
     public static PairViewModel FromModel(FolderPair p) => new()
     {
         Name = p.Name,
+        Enabled = p.Enabled,
         Source = p.Source,
         Target = p.Target,
         Links = p.Links,
@@ -46,6 +54,7 @@ public sealed partial class PairViewModel : ObservableObject
     public FolderPair ToModel() => new()
     {
         Name = Name.Trim(),
+        Enabled = Enabled,
         Source = Source.Trim(),
         Target = Target.Trim(),
         Links = Links,
@@ -58,6 +67,7 @@ public sealed partial class PairViewModel : ObservableObject
     public void CopyFrom(PairViewModel other)
     {
         Name = other.Name;
+        Enabled = other.Enabled;
         Source = other.Source;
         Target = other.Target;
         Links = other.Links;
@@ -69,6 +79,8 @@ public sealed partial class PairViewModel : ObservableObject
 
     public void RaiseSummaries()
     {
+        OnPropertyChanged(nameof(PauseButtonText));
+        OnPropertyChanged(nameof(StateSummary));
         OnPropertyChanged(nameof(RetentionSummary));
         OnPropertyChanged(nameof(LinksSummary));
         OnPropertyChanged(nameof(ExcludeCount));
@@ -76,6 +88,12 @@ public sealed partial class PairViewModel : ObservableObject
 
     private static List<string> ParseExcludes(string text) =>
         text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    partial void OnEnabledChanged(bool value)
+    {
+        OnPropertyChanged(nameof(PauseButtonText));
+        OnPropertyChanged(nameof(StateSummary));
+    }
 
     partial void OnHasRetentionChanged(bool value) => OnPropertyChanged(nameof(RetentionSummary));
     partial void OnRetentionDaysChanged(int value) => OnPropertyChanged(nameof(RetentionSummary));

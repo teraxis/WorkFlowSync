@@ -29,10 +29,11 @@ Requires .NET SDK 8.0.x on PATH (`C:\Program Files\dotnet`). No other services.
 
 If a command cannot run, record the exact reason and the next step needed.
 
-## Current Status (2026-09-14, Stage 4)
+## Current Status (2026-09-14, Stage 4 + per-pair controls)
 
 - `dotnet build -warnaserror`: OK.
-- `dotnet test`: 64 passed — adds `TrayModeTests` (3: background loop start/pause/resume against real folders,
+- `dotnet test`: 69 passed — adds `PerPairControlTests` (5: paused pair skipped, explicit single-pair run overrides pause,
+  unknown pair reported, `enabled` round-trip and legacy default, run-one-pair from the view-model), `TrayModeTests` (3: background loop start/pause/resume against real folders,
   Startup shortcut mode round-trip, app.ico structure). The tray icon itself needs a running Avalonia app, so it is
   verified by launching `WorkFlowSync.exe --tray` (process alive, hidden window, pass written to the log) and by eye.
   Stage 3 added `ResidentModeTests` (6: pass lock, loop with config reload, loop skip on held lock,

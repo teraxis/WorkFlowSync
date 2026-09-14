@@ -28,6 +28,18 @@ public partial class MainWindow : Window
             Vm.AddPair(draft);
     }
 
+    private async void OnRunPair(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is not PairViewModel pair) return;
+        await Vm.RunPairAsync(pair);
+    }
+
+    private void OnTogglePair(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is not PairViewModel pair) return;
+        Vm.TogglePair(pair);
+    }
+
     private async void OnImportFfs(object? sender, RoutedEventArgs e)
     {
         var files = await StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions

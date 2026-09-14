@@ -16,7 +16,6 @@ public partial class App : Application
     private MainViewModel? _vm;
     private MainWindow? _window;
     private TrayIcon? _tray;
-    private BackgroundLoop? _loop;
     private NativeMenuItem? _pauseItem;
     private NativeMenuItem? _statusItem;
 
@@ -34,6 +33,7 @@ public partial class App : Application
             var trayMode = args.Contains("--tray") || args.Contains("--minimized");
 
             _vm = new MainViewModel(configPath);
+            _vm.Background.Changed += UpdateTray;
             _window = new MainWindow { DataContext = _vm };
             _window.Closing += OnWindowClosing;
             desktop.MainWindow = _window;
@@ -133,38 +133,36 @@ public partial class App : Application
 
     private void ToggleLoop()
     {
-        if (_loop is { IsActive: true }) _loop.Pause();
-        else if (_loop is { State: LoopState.Paused }) _loop.Resume();
-        else StartLoop();
+        var loop = _vm!.Background;
+        if (loop.IsActive) loop.Pause();
+        else if (loop.State == LoopState.Paused) loop.Resume();
+        else loop.Start();
+        _vm.Run.SyncAutoCheckFromLoop();
         UpdateTray();
     }
 
     private void StartLoop()
     {
-        _loop ??= new BackgroundLoop(_vm!.ConfigPath, () =>
-        {
-            var cfg = _vm!.ToConfig();
-            return Path.IsPathRooted(cfg.LogPath) ? cfg.LogPath : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(_vm.ConfigPath))!, cfg.LogPath);
-        });
-        _loop.Changed += UpdateTray;
-        _loop.Start();
+        _vm!.Background.Start();
+        _vm.Run.SyncAutoCheckFromLoop();
         UpdateTray();
     }
 
     private void UpdateTray() => Dispatcher.UIThread.Post(() =>
     {
-        var text = _loop?.StatusText ?? "Фоновий режим: вимкнено";
+        var loop = _vm?.Background;
+        var text = loop is null || loop.State == LoopState.Stopped ? "Фоновий режим: вимкнено" : loop.StatusText;
         if (_statusItem is not null) _statusItem.Header = text;
         if (_tray is not null) _tray.ToolTipText = $"WorkFlowSync — {text}";
         if (_pauseItem is not null)
-            _pauseItem.Header = _loop is { IsActive: true } ? "Призупинити фоновий режим" : "Запустити фоновий режим";
-        if (_vm is not null) _vm.BackgroundStatus = text;
+            _pauseItem.Header = loop is { IsActive: true } ? "Призупинити фоновий режим" : "Запустити фоновий режим";
+        _vm?.Run.SyncAutoCheckFromLoop();
     });
 
     private void Shutdown(IClassicDesktopStyleApplicationLifetime desktop)
     {
-        _loop?.Stop();
-        _loop?.Dispose();
+        _vm?.Background.Stop();
+        _vm?.Background.Dispose();
         if (_tray is not null) _tray.IsVisible = false;
         desktop.Shutdown();
     }

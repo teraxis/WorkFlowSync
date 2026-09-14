@@ -43,17 +43,28 @@
                                  DoubleTapped="OnEditPair">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:PairViewModel">
-                                    <Grid ColumnDefinitions="*" RowDefinitions="Auto,Auto,Auto" Margin="4">
-                                        <TextBlock Grid.Row="0" Text="{Binding Name}" FontWeight="SemiBold" />
-                                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6">
+                                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="4">
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding StateSummary}" Opacity="0.7" VerticalAlignment="Center" />
+                                            <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="80" Height="4" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6">
                                             <TextBlock Text="{Binding Source}" />
                                             <TextBlock Text="→" Opacity="0.6" />
                                             <TextBlock Text="{Binding Target}" />
                                         </StackPanel>
-                                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12" Opacity="0.7">
+                                        <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Spacing="12" Opacity="0.7">
                                             <TextBlock Text="{Binding LinksSummary}" />
                                             <TextBlock Text="{Binding RetentionSummary, StringFormat='зберігати: {0}'}" />
                                             <TextBlock Text="{Binding ExcludeCount, StringFormat='виключень: {0}'}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.RowSpan="3" Grid.Column="1" Orientation="Horizontal"
+                                                    Spacing="6" VerticalAlignment="Center" Margin="12,0,0,0">
+                                            <Button Content="Запустити" Click="OnRunPair" MinWidth="96"
+                                                    ToolTip.Tip="Виконати синхронізацію лише цієї пари зараз (працює й на паузі)" />
+                                            <Button Content="{Binding PauseButtonText}" Click="OnTogglePair" MinWidth="96"
+                                                    ToolTip.Tip="Пауза виключає пару з автоматичних перевірок" />
                                         </StackPanel>
                                     </Grid>
                                 </DataTemplate>
@@ -127,9 +138,6 @@
             <!-- ===================== Стан ===================== -->
             <TabItem Header="Стан">
                 <DockPanel DataContext="{Binding Run}" x:DataType="vm:RunViewModel">
-                    <TextBlock DockPanel.Dock="Top" Text="{Binding $parent[Window].((vm:MainViewModel)DataContext).BackgroundStatus}"
-                               IsVisible="{Binding $parent[Window].((vm:MainViewModel)DataContext).BackgroundStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                               FontWeight="SemiBold" Margin="0,0,0,6" TextWrapping="Wrap" />
                     <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" TextWrapping="Wrap" FontFamily="Consolas,monospace" Margin="0,0,0,10" />
 
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
@@ -138,6 +146,17 @@
                         <Button Content="Зупинити" Command="{Binding StopCommand}" IsEnabled="{Binding IsRunning}" />
                         <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsRunning}" Width="140" VerticalAlignment="Center" />
                     </StackPanel>
+
+                    <Border DockPanel.Dock="Top" Margin="0,0,0,8" Padding="10,8" CornerRadius="4"
+                            Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                        <StackPanel Spacing="4">
+                            <CheckBox IsChecked="{Binding AutoCheck}"
+                                      Content="Перевіряти автоматично із заданим інтервалом (поки програма відкрита)" />
+                            <TextBlock Text="{Binding BackgroundStatus}" TextWrapping="Wrap" Opacity="0.85" Margin="28,0,0,0" />
+                            <TextBlock Opacity="0.6" TextWrapping="Wrap" Margin="28,0,0,0"
+                                       Text="Щоб перевірка тривала й після закриття вікна, увімкніть автозапуск у «Налаштуваннях»." />
+                        </StackPanel>
+                    </Border>
 
                     <TextBlock DockPanel.Dock="Top" Text="{Binding LastResult}" TextWrapping="Wrap" Margin="0,0,0,8" FontWeight="SemiBold" />
 

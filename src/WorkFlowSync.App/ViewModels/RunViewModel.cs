@@ -1,6 +1,7 @@
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using WorkFlowSync.App.Services;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
 using WorkFlowSync.Core.Execution;
@@ -17,21 +18,73 @@ public sealed partial class RunViewModel : ObservableObject
 
     private readonly Func<SyncConfig> _configProvider;
     private readonly Func<string> _configPathProvider;
+    private readonly BackgroundLoop _background;
+    private readonly Func<bool> _isDirty;
+    private bool _suppressAutoCheck;
     private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
     private readonly List<string> _logLines = new();
     private CancellationTokenSource? _cts;
 
     [ObservableProperty] private bool _isRunning;
+
+    /// <summary>«Перевіряти автоматично» — starts/stops the periodic checker in this window.</summary>
+    [ObservableProperty] private bool _autoCheck;
+    [ObservableProperty] private string _backgroundStatus = "Автоматична перевірка вимкнена.";
     [ObservableProperty] private string _summary = "";
     [ObservableProperty] private string _logText = "";
     [ObservableProperty] private string _lastResult = "";
 
     public bool CanRun => !IsRunning;
 
-    public RunViewModel(Func<SyncConfig> configProvider, Func<string> configPathProvider)
+    public RunViewModel(Func<SyncConfig> configProvider, Func<string> configPathProvider, BackgroundLoop background, Func<bool> isDirty)
     {
         _configProvider = configProvider;
         _configPathProvider = configPathProvider;
+        _background = background;
+        _isDirty = isDirty;
+        _background.Changed += OnBackgroundChanged;
+        _background.LogLine += AppendLog;
+    }
+
+    /// <summary>Called by the tray menu so the window switch mirrors the real state.</summary>
+    public void SyncAutoCheckFromLoop()
+    {
+        _suppressAutoCheck = true;
+        try { AutoCheck = _background.IsActive; }
+        finally { _suppressAutoCheck = false; }
+        OnBackgroundChanged();
+    }
+
+    private void OnBackgroundChanged()
+    {
+        var text = _background.State == LoopState.Stopped
+            ? "Автоматична перевірка вимкнена."
+            : _background.StatusText;
+        if (_ui is not null) _ui.Post(_ => BackgroundStatus = text, null);
+        else BackgroundStatus = text;
+    }
+
+    partial void OnAutoCheckChanged(bool value)
+    {
+        if (_suppressAutoCheck) return;
+        if (value)
+        {
+            // The loop reads config.json from disk, so unsaved edits (e.g. a new interval) would be ignored.
+            if (_isDirty())
+            {
+                _suppressAutoCheck = true;
+                AutoCheck = false;
+                _suppressAutoCheck = false;
+                BackgroundStatus = "Спершу натисніть «Зберегти» — фонова перевірка читає збережену конфігурацію.";
+                return;
+            }
+            _background.Start();
+        }
+        else
+        {
+            _background.Stop();
+        }
+        OnBackgroundChanged();
     }
 
     /// <summary>Reads last_run + counters from state.db without running anything.</summary>
@@ -72,10 +125,13 @@ public sealed partial class RunViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRun))]
     private Task RunNowAsync() => RunAsync(dryRun: false);
 
+    /// <summary>Runs a single pair now, even if it is paused (the row buttons on the «Папки» tab).</summary>
+    public Task RunPairAsync(string pairName) => RunAsync(dryRun: false, onlyPair: pairName);
+
     [RelayCommand]
     private void Stop() => _cts?.Cancel();
 
-    private async Task RunAsync(bool dryRun)
+    private async Task RunAsync(bool dryRun, string? onlyPair = null)
     {
         if (IsRunning) return;
         var cfg = _configProvider();
@@ -93,7 +149,7 @@ public sealed partial class RunViewModel : ObservableObject
         IsRunning = true;
         lock (_logLines) _logLines.Clear();
         LogText = "";
-        LastResult = dryRun ? "Розрахунок плану…" : "Виконується…";
+        LastResult = dryRun ? "Розрахунок плану…" : (onlyPair is null ? "Виконується…" : $"Виконується пара «{onlyPair}»…");
 
         try
         {
@@ -104,7 +160,7 @@ public sealed partial class RunViewModel : ObservableObject
                 using var gate = PassLock.TryAcquire(configPath);
                 if (!gate.Acquired) throw new InvalidOperationException("Інший прохід уже виконується для цього конфігу (Планувальник або резидентний режим). Спробуйте пізніше.");
                 using var log = new FileSyncLog(logDir, (_, line) => AppendLog(line));
-                return new SyncRunner(cfg, configPath, log).Run(dryRun, forceBackfill: false, token);
+                return new SyncRunner(cfg, configPath, log).Run(dryRun, forceBackfill: false, token, onlyPair);
             }, _cts.Token);
 
             var copied = result.Pairs.Sum(p => (p.Execution?.FilesCopied ?? 0) + (p.Execution?.FilesUpdated ?? 0));

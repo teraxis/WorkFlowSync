@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using WorkFlowSync.App.Services;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
 
@@ -26,9 +27,6 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _scanParallelism = 8;
     [ObservableProperty] private int _scanBufferKb = 256;
 
-    /// <summary>Set by the tray background loop; empty when it is not running.</summary>
-    [ObservableProperty] private string _backgroundStatus = "";
-
     [ObservableProperty] private bool _isDirty;
     [ObservableProperty] private string _statusText = "";
     [ObservableProperty] private bool _statusIsError;
@@ -39,14 +37,25 @@ public sealed partial class MainViewModel : ObservableObject
     public RunViewModel Run { get; }
     public AutostartViewModel Autostart { get; }
 
+    /// <summary>The periodic checker. Shared by the «Стан» tab switch and the tray menu.</summary>
+    public BackgroundLoop Background { get; }
+
     public MainViewModel(string configPath)
     {
         ConfigPath = configPath;
         Pairs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasPairs));
-        Run = new RunViewModel(ToConfig, () => ConfigPath);
+        Background = new BackgroundLoop(ConfigPath, ResolveLogDir);
+        Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => IsDirty);
         Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
         Load();
         Run.RefreshSummary();
+    }
+
+    public string ResolveLogDir()
+    {
+        var log = LogPath.Trim();
+        if (log.Length == 0) log = "logs";
+        return Path.IsPathRooted(log) ? log : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(ConfigPath))!, log);
     }
 
     public void Load()
@@ -195,6 +204,32 @@ public sealed partial class MainViewModel : ObservableObject
         var text = string.Join(" ", lines) + (anyPatterns ? " Натисніть «Зберегти», щоб зберегти нові шаблони." : "");
         SetStatus(text, error: false);
         return text;
+    }
+
+    /// <summary>Pause/resume one pair. Automatic passes read config.json, so the change needs saving.</summary>
+    public void TogglePair(PairViewModel pair)
+    {
+        pair.Enabled = !pair.Enabled;
+        IsDirty = true;
+        SetStatus(pair.Enabled
+            ? $"Пару «{pair.Name}» відновлено. Натисніть «Зберегти», щоб застосувати до автоматичних перевірок."
+            : $"Пару «{pair.Name}» поставлено на паузу. Натисніть «Зберегти», щоб застосувати до автоматичних перевірок.", error: false);
+    }
+
+    /// <summary>Runs one pair right now (works for paused pairs too).</summary>
+    public async Task RunPairAsync(PairViewModel pair)
+    {
+        if (Run.IsRunning) { SetStatus("Прохід уже виконується.", error: true); return; }
+        pair.IsBusy = true;
+        try
+        {
+            await Run.RunPairAsync(pair.Name);
+            SetStatus(Run.LastResult, error: false);
+        }
+        finally
+        {
+            pair.IsBusy = false;
+        }
     }
 
     public void MarkDirty()

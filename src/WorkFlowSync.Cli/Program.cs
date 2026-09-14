@@ -103,7 +103,7 @@ internal static class Program
         foreach (var pair in cfg.Pairs)
         {
             var retention = pair.Retention is { } r ? $"{r.TotalDays:0} days" : "forever";
-            Console.WriteLine($"  [{pair.Name}] {pair.Source} -> {pair.Target}  links={pair.Links}  retention={retention}  exclude={pair.Exclude.Count}");
+            Console.WriteLine($"  [{pair.Name}]{(pair.Enabled ? "" : " (paused)")} {pair.Source} -> {pair.Target}  links={pair.Links}  retention={retention}  exclude={pair.Exclude.Count}");
         }
         Console.WriteLine($"  interval={cfg.Interval}  state={cfg.StatePath}  logs={cfg.LogPath}  parallelism={cfg.ScanParallelism}  buffer={cfg.ScanBufferSize}");
 
@@ -145,7 +145,7 @@ internal static class Program
             Console.Error.WriteLine("another WorkFlowSync pass is running for this config");
             return 4;
         }
-        var pass = new SyncRunner(cfg, opts.ConfigPath, log).Run(opts.DryRun, opts.Backfill, cts.Token);
+        var pass = new SyncRunner(cfg, opts.ConfigPath, log).Run(opts.DryRun, opts.Backfill, cts.Token, opts.PairName);
         return pass.Errors == 0 ? 0 : 1;
     }
 
@@ -316,7 +316,7 @@ internal static class Program
             {WorkFlowSyncInfo.Name} {WorkFlowSyncInfo.Version} (wfs = console) - one-way mirror with memory (network share -> local/OneDrive)
 
             usage:
-              wfs sync [--once | --loop] [--config <path>] [--dry-run] [--backfill] [--verbose]
+              wfs sync [--once | --loop] [--pair <name>] [--config <path>] [--dry-run] [--backfill] [--verbose]
               wfs status [--config <path>]
               wfs config validate [--config <path>]
               wfs import-excludes <batch.ffs_batch> [--pair <name>] [--dry-run] [--no-probe] [--config <path>]
@@ -333,7 +333,7 @@ internal static class Program
               --dry-run         report planned actions without touching the file system or the state
               --backfill        take first_seen from min(ctime, mtime) even when state already exists
               --verbose         per-directory DEBUG lines in the log
-              --pair <name>     limit import-excludes / forget to one pair
+              --pair <name>     act on one pair only (sync / import-excludes / forget); a paused pair still runs
               --no-probe        import-excludes: do not stat items in the source to tell files from folders
 
             exit codes: 0 ok, 1 error, 2 usage/config, 3 not implemented, 4 another pass is running

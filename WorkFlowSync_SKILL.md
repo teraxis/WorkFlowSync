@@ -74,6 +74,10 @@ src\WorkFlowSync.App\bin\Debug\net8.0\win-x64\WorkFlowSync.exe --config config.e
   TryAcquire on the same thread "succeeds". Acquire and Dispose must happen on the same thread (no await in between).
 - CA1416: assembly-level `SupportedOSPlatform("windows")` via Directory.Build.props (SupportedPlatform items in
   Directory.Build.props do NOT work — the SDK adds its list later).
+- Per-pair: `FolderPair.Enabled` (default true, absent in old configs = enabled); automatic passes skip paused pairs,
+  `SyncRunner.Run(..., onlyPair:)` / `wfs sync --pair` runs one regardless. GUI row buttons call `MainViewModel.RunPairAsync/TogglePair`.
+- The «Стан» tab switch owns the same `BackgroundLoop` as the tray (`MainViewModel.Background`); it refuses to start while the
+  config is dirty, because the loop reads config.json from disk.
 - Autostart needs `wfs.exe` next to the running exe; the App Debug folder has none, so GUI switches are disabled there
   (test via publish\portable). Tests never call schtasks for real — only argument building.
 - PowerShell `Get-Content` without `-Encoding UTF8` shows Cyrillic log lines as mojibake; the files are fine.

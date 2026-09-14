@@ -68,6 +68,9 @@ public sealed class FolderPair
     /// <summary>Stable identifier; renaming it orphans the pair's state.</summary>
     public string Name { get; set; } = "";
 
+    /// <summary>Paused pairs are skipped by automatic passes; running one explicitly still works.</summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Network (or any) source root. Read-only for us.</summary>
     public string Source { get; set; } = "";
 

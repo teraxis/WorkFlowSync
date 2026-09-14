@@ -46,14 +46,20 @@ public sealed class SyncRunner
 
     public string StatePath => Path.IsPathRooted(_config.StatePath) ? _config.StatePath : Path.Combine(_configDir, _config.StatePath);
 
-    public PassResult Run(bool dryRun, bool forceBackfill = false, CancellationToken ct = default)
+    /// <param name="onlyPair">Run just this pair (by name), paused or not; null = every enabled pair.</param>
+    public PassResult Run(bool dryRun, bool forceBackfill = false, CancellationToken ct = default, string? onlyPair = null)
     {
         var sw = Stopwatch.StartNew();
         var pass = new PassResult { DryRun = dryRun };
-        _log.Info($"pass start  pairs={_config.Pairs.Count}{(dryRun ? "  mode=dry-run" : "")}");
+        var selected = onlyPair is null
+            ? _config.Pairs.Where(p => p.Enabled).ToList()
+            : _config.Pairs.Where(p => p.Name.Equals(onlyPair, StringComparison.OrdinalIgnoreCase)).ToList();
+        var paused = _config.Pairs.Count(p => !p.Enabled);
+        _log.Info($"pass start  pairs={selected.Count}{(paused > 0 && onlyPair is null ? $" (paused: {paused})" : "")}{(onlyPair is null ? "" : $"  only={onlyPair}")}{(dryRun ? "  mode=dry-run" : "")}");
+        if (onlyPair is not null && selected.Count == 0) _log.Error($"unknown pair: {onlyPair}");
 
         using var store = new StateStore(StatePath);
-        foreach (var pair in _config.Pairs)
+        foreach (var pair in selected)
         {
             ct.ThrowIfCancellationRequested();
             var r = RunPair(pair, store, dryRun, forceBackfill, ct);
