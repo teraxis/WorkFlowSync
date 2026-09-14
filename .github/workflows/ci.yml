@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore WorkFlowSync.sln
+
+      - name: Build
+        run: dotnet build WorkFlowSync.sln --no-restore --nologo -warnaserror
+
+      - name: Test
+        run: dotnet test WorkFlowSync.sln --no-build --nologo
+
+      - name: Publish portable exe
+        run: dotnet publish src/WorkFlowSync.Cli/WorkFlowSync.Cli.csproj -c Release -r win-x64 -o publish/portable --nologo
+
+      - name: Smoke
+        run: publish/portable/WorkFlowSync.exe config validate --config config.example.json

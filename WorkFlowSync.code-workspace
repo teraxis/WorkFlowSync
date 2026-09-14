@@ -1,0 +1,9 @@
+{
+    "folders": [ { "path": "." } ],
+    "settings": {
+        "files.exclude": { "**/bin": true, "**/obj": true, "publish": true },
+        "files.encoding": "utf8",
+        "dotnet.defaultSolution": "WorkFlowSync.sln"
+    },
+    "extensions": { "recommendations": [ "ms-dotnettools.csdevkit" ] }
+}

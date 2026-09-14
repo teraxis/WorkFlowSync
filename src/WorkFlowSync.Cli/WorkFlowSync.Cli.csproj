@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>wfs</AssemblyName>
+    <RootNamespace>WorkFlowSync.Cli</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Portable single-file publish: no separately installed runtime, normal user, no installer. -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WorkFlowSync.Core\WorkFlowSync.Core.csproj" />
+  </ItemGroup>
+
+</Project>

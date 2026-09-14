@@ -1,0 +1,17 @@
+# Project-scoped Codex configuration.
+
+[actions.setup]
+description = "Restore NuGet packages"
+command = "dotnet restore WorkFlowSync.sln"
+
+[actions.test]
+description = "Run the unit test suite"
+command = "dotnet test WorkFlowSync.sln --nologo"
+
+[actions.build]
+description = "Build the solution"
+command = "dotnet build WorkFlowSync.sln --nologo"
+
+[actions.publish]
+description = "Publish the portable single-file exe"
+command = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1"

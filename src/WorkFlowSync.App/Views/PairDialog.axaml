@@ -1,0 +1,58 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WorkFlowSync.App.ViewModels"
+        x:Class="WorkFlowSync.App.Views.PairDialog"
+        x:DataType="vm:PairViewModel"
+        Title="Пара папок"
+        Width="720" Height="560" MinWidth="600" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <DockPanel Margin="16">
+
+        <Border DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+                    <Button Content="Скасувати" Click="OnCancel" IsCancel="True" />
+                    <Button Content="OK" Click="OnOk" IsDefault="True" Classes="accent" MinWidth="90" />
+                </StackPanel>
+                <TextBlock x:Name="ErrorText" Foreground="Firebrick" VerticalAlignment="Center" TextWrapping="Wrap" />
+            </DockPanel>
+        </Border>
+
+        <ScrollViewer>
+            <Grid ColumnDefinitions="170,*,Auto" RowDefinitions="Auto,10,Auto,10,Auto,10,Auto,10,Auto,10,Auto,4,*" >
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Назва пари" VerticalAlignment="Center" />
+                <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Name}" Watermark="наприклад: vrp" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Мережева папка (джерело)" VerticalAlignment="Center" TextWrapping="Wrap" />
+                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Source}" Watermark="\\server\share\папка або E:\vrp" />
+                <Button Grid.Row="2" Grid.Column="2" Content="Огляд…" Margin="8,0,0,0" Click="OnBrowseSource" />
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Локальна папка (дзеркало)" VerticalAlignment="Center" TextWrapping="Wrap" />
+                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Target}" Watermark="D:\OneDrive\Робоча папка" />
+                <Button Grid.Row="4" Grid.Column="2" Content="Огляд…" Margin="8,0,0,0" Click="OnBrowseTarget" />
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Лінки в джерелі" VerticalAlignment="Center" />
+                <StackPanel Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
+                    <ComboBox ItemsSource="{x:Static vm:PairViewModel.LinkModes}" SelectedItem="{Binding Links}" Width="180" />
+                    <TextBlock VerticalAlignment="Center" Opacity="0.7" Text="Follow — копіювати вміст як звичайну папку (для OneDrive)" />
+                </StackPanel>
+
+                <TextBlock Grid.Row="8" Grid.Column="0" Text="Зберігання" VerticalAlignment="Center" />
+                <StackPanel Grid.Row="8" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
+                    <CheckBox IsChecked="{Binding HasRetention}" Content="лише те, що з'явилося за останні" VerticalAlignment="Center" />
+                    <NumericUpDown Value="{Binding RetentionDays}" Minimum="1" Maximum="36500" Increment="30" FormatString="0" Width="130" IsEnabled="{Binding HasRetention}" />
+                    <TextBlock Text="днів" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <TextBlock Grid.Row="10" Grid.Column="0" Text="Виключення" VerticalAlignment="Top" />
+                <TextBlock Grid.Row="10" Grid.Column="1" Grid.ColumnSpan="2" Opacity="0.7" TextWrapping="Wrap"
+                           Text="По одному шаблону в рядку, відносно джерела. Приклади: \Тимчасове   *.tmp   \Палата\*Робочий.docx" />
+                <TextBox Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Text="{Binding ExcludeText}" AcceptsReturn="True"
+                         TextWrapping="NoWrap" FontFamily="Consolas,monospace" MinHeight="120" VerticalContentAlignment="Top" />
+            </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

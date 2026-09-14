@@ -1,0 +1,119 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WorkFlowSync.App.ViewModels"
+        xmlns:app="using:WorkFlowSync.App"
+        x:Class="WorkFlowSync.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{Binding Title}"
+        Width="900" Height="600" MinWidth="720" MinHeight="460"
+        WindowStartupLocation="CenterScreen">
+
+    <DockPanel>
+
+        <!-- Status bar + main actions -->
+        <Border DockPanel.Dock="Bottom" Padding="12,8" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+                    <Button Content="Перевірити" Command="{Binding CheckConfigCommand}" />
+                    <Button Content="Скасувати зміни" Command="{Binding ReloadCommand}" IsEnabled="{Binding IsDirty}" />
+                    <Button Content="Зберегти" Command="{Binding SaveCommand}" Classes="accent" IsEnabled="{Binding IsDirty}" />
+                </StackPanel>
+                <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap"
+                           Foreground="{Binding StatusIsError, Converter={x:Static app:Converters.ErrorBrush}}" />
+            </DockPanel>
+        </Border>
+
+        <TabControl TabStripPlacement="Left" Padding="16,8" SelectedIndex="0">
+
+            <!-- ===================== Папки ===================== -->
+            <TabItem Header="Папки">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" TextWrapping="Wrap" Opacity="0.8"
+                               Text="Кожна пара — це мережева папка, за якою стежимо, і локальна папка (у OneDrive), куди складаємо копію. Джерело лише читається; локальне дзеркало — ваше." />
+
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                        <Button Content="Додати пару…" Click="OnAddPair" />
+                        <Button Content="Редагувати…" Click="OnEditPair" IsEnabled="{Binding HasSelection}" />
+                        <Button Content="Видалити" Command="{Binding RemoveSelectedCommand}" IsEnabled="{Binding HasSelection}" />
+                    </StackPanel>
+
+                    <Panel>
+                        <ListBox ItemsSource="{Binding Pairs}" SelectedItem="{Binding SelectedPair}"
+                                 DoubleTapped="OnEditPair">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PairViewModel">
+                                    <Grid ColumnDefinitions="*" RowDefinitions="Auto,Auto,Auto" Margin="4">
+                                        <TextBlock Grid.Row="0" Text="{Binding Name}" FontWeight="SemiBold" />
+                                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding Source}" />
+                                            <TextBlock Text="→" Opacity="0.6" />
+                                            <TextBlock Text="{Binding Target}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12" Opacity="0.7">
+                                            <TextBlock Text="{Binding LinksSummary}" />
+                                            <TextBlock Text="{Binding RetentionSummary, StringFormat='зберігати: {0}'}" />
+                                            <TextBlock Text="{Binding ExcludeCount, StringFormat='виключень: {0}'}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock IsVisible="{Binding !HasPairs}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Opacity="0.6" Text="Пар ще немає. Натисніть «Додати пару…»" />
+                    </Panel>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ===================== Налаштування ===================== -->
+            <TabItem Header="Налаштування">
+                <ScrollViewer>
+                    <StackPanel Spacing="14" MaxWidth="560" HorizontalAlignment="Left">
+
+                        <TextBlock Text="Розклад" FontWeight="SemiBold" FontSize="16" />
+                        <Grid ColumnDefinitions="220,*" RowDefinitions="Auto" >
+                            <TextBlock Grid.Column="0" Text="Інтервал перевірки, хв" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Column="1" Value="{Binding IntervalMinutes}" Minimum="1" Maximum="1440" Increment="5" FormatString="0" Width="140" HorizontalAlignment="Left" />
+                        </Grid>
+                        <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                                   Text="Використовується у резидентному режимі (sync --loop). Автозапуск з Windows і трей — наступні етапи." />
+
+                        <TextBlock Text="Файли програми" FontWeight="SemiBold" FontSize="16" Margin="0,8,0,0" />
+                        <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,8,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="База стану" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding StatePath}" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Папка логів" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding LogPath}" />
+                        </Grid>
+                        <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                                   Text="Відносні шляхи — від папки, де лежить config.json (поруч з програмою)." />
+
+                        <TextBlock Text="Продуктивність сканера" FontWeight="SemiBold" FontSize="16" Margin="0,8,0,0" />
+                        <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,8,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Паралельних листингів" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding ScanParallelism}" Minimum="1" Maximum="64" FormatString="0" Width="140" HorizontalAlignment="Left" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Буфер листингу, КБ" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding ScanBufferKb}" Minimum="4" Maximum="4096" Increment="64" FormatString="0" Width="140" HorizontalAlignment="Left" />
+                        </Grid>
+                        <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                                   Text="Великий буфер зменшує кількість мережевих запитів до SMB-сервера; типово 256 КБ. Паралелізм 8–16 для локальної мережі." />
+
+                        <TextBlock Text="Конфігурація" FontWeight="SemiBold" FontSize="16" Margin="0,8,0,0" />
+                        <TextBox Text="{Binding ConfigPath}" IsReadOnly="True" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ===================== Стан ===================== -->
+            <TabItem Header="Стан">
+                <StackPanel Spacing="10" MaxWidth="560" HorizontalAlignment="Left">
+                    <TextBlock Text="Синхронізація" FontWeight="SemiBold" FontSize="16" />
+                    <TextBlock TextWrapping="Wrap"
+                               Text="Двигун синхронізації (сканер, база стану, планувальник) — Етап 1. Після його появи тут будуть: час і результат останнього проходу, лічильники active / tombstone / local_modified за парами, кнопка «Виконати зараз» і «Показати план (dry-run)»." />
+                    <TextBlock TextWrapping="Wrap" Opacity="0.7"
+                               Text="Поки що конфігурацію, створену тут, можна перевірити з консолі: wfs config validate" />
+                </StackPanel>
+            </TabItem>
+
+        </TabControl>
+    </DockPanel>
+</Window>

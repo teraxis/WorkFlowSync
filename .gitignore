@@ -1,0 +1,30 @@
+﻿.env
+.env.*
+!.env.example
+secrets.local.md
+vendor/
+node_modules/
+.pnpm-store/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+dist/
+build/
+.DS_Store
+Thumbs.db
+
+# .NET
+bin/
+obj/
+publish/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# WorkFlowSync runtime artifacts
+config.json
+state.db
+state.db-*
+logs/

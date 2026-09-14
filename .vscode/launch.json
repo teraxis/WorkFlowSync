@@ -1,0 +1,56 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GUI (WorkFlowSync.exe, example config)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/WorkFlowSync.App/bin/Debug/net8.0/win-x64/WorkFlowSync.exe",
+      "args": ["--config", "${workspaceFolder}/config.example.json"],
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    },
+    {
+      "name": "wfs config validate (example)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/WorkFlowSync.Cli/bin/Debug/net8.0/win-x64/wfs.exe",
+      "args": ["config", "validate", "--config", "${workspaceFolder}/config.example.json"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "wfs sync --once --dry-run (example)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/WorkFlowSync.Cli/bin/Debug/net8.0/win-x64/wfs.exe",
+      "args": ["sync", "--once", "--dry-run", "--config", "${workspaceFolder}/config.example.json"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "wfs custom args (prompt)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/src/WorkFlowSync.Cli/bin/Debug/net8.0/win-x64/wfs.exe",
+      "args": "${input:cliArgs}",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "cliArgs",
+      "type": "promptString",
+      "description": "wfs arguments",
+      "default": "--help"
+    }
+  ]
+}

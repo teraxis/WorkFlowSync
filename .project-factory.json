@@ -1,0 +1,16 @@
+{
+  "name": "WorkFlowSync",
+  "slug": "workflowsync",
+  "stack": "dotnet",
+  "projectType": "worker",
+  "root": "D:\\Projects",
+  "path": "D:\\Projects\\WorkFlowSync",
+  "devNamespace": null,
+  "createdAt": "2026-09-14T13:32:19+03:00",
+  "startupTemplate": "D:\\Projects\\startup",
+  "overrides": [
+    "no infra/ (no Docker/WSL2/k3s)",
+    "no GitLab CI",
+    "folder name capitalized like PathShortener"
+  ]
+}
