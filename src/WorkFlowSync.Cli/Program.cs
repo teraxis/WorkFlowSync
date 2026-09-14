@@ -156,15 +156,17 @@ internal static class Program
         {
             case "on":
                 if (LoadConfig(opts, out var c1) is null) return c1;
-                Autostart.EnableStartupShortcut(opts.ConfigPath);
-                Console.WriteLine($"autostart: enabled  ({Autostart.ShortcutPath()})");
+                var mode = opts.Tray ? Autostart.Mode.Tray : Autostart.Mode.ConsoleLoop;
+                Autostart.EnableStartupShortcut(opts.ConfigPath, mode: mode);
+                Console.WriteLine($"autostart: enabled  mode={mode}  ({Autostart.ShortcutPath()})");
                 return 0;
             case "off":
                 Autostart.DisableStartupShortcut();
                 Console.WriteLine("autostart: disabled");
                 return 0;
             case "status":
-                Console.WriteLine($"autostart: {(Autostart.IsStartupShortcutEnabled() ? "enabled" : "disabled")}  ({Autostart.ShortcutPath()})");
+                var current = Autostart.ReadStartupShortcutMode();
+                Console.WriteLine($"autostart: {(current is null ? "disabled" : $"enabled  mode={current}")}  ({Autostart.ShortcutPath()})");
                 return 0;
             default:
                 Console.Error.WriteLine("usage: wfs autostart on|off|status [--config <path>]");
@@ -319,7 +321,8 @@ internal static class Program
               wfs config validate [--config <path>]
               wfs import-excludes <batch.ffs_batch> [--pair <name>] [--dry-run] [--no-probe] [--config <path>]
               wfs forget <relative-path> [--pair <name>] [--config <path>]
-              wfs autostart on|off|status [--config <path>]   Startup-folder shortcut running `sync --loop` at logon
+              wfs autostart on|off|status [--tray] [--config <path>]   Startup-folder shortcut at logon
+                                                              (default: wfs sync --loop; --tray: the app in the notification area)
               wfs task on|off|status [--config <path>]        Task Scheduler task running `sync --once` every <interval>
               wfs version
 
@@ -355,6 +358,7 @@ internal static class Program
                 case "--backfill": o.Backfill = true; break;
                 case "--verbose": o.Verbose = true; break;
                 case "--no-probe": o.NoProbe = true; break;
+                case "--tray": o.Tray = true; break;
                 case "--pair" when i + 1 < list.Count:
                     o.PairName = list[++i];
                     break;
@@ -373,6 +377,7 @@ internal static class Program
         public bool Backfill { get; set; }
         public bool Verbose { get; set; }
         public bool NoProbe { get; set; }
+        public bool Tray { get; set; }
         public string? PairName { get; set; }
         public List<string> Positional { get; } = new();
     }

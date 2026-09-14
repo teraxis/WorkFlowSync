@@ -14,11 +14,13 @@ public sealed partial class AutostartViewModel : ObservableObject
     private bool _suppress;
 
     [ObservableProperty] private bool _startupEnabled;
+    [ObservableProperty] private bool _startupInTray = true;
     [ObservableProperty] private bool _taskEnabled;
     [ObservableProperty] private string _message = "";
     [ObservableProperty] private bool _messageIsError;
 
     public string StartupHint => $"Ярлик у папці автозавантаження: {Autostart.ShortcutPath()}";
+    public bool GuiAvailable => File.Exists(Autostart.GuiExePath);
     public string TaskHint => $"Завдання «{Autostart.TaskName}» у Планувальнику: від вашого імені, лише коли ви увійшли, без прав адміністратора.";
     public bool ConsoleAvailable => File.Exists(Autostart.ConsoleExePath);
 
@@ -34,7 +36,9 @@ public sealed partial class AutostartViewModel : ObservableObject
         _suppress = true;
         try
         {
-            StartupEnabled = Autostart.IsStartupShortcutEnabled();
+            var mode = Autostart.ReadStartupShortcutMode();
+            StartupEnabled = mode is not null;
+            if (mode is { } m) StartupInTray = m == Autostart.Mode.Tray;
             TaskEnabled = Autostart.IsScheduledTaskEnabled();
         }
         finally
@@ -50,10 +54,23 @@ public sealed partial class AutostartViewModel : ObservableObject
         if (_suppress) return;
         Apply(() =>
         {
-            if (value) Autostart.EnableStartupShortcut(_configPath());
+            if (value) Autostart.EnableStartupShortcut(_configPath(), mode: StartupInTray ? Autostart.Mode.Tray : Autostart.Mode.ConsoleLoop);
             else Autostart.DisableStartupShortcut();
-            return value ? "Резидентний режим увімкнено: запуститься при наступному вході в Windows." : "Автозапуск вимкнено.";
+            return value
+                ? (StartupInTray ? "Увімкнено: при вході в Windows програма з'явиться в області сповіщень і працюватиме сама."
+                                 : "Увімкнено: при вході в Windows запускатиметься фоновий процес без вікна.")
+                : "Автозапуск вимкнено.";
         }, revert: () => StartupEnabled = !value);
+    }
+
+    partial void OnStartupInTrayChanged(bool value)
+    {
+        if (_suppress || !StartupEnabled) return;
+        Apply(() =>
+        {
+            Autostart.EnableStartupShortcut(_configPath(), mode: value ? Autostart.Mode.Tray : Autostart.Mode.ConsoleLoop);
+            return value ? "Спосіб запуску змінено: в області сповіщень." : "Спосіб запуску змінено: фоновий процес без вікна.";
+        }, revert: () => StartupInTray = !value);
     }
 
     partial void OnTaskEnabledChanged(bool value)

@@ -26,6 +26,9 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _scanParallelism = 8;
     [ObservableProperty] private int _scanBufferKb = 256;
 
+    /// <summary>Set by the tray background loop; empty when it is not running.</summary>
+    [ObservableProperty] private string _backgroundStatus = "";
+
     [ObservableProperty] private bool _isDirty;
     [ObservableProperty] private string _statusText = "";
     [ObservableProperty] private bool _statusIsError;

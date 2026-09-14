@@ -22,6 +22,7 @@ public sealed class LoopRunner
 
     public int PassesRun { get; private set; }
 
+    public event Action? PassStarting;
     public event Action<PassResult>? PassCompleted;
 
     public LoopRunner(string configPath, ISyncLog log, bool dryRun = false)
@@ -54,6 +55,7 @@ public sealed class LoopRunner
                     }
                     else
                     {
+                        PassStarting?.Invoke();
                         var result = new SyncRunner(cfg, _configPath, _log).Run(_dryRun, forceBackfill: false, ct);
                         PassesRun++;
                         PassCompleted?.Invoke(result);

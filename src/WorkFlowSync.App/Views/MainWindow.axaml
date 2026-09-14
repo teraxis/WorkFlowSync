@@ -81,7 +81,13 @@
                         <TextBlock Text="Автоматичний запуск" FontWeight="SemiBold" FontSize="16" Margin="0,8,0,0" />
                         <StackPanel DataContext="{Binding Autostart}" x:DataType="vm:AutostartViewModel" Spacing="6">
                             <CheckBox IsChecked="{Binding StartupEnabled}" IsEnabled="{Binding ConsoleAvailable}"
-                                      Content="Запускати при вході в Windows і перевіряти за інтервалом (резидентний режим)" />
+                                      Content="Запускати при вході в Windows і перевіряти за інтервалом" />
+                            <StackPanel Margin="28,0,0,4" Spacing="2" IsEnabled="{Binding StartupEnabled}">
+                                <RadioButton GroupName="StartupMode" IsChecked="{Binding StartupInTray}" IsEnabled="{Binding GuiAvailable}"
+                                             Content="в області сповіщень (значок біля годинника, вікно під рукою)" />
+                                <RadioButton GroupName="StartupMode" IsChecked="{Binding !StartupInTray}"
+                                             Content="фоновим процесом без вікна" />
+                            </StackPanel>
                             <TextBlock Opacity="0.7" TextWrapping="Wrap" Text="{Binding StartupHint}" Margin="28,0,0,4" />
                             <CheckBox IsChecked="{Binding TaskEnabled}" IsEnabled="{Binding ConsoleAvailable}"
                                       Content="Завдання Планувальника Windows: один прохід за інтервалом" />
@@ -89,7 +95,7 @@
                             <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
                                        Foreground="{Binding MessageIsError, Converter={x:Static app:Converters.ErrorBrush}}" />
                             <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                                       Text="Достатньо одного способу. Резидентний режим не показує вікон (мінімізована консоль wfs.exe); стан видно на вкладці «Стан». Обидва працюють від звичайного користувача." />
+                                       Text="Достатньо одного способу. Обидва працюють від звичайного користувача, без прав адміністратора." />
                         </StackPanel>
 
                         <TextBlock Text="Файли програми" FontWeight="SemiBold" FontSize="16" Margin="0,8,0,0" />
@@ -121,6 +127,9 @@
             <!-- ===================== Стан ===================== -->
             <TabItem Header="Стан">
                 <DockPanel DataContext="{Binding Run}" x:DataType="vm:RunViewModel">
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding $parent[Window].((vm:MainViewModel)DataContext).BackgroundStatus}"
+                               IsVisible="{Binding $parent[Window].((vm:MainViewModel)DataContext).BackgroundStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               FontWeight="SemiBold" Margin="0,0,0,6" TextWrapping="Wrap" />
                     <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" TextWrapping="Wrap" FontFamily="Consolas,monospace" Margin="0,0,0,10" />
 
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">

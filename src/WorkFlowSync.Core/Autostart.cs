@@ -14,6 +14,17 @@ public static class Autostart
     public const string ShortcutName = "WorkFlowSync.lnk";
     public const string TaskName = "WorkFlowSync";
 
+    /// <summary>What the Startup shortcut launches.</summary>
+    public enum Mode
+    {
+        /// <summary>wfs.exe sync --loop — no window at all (minimised console).</summary>
+        ConsoleLoop,
+        /// <summary>WorkFlowSync.exe --tray — the app sits in the notification area and runs the loop itself.</summary>
+        Tray,
+    }
+
+    public static string GuiExePath => Path.Combine(AppContext.BaseDirectory, "WorkFlowSync.exe");
+
     public static string StartupFolder =>
         Environment.GetFolderPath(Environment.SpecialFolder.Startup, Environment.SpecialFolderOption.Create);
 
@@ -26,23 +37,45 @@ public static class Autostart
 
     public static bool IsStartupShortcutEnabled(string? startupFolder = null) => File.Exists(ShortcutPath(startupFolder));
 
-    /// <summary>Creates (or rewrites) the Startup shortcut: `wfs.exe sync --loop --config &lt;path&gt;`, minimised window.</summary>
-    public static void EnableStartupShortcut(string configPath, string? startupFolder = null, string? exePath = null)
+    /// <summary>Creates (or rewrites) the Startup shortcut for the chosen <paramref name="mode"/>.</summary>
+    public static void EnableStartupShortcut(string configPath, string? startupFolder = null, string? exePath = null, Mode mode = Mode.ConsoleLoop)
     {
         var lnk = ShortcutPath(startupFolder);
-        var exe = exePath ?? ConsoleExePath;
-        if (!File.Exists(exe)) throw new FileNotFoundException("Console executable not found next to the application.", exe);
+        var exe = exePath ?? (mode == Mode.Tray ? GuiExePath : ConsoleExePath);
+        if (!File.Exists(exe)) throw new FileNotFoundException("Executable not found next to the application.", exe);
         Directory.CreateDirectory(Path.GetDirectoryName(lnk)!);
 
         var shellType = Type.GetTypeFromProgID("WScript.Shell") ?? throw new PlatformNotSupportedException("WScript.Shell is not available.");
         dynamic shell = Activator.CreateInstance(shellType)!;
         dynamic sc = shell.CreateShortcut(lnk);
         sc.TargetPath = exe;
-        sc.Arguments = $"sync --loop --config \"{Path.GetFullPath(configPath)}\"";
+        sc.Arguments = mode == Mode.Tray
+            ? $"--tray --config \"{Path.GetFullPath(configPath)}\""
+            : $"sync --loop --config \"{Path.GetFullPath(configPath)}\"";
         sc.WorkingDirectory = Path.GetDirectoryName(exe);
-        sc.WindowStyle = 7;   // minimised
+        sc.WindowStyle = mode == Mode.Tray ? 1 : 7;   // tray app shows no console; console loop starts minimised
         sc.Description = "WorkFlowSync — фонова синхронізація мережевих папок";
         sc.Save();
+    }
+
+    /// <summary>Which mode the existing shortcut uses (null when there is none or it cannot be read).</summary>
+    public static Mode? ReadStartupShortcutMode(string? startupFolder = null)
+    {
+        var lnk = ShortcutPath(startupFolder);
+        if (!File.Exists(lnk)) return null;
+        try
+        {
+            var shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType is null) return null;
+            dynamic shell = Activator.CreateInstance(shellType)!;
+            dynamic sc = shell.CreateShortcut(lnk);
+            string args = sc.Arguments ?? "";
+            return args.Contains("--tray", StringComparison.OrdinalIgnoreCase) ? Mode.Tray : Mode.ConsoleLoop;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public static void DisableStartupShortcut(string? startupFolder = null)

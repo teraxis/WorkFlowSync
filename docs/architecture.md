@@ -24,7 +24,7 @@ WorkFlowSync.sln
 | `SyncRunner` | ✅ оркестратор проходу: стан → скан джерела (недоступне = skip) → скан цілі → plan → execute → upsert; `PassResult` |
 | `LoopRunner` | ✅ резидент: перечитати конфіг → `PassLock` → прохід → `Task.Delay(interval)`; помилки логуються, цикл живе |
 | `PassLock` | ✅ міжпроцесний замок на конфіг (іменований Mutex + облік у процесі, бо Mutex реентерабельний у потоці) |
-| `Autostart` | ✅ ярлик у Startup (WScript.Shell COM) і завдання Планувальника (`schtasks`, без /RU і /RL) |
+| `Autostart` | ✅ ярлик у Startup (WScript.Shell COM; режим `ConsoleLoop` або `Tray`, читається назад з ярлика) і завдання Планувальника (`schtasks`, без /RU і /RL) |
 | `Ffs/` | ✅ `FfsBatch` (XDocument-парсер), `FfsBatchImporter` (шаблони → exclude, шляхи → tombstone, зіставлення пар за джерелом) |
 
 Ключова межа: **Planner не торкається файлової системи**. Уся логіка правил живе там і
@@ -32,8 +32,10 @@ WorkFlowSync.sln
 e2e на temp-папках.
 
 GUI-шар: `App/ViewModels` (без типів Avalonia; мапінг у `SyncConfig` тестується), `App/Views`
-(вікна, діалоги, вибір папок через `StorageProvider`), `Core/Config/ConfigFile` (атомарне
-збереження `config.json` поруч з exe — спільне для GUI і консолі).
+(вікна, діалоги, вибір папок через `StorageProvider`), `App/Services/BackgroundLoop` (обгортка
+над `LoopRunner` з паузою — фоновий цикл у трей-режимі), `App/App.axaml.cs` (`TrayIcon` +
+`NativeMenu`, приховування вікна замість виходу), `Assets/app.ico` (згенерована іконка, 16/32/48/256),
+`Core/Config/ConfigFile` (атомарне збереження `config.json` поруч з exe — спільне для GUI і консолі).
 
 ## Дані
 
