@@ -18,6 +18,9 @@ public sealed class SyncConfig
     /// <summary>Interval between passes in resident (loop) mode.</summary>
     public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(30);
 
+    /// <summary>Remembers the «Перевіряти автоматично» switch, so an open window resumes checking after a restart.</summary>
+    public bool AutoCheck { get; set; }
+
     /// <summary>Directory listing buffer for the scanner; large values cut SMB round-trips.</summary>
     public int ScanBufferSize { get; set; } = 256 * 1024;
 

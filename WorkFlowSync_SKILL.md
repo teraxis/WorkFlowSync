@@ -77,7 +77,12 @@ src\WorkFlowSync.App\bin\Debug\net8.0\win-x64\WorkFlowSync.exe --config config.e
 - Per-pair: `FolderPair.Enabled` (default true, absent in old configs = enabled); automatic passes skip paused pairs,
   `SyncRunner.Run(..., onlyPair:)` / `wfs sync --pair` runs one regardless. GUI row buttons call `MainViewModel.RunPairAsync/TogglePair`.
 - The «Стан» tab switch owns the same `BackgroundLoop` as the tray (`MainViewModel.Background`); it refuses to start while the
-  config is dirty, because the loop reads config.json from disk.
+  config is dirty, because the loop reads config.json from disk. Its state lives in `SyncConfig.AutoCheck` and is written
+  immediately (when the config is otherwise clean) so the next launch resumes checking.
+- Autostart gating: the Startup shortcut needs WorkFlowSync.exe (tray mode) OR wfs.exe (windowless); the scheduled task needs wfs.exe.
+  In the App Debug folder only the GUI exists — tray autostart must stay available there.
+- A running GUI locks WorkFlowSync.Core.dll: `dotnet build` fails with MSB3026. Ask the user before killing their app; a compile check
+  can go to a temp folder via `dotnet build src\WorkFlowSync.App -o <tmp>`.
 - Autostart needs `wfs.exe` next to the running exe; the App Debug folder has none, so GUI switches are disabled there
   (test via publish\portable). Tests never call schtasks for real — only argument building.
 - PowerShell `Get-Content` without `-Encoding UTF8` shows Cyrillic log lines as mojibake; the files are fine.

@@ -45,7 +45,7 @@ public sealed partial class MainViewModel : ObservableObject
         ConfigPath = configPath;
         Pairs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasPairs));
         Background = new BackgroundLoop(ConfigPath, ResolveLogDir);
-        Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => IsDirty);
+        Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => IsDirty, PersistAutoCheck);
         Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
         Load();
         Run.RefreshSummary();
@@ -84,6 +84,25 @@ public sealed partial class MainViewModel : ObservableObject
         LogPath = cfg.LogPath;
         ScanParallelism = cfg.ScanParallelism;
         ScanBufferKb = Math.Max(4, cfg.ScanBufferSize / 1024);
+        _autoCheck = cfg.AutoCheck;
+        Run?.ApplySavedAutoCheck(cfg.AutoCheck);
+    }
+
+    private bool _autoCheck;
+
+    /// <summary>Writes the switch straight to config.json when nothing else is pending, so it survives a restart.</summary>
+    private void PersistAutoCheck(bool value)
+    {
+        _autoCheck = value;
+        if (IsDirty) return;                       // it will be written by the next «Зберегти»
+        try
+        {
+            ConfigFile.Save(ToConfig(), ConfigPath);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Не вдалося зберегти налаштування автоперевірки: {ex.Message}", error: true);
+        }
     }
 
     public SyncConfig ToConfig() => new()
@@ -94,6 +113,7 @@ public sealed partial class MainViewModel : ObservableObject
         LogPath = LogPath.Trim(),
         ScanParallelism = ScanParallelism,
         ScanBufferSize = ScanBufferKb * 1024,
+        AutoCheck = _autoCheck,
     };
 
     /// <summary>Returns validation problems (empty = OK) and reflects them in the status line.</summary>

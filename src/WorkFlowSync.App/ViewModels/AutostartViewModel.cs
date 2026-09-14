@@ -24,6 +24,9 @@ public sealed partial class AutostartViewModel : ObservableObject
     public string TaskHint => $"Завдання «{Autostart.TaskName}» у Планувальнику: від вашого імені, лише коли ви увійшли, без прав адміністратора.";
     public bool ConsoleAvailable => File.Exists(Autostart.ConsoleExePath);
 
+    /// <summary>The Startup shortcut needs the GUI (tray mode) or the console (windowless mode).</summary>
+    public bool CanAutostart => GuiAvailable || ConsoleAvailable;
+
     public AutostartViewModel(Func<string> configPath, Func<int> intervalMinutes)
     {
         _configPath = configPath;
@@ -45,8 +48,10 @@ public sealed partial class AutostartViewModel : ObservableObject
         {
             _suppress = false;
         }
-        if (!ConsoleAvailable)
-            Set("Поруч із програмою немає wfs.exe — автозапуск недоступний (див. publish\\portable).", error: true);
+        if (!CanAutostart)
+            Set("Поруч із програмою немає ані WorkFlowSync.exe, ані wfs.exe — автозапуск недоступний.", error: true);
+        else if (!ConsoleAvailable)
+            Set("Поруч немає wfs.exe, тож доступний лише режим «в області сповіщень» і недоступне завдання Планувальника (візьміть збірку з publish\\portable).", error: false);
     }
 
     partial void OnStartupEnabledChanged(bool value)
@@ -54,7 +59,7 @@ public sealed partial class AutostartViewModel : ObservableObject
         if (_suppress) return;
         Apply(() =>
         {
-            if (value) Autostart.EnableStartupShortcut(_configPath(), mode: StartupInTray ? Autostart.Mode.Tray : Autostart.Mode.ConsoleLoop);
+            if (value) Autostart.EnableStartupShortcut(_configPath(), mode: StartupInTray && GuiAvailable ? Autostart.Mode.Tray : Autostart.Mode.ConsoleLoop);
             else Autostart.DisableStartupShortcut();
             return value
                 ? (StartupInTray ? "Увімкнено: при вході в Windows програма з'явиться в області сповіщень і працюватиме сама."

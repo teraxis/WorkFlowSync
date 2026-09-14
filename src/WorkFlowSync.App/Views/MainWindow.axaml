@@ -91,12 +91,12 @@
 
                         <TextBlock Text="Автоматичний запуск" FontWeight="SemiBold" FontSize="16" Margin="0,8,0,0" />
                         <StackPanel DataContext="{Binding Autostart}" x:DataType="vm:AutostartViewModel" Spacing="6">
-                            <CheckBox IsChecked="{Binding StartupEnabled}" IsEnabled="{Binding ConsoleAvailable}"
+                            <CheckBox IsChecked="{Binding StartupEnabled}" IsEnabled="{Binding CanAutostart}"
                                       Content="Запускати при вході в Windows і перевіряти за інтервалом" />
                             <StackPanel Margin="28,0,0,4" Spacing="2" IsEnabled="{Binding StartupEnabled}">
                                 <RadioButton GroupName="StartupMode" IsChecked="{Binding StartupInTray}" IsEnabled="{Binding GuiAvailable}"
                                              Content="в області сповіщень (значок біля годинника, вікно під рукою)" />
-                                <RadioButton GroupName="StartupMode" IsChecked="{Binding !StartupInTray}"
+                                <RadioButton GroupName="StartupMode" IsChecked="{Binding !StartupInTray}" IsEnabled="{Binding ConsoleAvailable}"
                                              Content="фоновим процесом без вікна" />
                             </StackPanel>
                             <TextBlock Opacity="0.7" TextWrapping="Wrap" Text="{Binding StartupHint}" Margin="28,0,0,4" />
@@ -154,7 +154,7 @@
                                       Content="Перевіряти автоматично із заданим інтервалом (поки програма відкрита)" />
                             <TextBlock Text="{Binding BackgroundStatus}" TextWrapping="Wrap" Opacity="0.85" Margin="28,0,0,0" />
                             <TextBlock Opacity="0.6" TextWrapping="Wrap" Margin="28,0,0,0"
-                                       Text="Щоб перевірка тривала й після закриття вікна, увімкніть автозапуск у «Налаштуваннях»." />
+                                       Text="Закриття вікна не зупиняє перевірку — програма лишається в області сповіщень (вихід через меню значка). Щоб вона вмикалася після перезавантаження, увімкніть автозапуск у «Налаштуваннях»." />
                         </StackPanel>
                     </Border>
 

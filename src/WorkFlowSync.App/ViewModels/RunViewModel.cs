@@ -20,6 +20,7 @@ public sealed partial class RunViewModel : ObservableObject
     private readonly Func<string> _configPathProvider;
     private readonly BackgroundLoop _background;
     private readonly Func<bool> _isDirty;
+    private readonly Action<bool>? _persistAutoCheck;
     private bool _suppressAutoCheck;
     private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
     private readonly List<string> _logLines = new();
@@ -36,14 +37,28 @@ public sealed partial class RunViewModel : ObservableObject
 
     public bool CanRun => !IsRunning;
 
-    public RunViewModel(Func<SyncConfig> configProvider, Func<string> configPathProvider, BackgroundLoop background, Func<bool> isDirty)
+    public RunViewModel(Func<SyncConfig> configProvider, Func<string> configPathProvider, BackgroundLoop background,
+        Func<bool> isDirty, Action<bool>? persistAutoCheck = null)
     {
         _configProvider = configProvider;
         _configPathProvider = configPathProvider;
         _background = background;
         _isDirty = isDirty;
+        _persistAutoCheck = persistAutoCheck;
         _background.Changed += OnBackgroundChanged;
         _background.LogLine += AppendLog;
+    }
+
+    /// <summary>Applies the value remembered in config.json at start-up (and actually starts the loop).</summary>
+    public void ApplySavedAutoCheck(bool value)
+    {
+        if (value == AutoCheck)
+        {
+            if (value && !_background.IsActive) _background.Start();
+            OnBackgroundChanged();
+            return;
+        }
+        AutoCheck = value;      // goes through OnAutoCheckChanged, which starts the loop
     }
 
     /// <summary>Called by the tray menu so the window switch mirrors the real state.</summary>
@@ -84,6 +99,7 @@ public sealed partial class RunViewModel : ObservableObject
         {
             _background.Stop();
         }
+        _persistAutoCheck?.Invoke(value);
         OnBackgroundChanged();
     }
 
