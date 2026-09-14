@@ -26,8 +26,10 @@ public sealed partial class PairViewModel : ObservableObject
     /// <summary>True while this very pair is being synchronised (drives the row's buttons).</summary>
     [ObservableProperty] private bool _isBusy;
 
-    public string PauseButtonText => Enabled ? "Пауза" : "Відновити";
-    public string StateSummary => Enabled ? "активна" : "на паузі";
+    /// <summary>Play/pause glyph of the single state button.</summary>
+    public string ToggleGlyph => Enabled ? "⏸" : "▶";
+    public string ToggleTip => Enabled ? "Призупинити автоматичну перевірку цієї пари" : "Запустити: перевіряти цю пару автоматично за інтервалом";
+    public string StateSummary => IsBusy ? "перевіряється…" : Enabled ? "виконується" : "на паузі";
 
     public string LinksSummary => Links switch
     {
@@ -79,7 +81,8 @@ public sealed partial class PairViewModel : ObservableObject
 
     public void RaiseSummaries()
     {
-        OnPropertyChanged(nameof(PauseButtonText));
+        OnPropertyChanged(nameof(ToggleGlyph));
+        OnPropertyChanged(nameof(ToggleTip));
         OnPropertyChanged(nameof(StateSummary));
         OnPropertyChanged(nameof(RetentionSummary));
         OnPropertyChanged(nameof(LinksSummary));
@@ -91,9 +94,12 @@ public sealed partial class PairViewModel : ObservableObject
 
     partial void OnEnabledChanged(bool value)
     {
-        OnPropertyChanged(nameof(PauseButtonText));
+        OnPropertyChanged(nameof(ToggleGlyph));
+        OnPropertyChanged(nameof(ToggleTip));
         OnPropertyChanged(nameof(StateSummary));
     }
+
+    partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(StateSummary));
 
     partial void OnHasRetentionChanged(bool value) => OnPropertyChanged(nameof(RetentionSummary));
     partial void OnRetentionDaysChanged(int value) => OnPropertyChanged(nameof(RetentionSummary));

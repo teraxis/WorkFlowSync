@@ -32,7 +32,7 @@ If a command cannot run, record the exact reason and the next step needed.
 ## Current Status (2026-09-14, Stage 4 + per-pair controls)
 
 - `dotnet build -warnaserror`: OK.
-- `dotnet test`: 72 passed — adds `AutoCheckPersistenceTests` (3: switch persisted and restored, refusal while dirty, legacy default), `PerPairControlTests` (5: paused pair skipped, explicit single-pair run overrides pause,
+- `dotnet test`: 73 passed — adds `AutoCheckPersistenceTests` (4: checker follows the pair states, toggle persists and survives a restart, other unsaved edits defer it, legacy default), `PerPairControlTests` (5: paused pair skipped, explicit single-pair run overrides pause,
   unknown pair reported, `enabled` round-trip and legacy default, run-one-pair from the view-model), `TrayModeTests` (3: background loop start/pause/resume against real folders,
   Startup shortcut mode round-trip, app.ico structure). The tray icon itself needs a running Avalonia app, so it is
   verified by launching `WorkFlowSync.exe --tray` (process alive, hidden window, pass written to the log) and by eye.

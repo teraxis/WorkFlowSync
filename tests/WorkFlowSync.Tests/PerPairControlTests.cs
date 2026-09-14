@@ -73,19 +73,18 @@ public sealed class PerPairControlTests : IDisposable
     }
 
     [Fact]
-    public void Enabled_survives_the_view_model_round_trip_and_defaults_to_true()
+    public async Task Enabled_survives_the_view_model_round_trip_and_defaults_to_true()
     {
         var vm = new MainViewModel(_configPath);
         Assert.True(vm.Pairs[0].Enabled);
         Assert.False(vm.Pairs[1].Enabled);
         Assert.Equal("на паузі", vm.Pairs[1].StateSummary);
-        Assert.Equal("Відновити", vm.Pairs[1].PauseButtonText);
+        Assert.Equal("▶", vm.Pairs[1].ToggleGlyph);
 
-        vm.TogglePair(vm.Pairs[0]);
-        Assert.True(vm.IsDirty);
+        await vm.TogglePairAsync(vm.Pairs[0]);
         Assert.False(vm.Pairs[0].Enabled);
-        Assert.Equal("Відновити", vm.Pairs[0].PauseButtonText);
-        vm.SaveCommand.Execute(null);
+        Assert.Equal("▶", vm.Pairs[0].ToggleGlyph);
+        vm.Background.Stop();
 
         var reloaded = SyncConfig.Load(_configPath);
         Assert.False(reloaded.Pairs[0].Enabled);
@@ -106,5 +105,6 @@ public sealed class PerPairControlTests : IDisposable
         Assert.False(Mirrored("a"));
         Assert.False(vm.Pairs[1].IsBusy);
         Assert.Contains("скопійовано/оновлено 1", vm.Run.LastResult);
+        vm.Background.Stop();
     }
 }

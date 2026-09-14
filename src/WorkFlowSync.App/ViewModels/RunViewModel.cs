@@ -20,87 +20,67 @@ public sealed partial class RunViewModel : ObservableObject
     private readonly Func<string> _configPathProvider;
     private readonly BackgroundLoop _background;
     private readonly Func<bool> _isDirty;
-    private readonly Action<bool>? _persistAutoCheck;
-    private bool _suppressAutoCheck;
+    private int _activePairs;
     private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
     private readonly List<string> _logLines = new();
     private CancellationTokenSource? _cts;
 
     [ObservableProperty] private bool _isRunning;
 
-    /// <summary>«Перевіряти автоматично» — starts/stops the periodic checker in this window.</summary>
-    [ObservableProperty] private bool _autoCheck;
-    [ObservableProperty] private string _backgroundStatus = "Автоматична перевірка вимкнена.";
+    [ObservableProperty] private string _backgroundStatus = "";
     [ObservableProperty] private string _summary = "";
     [ObservableProperty] private string _logText = "";
     [ObservableProperty] private string _lastResult = "";
 
     public bool CanRun => !IsRunning;
 
-    public RunViewModel(Func<SyncConfig> configProvider, Func<string> configPathProvider, BackgroundLoop background,
-        Func<bool> isDirty, Action<bool>? persistAutoCheck = null)
+    public RunViewModel(Func<SyncConfig> configProvider, Func<string> configPathProvider, BackgroundLoop background, Func<bool> isDirty)
     {
         _configProvider = configProvider;
         _configPathProvider = configPathProvider;
         _background = background;
         _isDirty = isDirty;
-        _persistAutoCheck = persistAutoCheck;
         _background.Changed += OnBackgroundChanged;
         _background.LogLine += AppendLog;
     }
 
-    /// <summary>Applies the value remembered in config.json at start-up (and actually starts the loop).</summary>
-    public void ApplySavedAutoCheck(bool value)
+    /// <summary>Called whenever the pairs change: the checker follows them, so the wording follows too.</summary>
+    public void RefreshBackgroundStatus(int activePairs)
     {
-        if (value == AutoCheck)
+        _activePairs = activePairs;
+        if (activePairs > 0 && _isDirty())
         {
-            if (value && !_background.IsActive) _background.Start();
-            OnBackgroundChanged();
+            Set($"Пар у стані «виконується»: {activePairs}. Є незбережені зміни — натисніть «Зберегти», щоб перевірка їх врахувала.");
             return;
         }
-        AutoCheck = value;      // goes through OnAutoCheckChanged, which starts the loop
-    }
-
-    /// <summary>Called by the tray menu so the window switch mirrors the real state.</summary>
-    public void SyncAutoCheckFromLoop()
-    {
-        _suppressAutoCheck = true;
-        try { AutoCheck = _background.IsActive; }
-        finally { _suppressAutoCheck = false; }
         OnBackgroundChanged();
     }
+
+    /// <summary>Called by the tray menu after it pauses or resumes the checker.</summary>
+    public void SyncFromLoop() => OnBackgroundChanged();
 
     private void OnBackgroundChanged()
     {
-        var text = _background.State == LoopState.Stopped
-            ? "Автоматична перевірка вимкнена."
-            : _background.StatusText;
-        if (_ui is not null) _ui.Post(_ => BackgroundStatus = text, null);
-        else BackgroundStatus = text;
+        var text = _background.State switch
+        {
+            LoopState.Stopped when _activePairs == 0 => "Усі пари на паузі — автоматична перевірка не виконується. Натисніть ▶ у рядку пари.",
+            LoopState.Stopped => "Автоматичну перевірку зупинено.",
+            LoopState.Paused => "Автоматичну перевірку призупинено зі значка в області сповіщень.",
+            _ => $"{_background.StatusText}   Пар у стані «виконується»: {_activePairs}.",
+        };
+        Set(text);
     }
 
-    partial void OnAutoCheckChanged(bool value)
+    private void Set(string text) => OnUi(() => BackgroundStatus = text);
+
+    /// <summary>
+    /// Updates from background threads are marshalled to the UI thread; calls already on it apply straight away
+    /// (a deferred Post would leave the property stale for the caller — and for tests).
+    /// </summary>
+    private void OnUi(Action action)
     {
-        if (_suppressAutoCheck) return;
-        if (value)
-        {
-            // The loop reads config.json from disk, so unsaved edits (e.g. a new interval) would be ignored.
-            if (_isDirty())
-            {
-                _suppressAutoCheck = true;
-                AutoCheck = false;
-                _suppressAutoCheck = false;
-                BackgroundStatus = "Спершу натисніть «Зберегти» — фонова перевірка читає збережену конфігурацію.";
-                return;
-            }
-            _background.Start();
-        }
-        else
-        {
-            _background.Stop();
-        }
-        _persistAutoCheck?.Invoke(value);
-        OnBackgroundChanged();
+        if (_ui is null || ReferenceEquals(SynchronizationContext.Current, _ui)) action();
+        else _ui.Post(_ => action(), null);
     }
 
     /// <summary>Reads last_run + counters from state.db without running anything.</summary>
@@ -215,8 +195,7 @@ public sealed partial class RunViewModel : ObservableObject
             if (_flushPending) return;
             _flushPending = true;
         }
-        if (_ui is not null) _ui.Post(_ => FlushLog(), null);
-        else FlushLog();
+        OnUi(FlushLog);
     }
 
     private void FlushLog()

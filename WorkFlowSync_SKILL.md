@@ -76,9 +76,9 @@ src\WorkFlowSync.App\bin\Debug\net8.0\win-x64\WorkFlowSync.exe --config config.e
   Directory.Build.props do NOT work — the SDK adds its list later).
 - Per-pair: `FolderPair.Enabled` (default true, absent in old configs = enabled); automatic passes skip paused pairs,
   `SyncRunner.Run(..., onlyPair:)` / `wfs sync --pair` runs one regardless. GUI row buttons call `MainViewModel.RunPairAsync/TogglePair`.
-- The «Стан» tab switch owns the same `BackgroundLoop` as the tray (`MainViewModel.Background`); it refuses to start while the
-  config is dirty, because the loop reads config.json from disk. Its state lives in `SyncConfig.AutoCheck` and is written
-  immediately (when the config is otherwise clean) so the next launch resumes checking.
+- There is NO global auto-check switch: `MainViewModel.FollowPairStates()` starts/stops the shared `BackgroundLoop`
+  from the pair states (`FolderPair.Enabled`). `TogglePairAsync` writes config.json at once (when nothing else is dirty),
+  re-evaluates the loop and runs that pair immediately. The tray's pause is a separate global pause (LoopState.Paused).
 - Autostart gating: the Startup shortcut needs WorkFlowSync.exe (tray mode) OR wfs.exe (windowless); the scheduled task needs wfs.exe.
   In the App Debug folder only the GUI exists — tray autostart must stay available there.
 - A running GUI locks WorkFlowSync.Core.dll: `dotnet build` fails with MSB3026. Ask the user before killing their app; a compile check
@@ -86,6 +86,9 @@ src\WorkFlowSync.App\bin\Debug\net8.0\win-x64\WorkFlowSync.exe --config config.e
 - Autostart needs `wfs.exe` next to the running exe; the App Debug folder has none, so GUI switches are disabled there
   (test via publish\portable). Tests never call schtasks for real — only argument building.
 - PowerShell `Get-Content` without `-Encoding UTF8` shows Cyrillic log lines as mojibake; the files are fine.
+  NEVER round-trip a source file through `Get-Content | Set-Content` — it double-encodes Cyrillic (did it to a test file; restored via git).
+- View-model updates that go through `SynchronizationContext.Post` are invisible to the caller (and to tests) until the next
+  message pump turn: `RunViewModel.OnUi` applies straight away when already on the captured context.
 - Tray: `ShutdownMode.OnExplicitShutdown` + window Closing cancelled → hidden. Exit only via the tray menu, else the process lingers.
 - `BackgroundLoop.Pause/Stop` must cancel AND wait for the worker task; otherwise `Start()` sees a live task and no-ops (test caught it).
 - `AssetLoader.Open` needs a running Avalonia app — unit-test the .ico file on disk instead (path via [CallerFilePath]).

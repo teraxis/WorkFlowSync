@@ -45,7 +45,7 @@ public sealed partial class MainViewModel : ObservableObject
         ConfigPath = configPath;
         Pairs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasPairs));
         Background = new BackgroundLoop(ConfigPath, ResolveLogDir);
-        Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => IsDirty, PersistAutoCheck);
+        Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => IsDirty);
         Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
         Load();
         Run.RefreshSummary();
@@ -84,25 +84,19 @@ public sealed partial class MainViewModel : ObservableObject
         LogPath = cfg.LogPath;
         ScanParallelism = cfg.ScanParallelism;
         ScanBufferKb = Math.Max(4, cfg.ScanBufferSize / 1024);
-        _autoCheck = cfg.AutoCheck;
-        Run?.ApplySavedAutoCheck(cfg.AutoCheck);
+        FollowPairStates();
     }
 
-    private bool _autoCheck;
-
-    /// <summary>Writes the switch straight to config.json when nothing else is pending, so it survives a restart.</summary>
-    private void PersistAutoCheck(bool value)
+    /// <summary>
+    /// The background checker simply follows the pairs: it runs while at least one pair is in the «виконується»
+    /// state and stops once they are all paused. There is no separate switch.
+    /// </summary>
+    public void FollowPairStates()
     {
-        _autoCheck = value;
-        if (IsDirty) return;                       // it will be written by the next «Зберегти»
-        try
-        {
-            ConfigFile.Save(ToConfig(), ConfigPath);
-        }
-        catch (Exception ex)
-        {
-            SetStatus($"Не вдалося зберегти налаштування автоперевірки: {ex.Message}", error: true);
-        }
+        var active = Pairs.Count(p => p.Enabled);
+        if (active > 0 && !Background.IsActive && Background.State != Services.LoopState.Paused) Background.Start();
+        else if (active == 0 && Background.IsActive) Background.Stop();
+        Run?.RefreshBackgroundStatus(active);
     }
 
     public SyncConfig ToConfig() => new()
@@ -113,7 +107,6 @@ public sealed partial class MainViewModel : ObservableObject
         LogPath = LogPath.Trim(),
         ScanParallelism = ScanParallelism,
         ScanBufferSize = ScanBufferKb * 1024,
-        AutoCheck = _autoCheck,
     };
 
     /// <summary>Returns validation problems (empty = OK) and reflects them in the status line.</summary>
@@ -134,6 +127,7 @@ public sealed partial class MainViewModel : ObservableObject
             ConfigFile.Save(ToConfig(), ConfigPath);
             IsDirty = false;
             SetStatus($"Збережено {ConfigPath}", error: false);
+            FollowPairStates();
         }
         catch (Exception ex)
         {
@@ -154,6 +148,7 @@ public sealed partial class MainViewModel : ObservableObject
         Pairs.Add(pair);
         SelectedPair = pair;
         MarkDirty();
+        FollowPairStates();
     }
 
     public void ReplacePair(PairViewModel target, PairViewModel edited)
@@ -169,6 +164,7 @@ public sealed partial class MainViewModel : ObservableObject
         Pairs.Remove(SelectedPair);
         SelectedPair = null;
         MarkDirty();
+        FollowPairStates();
     }
 
     public string SuggestPairName(string source)
@@ -226,14 +222,49 @@ public sealed partial class MainViewModel : ObservableObject
         return text;
     }
 
-    /// <summary>Pause/resume one pair. Automatic passes read config.json, so the change needs saving.</summary>
-    public void TogglePair(PairViewModel pair)
+    /// <summary>
+    /// The row's play/pause button. Applies at once: the new state goes into config.json (the checker reads it from
+    /// disk), the checker starts or stops accordingly, and a freshly started pair is checked immediately.
+    /// </summary>
+    public async Task TogglePairAsync(PairViewModel pair)
     {
         pair.Enabled = !pair.Enabled;
-        IsDirty = true;
-        SetStatus(pair.Enabled
-            ? $"Пару «{pair.Name}» відновлено. Натисніть «Зберегти», щоб застосувати до автоматичних перевірок."
-            : $"Пару «{pair.Name}» поставлено на паузу. Натисніть «Зберегти», щоб застосувати до автоматичних перевірок.", error: false);
+        var saved = PersistPairStates();
+        FollowPairStates();
+
+        if (!saved)
+        {
+            SetStatus(pair.Enabled
+                ? $"«{pair.Name}» — виконується. Є інші незбережені зміни: натисніть «Зберегти»."
+                : $"«{pair.Name}» — на паузі. Є інші незбережені зміни: натисніть «Зберегти».", error: false);
+            return;
+        }
+
+        if (pair.Enabled)
+        {
+            SetStatus($"«{pair.Name}» — виконується: перевіряю зараз, далі кожні {IntervalMinutes} хв.", error: false);
+            await RunPairAsync(pair);
+        }
+        else
+        {
+            SetStatus($"«{pair.Name}» — на паузі: автоматичні перевірки цієї пари зупинено.", error: false);
+        }
+    }
+
+    /// <summary>Writes the play/pause states to config.json. Returns false when other unsaved edits block it.</summary>
+    private bool PersistPairStates()
+    {
+        if (IsDirty) return false;
+        try
+        {
+            ConfigFile.Save(ToConfig(), ConfigPath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Не вдалося зберегти стан пари: {ex.Message}", error: true);
+            return false;
+        }
     }
 
     /// <summary>Runs one pair right now (works for paused pairs too).</summary>

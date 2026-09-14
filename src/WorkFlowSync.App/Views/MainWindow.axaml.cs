@@ -34,10 +34,10 @@ public partial class MainWindow : Window
         await Vm.RunPairAsync(pair);
     }
 
-    private void OnTogglePair(object? sender, RoutedEventArgs e)
+    private async void OnTogglePair(object? sender, RoutedEventArgs e)
     {
         if ((sender as Control)?.DataContext is not PairViewModel pair) return;
-        Vm.TogglePair(pair);
+        await Vm.TogglePairAsync(pair);
     }
 
     private async void OnImportFfs(object? sender, RoutedEventArgs e)

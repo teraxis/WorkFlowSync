@@ -137,14 +137,14 @@ public partial class App : Application
         if (loop.IsActive) loop.Pause();
         else if (loop.State == LoopState.Paused) loop.Resume();
         else loop.Start();
-        _vm.Run.SyncAutoCheckFromLoop();
+        _vm.Run.SyncFromLoop();
         UpdateTray();
     }
 
     private void StartLoop()
     {
         _vm!.Background.Start();
-        _vm.Run.SyncAutoCheckFromLoop();
+        _vm.Run.SyncFromLoop();
         UpdateTray();
     }
 
@@ -156,7 +156,7 @@ public partial class App : Application
         if (_tray is not null) _tray.ToolTipText = $"WorkFlowSync — {text}";
         if (_pauseItem is not null)
             _pauseItem.Header = loop is { IsActive: true } ? "Призупинити фоновий режим" : "Запустити фоновий режим";
-        _vm?.Run.SyncAutoCheckFromLoop();
+        _vm?.Run.SyncFromLoop();
     });
 
     private void Shutdown(IClassicDesktopStyleApplicationLifetime desktop)

@@ -29,7 +29,7 @@
             <TabItem Header="Папки">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8" TextWrapping="Wrap" Opacity="0.8"
-                               Text="Кожна пара — це мережева папка, за якою стежимо, і локальна папка (у OneDrive), куди складаємо копію. Джерело лише читається; локальне дзеркало — ваше." />
+                               Text="Кожна пара — це мережева папка, за якою стежимо, і локальна папка (у OneDrive), куди складаємо копію. ▶ — перевіряти автоматично за інтервалом (зелений кружечок), ⏸ — пауза. Джерело лише читається; локальне дзеркало — ваше." />
 
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
                         <Button Content="Додати пару…" Click="OnAddPair" />
@@ -45,6 +45,9 @@
                                 <DataTemplate x:DataType="vm:PairViewModel">
                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="4">
                                         <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                            <Ellipse Width="11" Height="11" VerticalAlignment="Center"
+                                                     Fill="{Binding Enabled, Converter={x:Static app:Converters.StateDot}}"
+                                                     ToolTip.Tip="{Binding StateSummary}" />
                                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                             <TextBlock Text="{Binding StateSummary}" Opacity="0.7" VerticalAlignment="Center" />
                                             <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="80" Height="4" VerticalAlignment="Center" />
@@ -61,10 +64,10 @@
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.RowSpan="3" Grid.Column="1" Orientation="Horizontal"
                                                     Spacing="6" VerticalAlignment="Center" Margin="12,0,0,0">
-                                            <Button Content="Запустити" Click="OnRunPair" MinWidth="96"
-                                                    ToolTip.Tip="Виконати синхронізацію лише цієї пари зараз (працює й на паузі)" />
-                                            <Button Content="{Binding PauseButtonText}" Click="OnTogglePair" MinWidth="96"
-                                                    ToolTip.Tip="Пауза виключає пару з автоматичних перевірок" />
+                                            <Button Content="{Binding ToggleGlyph}" Click="OnTogglePair" Width="40" FontSize="16"
+                                                    ToolTip.Tip="{Binding ToggleTip}" />
+                                            <Button Content="Перевірити зараз" Click="OnRunPair" MinWidth="130"
+                                                    ToolTip.Tip="Одноразова синхронізація саме цієї пари (працює й на паузі)" />
                                         </StackPanel>
                                     </Grid>
                                 </DataTemplate>
@@ -150,11 +153,9 @@
                     <Border DockPanel.Dock="Top" Margin="0,0,0,8" Padding="10,8" CornerRadius="4"
                             Background="{DynamicResource SystemControlBackgroundListLowBrush}">
                         <StackPanel Spacing="4">
-                            <CheckBox IsChecked="{Binding AutoCheck}"
-                                      Content="Перевіряти автоматично із заданим інтервалом (поки програма відкрита)" />
-                            <TextBlock Text="{Binding BackgroundStatus}" TextWrapping="Wrap" Opacity="0.85" Margin="28,0,0,0" />
-                            <TextBlock Opacity="0.6" TextWrapping="Wrap" Margin="28,0,0,0"
-                                       Text="Закриття вікна не зупиняє перевірку — програма лишається в області сповіщень (вихід через меню значка). Щоб вона вмикалася після перезавантаження, увімкніть автозапуск у «Налаштуваннях»." />
+                            <TextBlock Text="{Binding BackgroundStatus}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                            <TextBlock Opacity="0.6" TextWrapping="Wrap"
+                                       Text="Автоматично перевіряються пари у стані «виконується» (зелений кружечок на вкладці «Папки»). Закриття вікна перевірку не зупиняє — програма лишається в області сповіщень; щоб вона вмикалася після перезавантаження, увімкніть автозапуск у «Налаштуваннях»." />
                         </StackPanel>
                     </Border>
 
