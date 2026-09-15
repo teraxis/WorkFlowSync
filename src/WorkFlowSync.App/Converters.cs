@@ -22,6 +22,13 @@ public static class Converters
     public static readonly IValueConverter StateHalo =
         new FuncValueConverter<bool, IBrush>(on => Brush(on ? "SuccessSoft" : "NeutralSoft", true)!);
 
+    public static readonly IValueConverter ModeName =
+        new FuncValueConverter<SyncMode, string>(m => m switch
+        {
+            SyncMode.TwoWay => "Повна синхронізація (в обидва боки)",
+            _ => "Дзеркало (в один бік)",
+        });
+
     public static readonly IValueConverter ThemeName =
         new FuncValueConverter<AppTheme, string>(t => t switch
         {

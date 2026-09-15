@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using WorkFlowSync.App.ViewModels;
+using WorkFlowSync.Core.Config;
 
 namespace WorkFlowSync.App.Views;
 
@@ -64,14 +65,11 @@ public partial class PairDialog : Window
             problems.Add($"Пара з назвою «{_draft.Name.Trim()}» уже є.");
         if (string.IsNullOrWhiteSpace(_draft.Source)) problems.Add("Вкажіть мережеву папку (джерело).");
         if (string.IsNullOrWhiteSpace(_draft.Target)) problems.Add("Вкажіть локальну папку (дзеркало).");
-        if (!string.IsNullOrWhiteSpace(_draft.Source) && !string.IsNullOrWhiteSpace(_draft.Target))
-        {
-            var s = Normalize(_draft.Source);
-            var t = Normalize(_draft.Target);
-            if (s.Equals(t, StringComparison.OrdinalIgnoreCase)) problems.Add("Джерело і дзеркало — одна й та сама папка.");
-            else if (t.StartsWith(s, StringComparison.OrdinalIgnoreCase)) problems.Add("Дзеркало не може бути всередині джерела.");
-            else if (s.StartsWith(t, StringComparison.OrdinalIgnoreCase)) problems.Add("Джерело не може бути всередині дзеркала.");
-        }
+        // Same rule as SyncConfig.Validate, so a pair rejected here is also rejected in a hand-edited config.
+        if (SyncConfig.Nesting(_draft.Source, _draft.Target) is { } nesting)
+            problems.Add(nesting.Contains("same folder") ? "Джерело і дзеркало — одна й та сама папка."
+                : nesting.StartsWith("target", StringComparison.Ordinal) ? "Дзеркало не може бути всередині джерела."
+                : "Джерело не може бути всередині дзеркала.");
         if (_draft.HasRetention && _draft.RetentionDays < 1) problems.Add("Кількість днів має бути ≥ 1.");
 
         if (problems.Count > 0)
@@ -83,10 +81,4 @@ public partial class PairDialog : Window
     }
 
     private void OnCancel(object? sender, RoutedEventArgs e) => Close(false);
-
-    private static string Normalize(string path)
-    {
-        var full = Path.GetFullPath(path.Trim());
-        return full.TrimEnd('\\', '/') + "\\";
-    }
 }

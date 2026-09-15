@@ -85,10 +85,14 @@ public sealed class SyncRunner
 
         // 1. State (in memory).
         var state = store.Load(pair.Name);
-        var backfill = forceBackfill || state.Count == 0;
+        var twoWay = pair.Mode == SyncMode.TwoWay;
+        var backfill = !twoWay && (forceBackfill || state.Count == 0);
+        if (twoWay) _log.Info($"{tag} mode=two-way: additions, edits and deletions travel both ways");
         if (backfill) _log.Info($"{tag} first pass for this pair: first_seen backfilled from min(ctime, mtime)");
+        if (twoWay && pair.Retention is not null) _log.Warn($"{tag} retention is ignored in two-way mode");
 
-        // 2. Source (read-only). Unavailable root = skip, never a state change (rule: never mistake offline for deleted).
+        // 2. Source. Mirror opens it read-only; two-way may also write back. Unavailable root = skip,
+        //    never a state change (rule: never mistake offline for deleted).
         var excludes = new ExcludeMatcher(pair.Exclude);
         bool IsTombstoneDir(string rel) => state.TryGetValue(rel, out var e) && e.Kind == EntryKind.Directory && e.Status == EntryStatus.Tombstone;
         ScanResult source;
@@ -119,7 +123,10 @@ public sealed class SyncRunner
         }
         else
         {
-            var targetScanner = new TreeScanner(_config.ScanBufferSize, _config.ScanParallelism, LinkMode.Skip);
+            // Two-way compares two equal sides, so the target is listed with the same rules as the source.
+            var targetScanner = twoWay
+                ? new TreeScanner(_config.ScanBufferSize, _config.ScanParallelism, pair.Links, excludes)
+                : new TreeScanner(_config.ScanBufferSize, _config.ScanParallelism, LinkMode.Skip);
             target = targetScanner.Scan(pair.Target, ct);
             foreach (var w in target.Warnings) _log.Warn($"{tag} target: {w}");
         }
@@ -127,7 +134,9 @@ public sealed class SyncRunner
         _log.Info($"{tag} scan target  dirs={target.DirectoryCount} files={target.FileCount} took={target.Elapsed.TotalSeconds:0.0}s");
 
         // 4. Plan (pure).
-        var plan = new SyncPlanner(pair.Name, now, backfill, pair.Retention).Plan(source.Entries, target.Entries, state);
+        var plan = twoWay
+            ? new TwoWayPlanner(pair.Name, now).Plan(source.Entries, target.Entries, state)
+            : new SyncPlanner(pair.Name, now, backfill, pair.Retention).Plan(source.Entries, target.Entries, state);
         foreach (var w in plan.Warnings) _log.Warn($"{tag} plan: {w}");
         result.Plan = plan.Stats;
         _log.Info($"{tag} plan  {plan.Stats}");
@@ -145,9 +154,10 @@ public sealed class SyncRunner
             var rows = new List<StateEntry>(plan.StateUpdates.Count + exec.Completed.Count);
             rows.AddRange(plan.StateUpdates);
             rows.AddRange(exec.Completed);
+            var forgotten = exec.Forgotten.Concat(plan.Forget).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (rows.Count > 0) store.Upsert(rows);
-            if (exec.Forgotten.Count > 0) store.Delete(pair.Name, exec.Forgotten);
-            _log.Info($"{tag} state  rows_written={rows.Count} rows_deleted={exec.Forgotten.Count}");
+            if (forgotten.Count > 0) store.Delete(pair.Name, forgotten);
+            _log.Info($"{tag} state  rows_written={rows.Count} rows_deleted={forgotten.Count}");
         }
 
         result.Elapsed = sw.Elapsed;

@@ -5,6 +5,8 @@
   "pairs": [
     {
       "name": "test",
+      // "mirror" — у один бік із памʼяттю (типово), "twoWay" — повна синхронізація в обидва боки
+      "mode": "mirror",
       "source": "S:\\tmp\\test\\Засідання ВРП",
       "target": "D:\\OneDrive\\tmp\\test",
       "links": "follow",
@@ -17,6 +19,7 @@
   ],
   "statePath": "state.db",
   "logPath": "logs",
+  "logKeepDays": 30,
   "interval": "00:30:00",
   "scanParallelism": 8,
   "scanBufferSize": 262144

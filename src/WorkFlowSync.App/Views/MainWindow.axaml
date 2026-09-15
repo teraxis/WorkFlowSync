@@ -108,8 +108,9 @@
                                                 <Grid ColumnDefinitions="*,Auto,*">
                                                     <TextBlock Grid.Column="0" Classes="caption mono oneline" Text="{Binding Source}"
                                                                ToolTip.Tip="{Binding Source}" />
-                                                    <Path Grid.Column="1" Classes="ico" Data="{StaticResource IconArrowRight}" Width="12" Height="12"
-                                                          Margin="8,0" Stroke="{DynamicResource TextMuted}" StrokeThickness="1.5" />
+                                                    <Path Grid.Column="1" Classes="ico" Data="{Binding ModeIcon}" Width="14" Height="NaN"
+                                                          Margin="8,0" Stroke="{DynamicResource TextMuted}" StrokeThickness="1.5"
+                                                          ToolTip.Tip="{Binding ModeSummary}" />
                                                     <TextBlock Grid.Column="2" Classes="caption mono oneline" Text="{Binding Target}"
                                                                ToolTip.Tip="{Binding Target}" />
                                                 </Grid>

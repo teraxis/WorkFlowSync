@@ -21,6 +21,7 @@
   "pairs": [
     {
       "name": "vrp",
+      "mode": "mirror",
       "source": "E:\\vrp",
       "target": "D:\\OneDrive\\Робоча папка",
       "links": "follow",
@@ -46,8 +47,9 @@
 | `pairs[].enabled` | так/ні | `true` | стан пари: `true` — «виконується» (перевіряється автоматично кожні `interval`), `false` — пауза. Ручний запуск (кнопка **Перевірити зараз** або `wfs sync --pair`) працює в обох станах. Пишеться самою програмою при натисканні ▶/⏸ |
 | `pairs[].source` | шлях | — | корінь джерела (UNC або підключений диск); лише читання |
 | `pairs[].target` | шлях | — | корінь локального дзеркала |
+| `pairs[].mode` | `mirror` / `twoWay` | `mirror` | F13: дзеркало в один бік або повна синхронізація в обидва |
 | `pairs[].links` | `follow` / `skip` / `recreate` | `follow` | F4 |
-| `pairs[].retention` | TimeSpan / null | null (вічно) | F3; формат `d.hh:mm:ss` |
+| `pairs[].retention` | TimeSpan / null | null (вічно) | F3; формат `d.hh:mm:ss`; у режимі `twoWay` ігнорується |
 | `pairs[].exclude[]` | шаблони | `[]` | відносно кореня джерела; синтаксис FFS: `\папка\*.docx`, `*\~$*` |
 | `statePath` | шлях | `state.db` | F2 |
 | `logPath` | папка | `logs` | F8 |

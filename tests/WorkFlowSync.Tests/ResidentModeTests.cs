@@ -73,7 +73,7 @@ public sealed class ResidentModeTests : IDisposable
     public async Task Loop_skips_a_pass_while_another_process_holds_the_lock_and_stops_on_cancel()
     {
         var configPath = Path.Combine(_root, "config.json");
-        ConfigFile.Save(new SyncConfig { Pairs = { new FolderPair { Name = "t", Source = _root, Target = Path.Combine(_root, "x") } } }, configPath);
+        ConfigFile.Save(new SyncConfig { Pairs = { new FolderPair { Name = "t", Source = Path.Combine(_root, "src-lock"), Target = Path.Combine(_root, "dst-lock") } } }, configPath);
         var log = new MemorySyncLog();
         var loop = new LoopRunner(configPath, log) { IntervalOverride = TimeSpan.FromMilliseconds(200) };
 

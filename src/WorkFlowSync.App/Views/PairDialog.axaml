@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:WorkFlowSync.App.ViewModels"
         xmlns:app="using:WorkFlowSync.App"
+        xmlns:cfg="using:WorkFlowSync.Core.Config"
         xmlns:ctl="using:WorkFlowSync.App.Views.Controls"
         x:Class="WorkFlowSync.App.Views.PairDialog"
         x:DataType="vm:PairViewModel"
@@ -42,11 +43,11 @@
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Назва пари" VerticalAlignment="Center" />
                             <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Name}" Watermark="наприклад: Засідання ВРП" />
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Мережева папка" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding SourceLabel}" VerticalAlignment="Center" />
                             <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Source}" Classes="mono" Watermark="\\server\share\папка" />
                             <Button Grid.Row="2" Grid.Column="2" Content="Огляд…" Margin="8,0,0,0" Click="OnBrowseSource" />
 
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Локальна папка" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="{Binding TargetLabel}" VerticalAlignment="Center" />
                             <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Target}" Classes="mono" Watermark="D:\OneDrive\…" />
                             <Button Grid.Row="4" Grid.Column="2" Content="Огляд…" Margin="8,0,0,0" Click="OnBrowseTarget" />
                         </Grid>
@@ -58,13 +59,25 @@
                         <TextBlock Classes="section" Text="ПРАВИЛА" />
 
                         <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Тип синхронізації" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.Modes}" SelectedItem="{Binding Mode}" Width="300" HorizontalAlignment="Left">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="cfg:SyncMode">
+                                        <TextBlock Text="{Binding Converter={x:Static app:Converters.ModeName}}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" Text="{Binding ModeHint}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Лінки в джерелі" VerticalAlignment="Center" />
                             <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.LinkModes}" SelectedItem="{Binding Links}" Width="200" HorizontalAlignment="Left" />
                             <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption"
                                        Text="Follow — копіювати вміст як звичайну папку (потрібно для OneDrive); Skip — не заходити в лінки." />
                         </Grid>
 
-                        <Grid ColumnDefinitions="160,*">
+                        <Grid ColumnDefinitions="160,*" IsEnabled="{Binding IsMirror}">
                             <TextBlock Grid.Column="0" Text="Зберігати" VerticalAlignment="Center" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
                                 <CheckBox IsChecked="{Binding HasRetention}" Content="лише те, що з'явилося за останні" VerticalAlignment="Center" />
@@ -72,8 +85,7 @@
                                 <TextBlock Text="днів" VerticalAlignment="Center" Classes="secondary" />
                             </StackPanel>
                         </Grid>
-                        <TextBlock Classes="caption"
-                                   Text="Старіші файли переносяться в Кошик і більше не повертаються. Файли, які ви редагували локально, це не зачіпає." />
+                        <TextBlock Classes="caption" Text="{Binding RetentionHint}" />
                     </StackPanel>
                 </Border>
 
@@ -81,7 +93,7 @@
                     <StackPanel Spacing="10">
                         <TextBlock Classes="section" Text="ВИКЛЮЧЕННЯ" />
                         <TextBlock Classes="caption" TextWrapping="Wrap"
-                                   Text="По одному шаблону в рядку, відносно мережевої папки. Приклади: \Тимчасове · *.tmp · \Палата\*Робочий.docx" />
+                                   Text="По одному шаблону в рядку, відносно першої папки. Приклади: \Тимчасове · *.tmp · \Палата\*Робочий.docx" />
                         <Border Classes="sunken" Padding="2">
                             <TextBox Text="{Binding ExcludeText}" AcceptsReturn="True" TextWrapping="NoWrap" Classes="mono" ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                      BorderThickness="0" Background="Transparent" MinHeight="130" VerticalContentAlignment="Top" />

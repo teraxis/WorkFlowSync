@@ -25,6 +25,8 @@
 
     <StreamGeometry x:Key="IconArrowRight">M5 12h14 M12 5l7 7-7 7</StreamGeometry>
 
+    <StreamGeometry x:Key="IconArrowsBoth">M3 8h14 M14 5l3 3-3 3 M21 16H7 M10 13l-3 3 3 3</StreamGeometry>
+
     <StreamGeometry x:Key="IconCheck">M20 6L9 17l-5-5</StreamGeometry>
 
     <!-- ── solid ── -->

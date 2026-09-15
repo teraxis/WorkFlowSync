@@ -61,12 +61,33 @@ public sealed class SyncConfig
             if (string.IsNullOrWhiteSpace(pair.Source)) problems.Add($"Pair '{pair.Name}': source is empty.");
             if (string.IsNullOrWhiteSpace(pair.Target)) problems.Add($"Pair '{pair.Name}': target is empty.");
             if (pair.Retention is { } r && r <= TimeSpan.Zero) problems.Add($"Pair '{pair.Name}': retention must be positive.");
+            if (Nesting(pair.Source, pair.Target) is { } nest) problems.Add($"Pair '{pair.Name}': {nest}");
         }
         if (Interval < TimeSpan.FromMinutes(1)) problems.Add("Interval must be at least 1 minute.");
         if (ScanParallelism is < 1 or > 64) problems.Add("ScanParallelism must be within 1..64.");
         if (ScanBufferSize < 4096) problems.Add("ScanBufferSize must be at least 4096.");
         if (LogKeepDays is < 1 or > 3650) problems.Add("LogKeepDays must be within 1..3650.");
         return problems;
+    }
+
+    /// <summary>
+    /// A pair inside itself: the two roots are the same folder, or one contains the other. Every pass would then
+    /// copy the copy, so such a pair is rejected. Returns the problem, or null when the two roots are unrelated.
+    /// </summary>
+    public static string? Nesting(string? source, string? target)
+    {
+        if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(target)) return null;
+        string Norm(string p)
+        {
+            try { return Path.GetFullPath(p.Trim()).TrimEnd('\\', '/'); }
+            catch { return p.Trim().TrimEnd('\\', '/'); }
+        }
+        var a = Norm(source);
+        var b = Norm(target);
+        if (a.Equals(b, StringComparison.OrdinalIgnoreCase)) return "source and target are the same folder.";
+        if (b.StartsWith(a + "\\", StringComparison.OrdinalIgnoreCase)) return "target is inside the source folder.";
+        if (a.StartsWith(b + "\\", StringComparison.OrdinalIgnoreCase)) return "source is inside the target folder.";
+        return null;
     }
 }
 
@@ -87,6 +108,9 @@ public sealed class FolderPair
 
     /// <summary>Local mirror root (inside OneDrive).</summary>
     public string Target { get; set; } = "";
+
+    /// <summary>One-way mirror with memory (default) or full two-way synchronisation.</summary>
+    public SyncMode Mode { get; set; } = SyncMode.Mirror;
 
     public LinkMode Links { get; set; } = LinkMode.Follow;
 

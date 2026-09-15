@@ -14,6 +14,9 @@ public sealed partial class PairViewModel : ObservableObject
     [ObservableProperty] private string _target = "";
     [ObservableProperty] private LinkMode _links = LinkMode.Follow;
 
+    /// <summary>Mirror with memory (default) or full two-way synchronisation.</summary>
+    [ObservableProperty] private SyncMode _mode = SyncMode.Mirror;
+
     /// <summary>False = keep forever; true = keep only items first seen within <see cref="RetentionDays"/>.</summary>
     [ObservableProperty] private bool _hasRetention;
     [ObservableProperty] private int _retentionDays = 365;
@@ -22,6 +25,27 @@ public sealed partial class PairViewModel : ObservableObject
     [ObservableProperty] private string _excludeText = "";
 
     public static IReadOnlyList<LinkMode> LinkModes { get; } = Enum.GetValues<LinkMode>();
+    public static IReadOnlyList<SyncMode> Modes { get; } = Enum.GetValues<SyncMode>();
+
+    public bool IsMirror => Mode == SyncMode.Mirror;
+
+    /// <summary>Arrow between the two paths in the pair card: single for mirror, double for two-way.</summary>
+    public Geometry? ModeIcon => Icon(IsMirror ? "IconArrowRight" : "IconArrowsBoth");
+
+    public string ModeSummary => IsMirror
+        ? "Дзеркало: нове з джерела копіюється сюди; ваші зміни в локальній папці остаточні"
+        : "Повна синхронізація: усе, що стається в одній папці, стається і в іншій";
+
+    public string SourceLabel => IsMirror ? "Мережева папка" : "Перша папка";
+    public string TargetLabel => IsMirror ? "Локальна папка" : "Друга папка";
+
+    public string ModeHint => IsMirror
+        ? "Джерело лише читається. Видалене в джерелі лишається у вас; видалене чи змінене вами назад не повертається."
+        : "Обидві папки рівноправні: створення, зміни й видалення переносяться в обидва боки. Видалене потрапляє в Кошик. Правила «видалене лишається» не діють.";
+
+    public string RetentionHint => IsMirror
+        ? "Старіші файли переносяться в Кошик і більше не повертаються. Файли, які ви редагували локально, це не зачіпає."
+        : "У повній синхронізації строк зберігання не застосовується.";
 
     public string RetentionSummary => HasRetention ? $"{RetentionDays} дн." : "назавжди";
 
@@ -39,7 +63,8 @@ public sealed partial class PairViewModel : ObservableObject
     {
         get
         {
-            var parts = new List<string> { LinksSummary, $"зберігати: {RetentionSummary}" };
+            var parts = new List<string> { IsMirror ? "дзеркало" : "повна синхронізація", LinksSummary };
+            if (IsMirror) parts.Add($"зберігати: {RetentionSummary}");
             if (ExcludeCount > 0) parts.Add($"виключень: {ExcludeCount}");
             return string.Join("   ·   ", parts);
         }
@@ -67,6 +92,7 @@ public sealed partial class PairViewModel : ObservableObject
         Enabled = p.Enabled,
         Source = p.Source,
         Target = p.Target,
+        Mode = p.Mode,
         Links = p.Links,
         HasRetention = p.Retention is not null,
         RetentionDays = p.Retention is { } r ? Math.Max(1, (int)Math.Round(r.TotalDays)) : 365,
@@ -79,6 +105,7 @@ public sealed partial class PairViewModel : ObservableObject
         Enabled = Enabled,
         Source = Source.Trim(),
         Target = Target.Trim(),
+        Mode = Mode,
         Links = Links,
         Retention = HasRetention ? TimeSpan.FromDays(RetentionDays) : null,
         Exclude = ParseExcludes(ExcludeText),
@@ -92,6 +119,7 @@ public sealed partial class PairViewModel : ObservableObject
         Enabled = other.Enabled;
         Source = other.Source;
         Target = other.Target;
+        Mode = other.Mode;
         Links = other.Links;
         HasRetention = other.HasRetention;
         RetentionDays = other.RetentionDays;
@@ -109,6 +137,7 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(RetentionSummary));
         OnPropertyChanged(nameof(LinksSummary));
         OnPropertyChanged(nameof(ExcludeCount));
+        RaiseMode();
     }
 
     private static List<string> ParseExcludes(string text) =>
@@ -127,6 +156,23 @@ public sealed partial class PairViewModel : ObservableObject
     partial void OnHasRetentionChanged(bool value) => RaiseFacts(nameof(RetentionSummary));
     partial void OnRetentionDaysChanged(int value) => RaiseFacts(nameof(RetentionSummary));
     partial void OnLinksChanged(LinkMode value) => RaiseFacts(nameof(LinksSummary));
+
+    partial void OnModeChanged(SyncMode value)
+    {
+        RaiseMode();
+        RaiseFacts(nameof(RetentionSummary));
+    }
+
+    private void RaiseMode()
+    {
+        OnPropertyChanged(nameof(IsMirror));
+        OnPropertyChanged(nameof(ModeIcon));
+        OnPropertyChanged(nameof(ModeSummary));
+        OnPropertyChanged(nameof(ModeHint));
+        OnPropertyChanged(nameof(RetentionHint));
+        OnPropertyChanged(nameof(SourceLabel));
+        OnPropertyChanged(nameof(TargetLabel));
+    }
     partial void OnExcludeTextChanged(string value) => RaiseFacts(nameof(ExcludeCount));
 
     private void RaiseFacts(string name)
