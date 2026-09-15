@@ -120,10 +120,10 @@
                                             <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Orientation="Horizontal"
                                                         Spacing="6" VerticalAlignment="Center" Margin="14,0,0,0">
                                                 <Button Classes="icon accentsoft" Click="OnTogglePair" ToolTip.Tip="{Binding ToggleTip}">
-                                                    <Path Classes="icof" Data="{Binding ToggleIcon}" Width="15" Height="15" />
+                                                    <Path Classes="icof" Data="{Binding ToggleIcon}" Width="NaN" Height="15" />
                                                 </Button>
                                                 <Button Classes="ghost icon" ToolTip.Tip="Дії з парою">
-                                                    <Path Classes="icof" Data="{StaticResource IconMoreFill}" Width="18" Height="18" />
+                                                    <Path Classes="icof" Data="{StaticResource IconMoreFill}" Width="18" Height="NaN" />
                                                     <Button.Flyout>
                                                         <MenuFlyout Placement="BottomEdgeAlignedRight">
                                                             <MenuItem Header="Перевірити зараз" Click="OnRunPair">

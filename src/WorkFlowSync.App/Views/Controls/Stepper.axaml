@@ -13,10 +13,10 @@
             <TextBox x:Name="Box" Grid.Column="0" BorderThickness="0" Background="Transparent" MinHeight="0"
                      VerticalContentAlignment="Center" Padding="10,0" Classes="stepper" />
             <Button x:Name="UpButton" Grid.Column="1" Classes="stepper" Click="OnUp" ToolTip.Tip="Більше">
-                <Path Classes="ico" Data="M6 15l6-6 6 6" Width="11" Height="11" />
+                <Path Classes="ico" Data="M6 15l6-6 6 6" Width="11" Height="NaN" />
             </Button>
             <Button x:Name="DownButton" Grid.Column="2" Classes="stepper last" Click="OnDown" ToolTip.Tip="Менше">
-                <Path Classes="ico" Data="M6 9l6 6 6-6" Width="11" Height="11" />
+                <Path Classes="ico" Data="M6 9l6 6 6-6" Width="11" Height="NaN" />
             </Button>
         </Grid>
     </Border>

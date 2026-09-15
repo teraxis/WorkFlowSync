@@ -300,6 +300,12 @@
         <Setter Property="BorderThickness" Value="1,0,0,0" />
         <Setter Property="CornerRadius" Value="0" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <!-- the frame's ClipToBounds is rectangular, so the outer button rounds its own outer corners -->
+    <Style Selector="Button.stepper.last">
+        <Setter Property="CornerRadius" Value="0,5,5,0" />
     </Style>
     <Style Selector="Button.stepper:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
