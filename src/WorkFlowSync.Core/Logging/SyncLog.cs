@@ -28,15 +28,15 @@ public sealed class FileSyncLog : ISyncLog, IDisposable
     private StreamWriter? _writer;
     private string? _writerDate;
 
-    /// <summary>Daily files older than this many days are deleted when the logger opens (docs F8).</summary>
+    /// <summary>Default rotation when the config does not say otherwise (docs F8).</summary>
     public const int KeepDays = 30;
 
-    public FileSyncLog(string directory, Action<LogLevel, string>? sink = null, bool verbose = false)
+    public FileSyncLog(string directory, Action<LogLevel, string>? sink = null, bool verbose = false, int keepDays = KeepDays)
     {
         _dir = directory;
         _sink = sink;
         _verbose = verbose;
-        Prune(directory, KeepDays);
+        Prune(directory, keepDays);
     }
 
     /// <summary>Deletes `wfs-YYYY-MM-DD.log` files older than <paramref name="keepDays"/>. Best effort. Returns the number removed.</summary>

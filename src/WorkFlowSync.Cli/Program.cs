@@ -127,7 +127,7 @@ internal static class Program
         {
             var w = level >= LogLevel.Warn ? Console.Error : Console.Out;
             w.WriteLine(line);
-        }, opts.Verbose);
+        }, opts.Verbose, cfg.LogKeepDays);
 
         if (opts.Loop)
         {

@@ -278,64 +278,35 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceSunken}" />
     </Style>
 
-    <!-- numeric stepper: one bordered box, quiet ± buttons that follow the button language -->
-    <Style Selector="NumericUpDown">
-        <Setter Property="MinHeight" Value="34" />
-        <Setter Property="FontSize" Value="{DynamicResource FontBody}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
-        <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    <!-- Stepper (Views/Controls/Stepper): borderless box + quiet buttons inside one rounded frame -->
+    <Style Selector="TextBox.stepper /template/ Border#PART_BorderElement">
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="0" />
     </Style>
-    <Style Selector="NumericUpDown ButtonSpinner">
-        <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
-    </Style>
-    <Style Selector="NumericUpDown ButtonSpinner:pointerover /template/ Border">
-        <Setter Property="BorderBrush" Value="{DynamicResource Neutral}" />
-    </Style>
-    <Style Selector="NumericUpDown ButtonSpinner:focus-within /template/ Border">
-        <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
-    </Style>
-    <!-- the inner text box has no border of its own: the spinner draws the frame -->
-    <Style Selector="NumericUpDown TextBox /template/ Border#PART_BorderElement">
+    <Style Selector="TextBox.stepper:focus /template/ Border#PART_BorderElement">
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Background" Value="Transparent" />
     </Style>
-    <Style Selector="NumericUpDown TextBox:focus /template/ Border#PART_BorderElement">
-        <Setter Property="BorderThickness" Value="0" />
+    <Style Selector="TextBox.stepper:pointerover /template/ Border#PART_BorderElement">
         <Setter Property="Background" Value="Transparent" />
     </Style>
-    <Style Selector="NumericUpDown RepeatButton">
+    <Style Selector="Button.stepper">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
         <Setter Property="BorderThickness" Value="1,0,0,0" />
-        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
-        <Setter Property="MinWidth" Value="30" />
-        <Setter Property="Padding" Value="0" />
         <Setter Property="CornerRadius" Value="0" />
-        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
     </Style>
-    <Style Selector="NumericUpDown RepeatButton:pointerover /template/ ContentPresenter">
+    <Style Selector="Button.stepper:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
     </Style>
-    <Style Selector="NumericUpDown RepeatButton:pressed /template/ ContentPresenter">
+    <Style Selector="Button.stepper:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource SurfaceSelected}" />
-    </Style>
-    <Style Selector="NumericUpDown RepeatButton PathIcon, NumericUpDown RepeatButton Path">
-        <Setter Property="Width" Value="10" />
-        <Setter Property="Height" Value="10" />
-    </Style>
-    <!-- the frame is rounded, so the outermost button must be rounded on that side too -->
-    <Style Selector="NumericUpDown RepeatButton#PART_DecreaseButton">
-        <Setter Property="CornerRadius" Value="0,6,6,0" />
-    </Style>
-    <Style Selector="NumericUpDown ButtonSpinner">
-        <Setter Property="ClipToBounds" Value="True" />
     </Style>
 
     <!-- scrollbars: a slim rail in its own lane, no arrow buttons, thumb from the palette -->
@@ -365,6 +336,45 @@
     </Style>
     <Style Selector="ScrollBar Thumb:pointerover /template/ Border">
         <Setter Property="Background" Value="{DynamicResource Neutral}" />
+    </Style>
+
+    <!-- read-only single-line box (paths) -->
+    <Style Selector="TextBox.oneline-box">
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="AcceptsReturn" Value="False" />
+    </Style>
+
+    <!-- context menu (the ⋯ button on a pair) -->
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+        <Setter Property="Padding" Value="6" />
+        <Setter Property="MinWidth" Value="200" />
+    </Style>
+    <Style Selector="MenuItem">
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontBody}" />
+    </Style>
+    <Style Selector="MenuItem:pointerover /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+    </Style>
+    <Style Selector="MenuItem.danger">
+        <Setter Property="Foreground" Value="{DynamicResource Danger}" />
+    </Style>
+    <Style Selector="MenuItem.danger Path.ico">
+        <Setter Property="Stroke" Value="{DynamicResource Danger}" />
+    </Style>
+    <Style Selector="MenuItem Path.ico">
+        <Setter Property="Width" Value="15" />
+        <Setter Property="Height" Value="15" />
+    </Style>
+    <Style Selector="MenuFlyoutPresenter Separator">
+        <Setter Property="Background" Value="{DynamicResource BorderSubtle}" />
+        <Setter Property="Margin" Value="6,4" />
     </Style>
 
     <Style Selector="ComboBox">

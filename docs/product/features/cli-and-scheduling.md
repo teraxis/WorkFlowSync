@@ -3,7 +3,7 @@
 **Статус**: реалізовано повністю (Етап 3, 2026-09-14) — `src/WorkFlowSync.Cli/Program.cs`, `Core/LoopRunner.cs`,
 `Core/PassLock.cs`, `Core/Autostart.cs`; тести `ResidentModeTests`.
 Консольний файл — **`wfs.exe`**; графічний — `WorkFlowSync.exe` (F11). Обидва читають той самий `config.json`.
-`sync`, `status`, `import-excludes` — Етапи 1–2; `--loop`, автозапуск — Етап 3.
+`sync`, `status`, `forget` — Етапи 1–2 (`import-excludes` вилучено 2026-09-15, F9); `--loop`, автозапуск — Етап 3.
 
 ## Команди
 

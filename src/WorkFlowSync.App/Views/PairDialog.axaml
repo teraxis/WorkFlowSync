@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:WorkFlowSync.App.ViewModels"
         xmlns:app="using:WorkFlowSync.App"
+        xmlns:ctl="using:WorkFlowSync.App.Views.Controls"
         x:Class="WorkFlowSync.App.Views.PairDialog"
         x:DataType="vm:PairViewModel"
         Title="Пара папок"
@@ -30,7 +31,7 @@
             </Grid>
         </Border>
 
-        <ScrollViewer Margin="24,0,10,8" AllowAutoHide="False" Padding="0,0,12,0">
+        <ScrollViewer Margin="24,0,10,8" AllowAutoHide="False" Padding="0,0,12,0" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="12">
 
                 <Border Classes="card">
@@ -67,8 +68,7 @@
                             <TextBlock Grid.Column="0" Text="Зберігати" VerticalAlignment="Center" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
                                 <CheckBox IsChecked="{Binding HasRetention}" Content="лише те, що з'явилося за останні" VerticalAlignment="Center" />
-                                <NumericUpDown Value="{Binding RetentionDays}" Minimum="1" Maximum="36500" Increment="30"
-                                               FormatString="0" Width="130" IsEnabled="{Binding HasRetention}" />
+                                <ctl:Stepper Value="{Binding RetentionDays}" Minimum="1" Maximum="36500" Increment="30" Width="130" IsEnabled="{Binding HasRetention}" />
                                 <TextBlock Text="днів" VerticalAlignment="Center" Classes="secondary" />
                             </StackPanel>
                         </Grid>

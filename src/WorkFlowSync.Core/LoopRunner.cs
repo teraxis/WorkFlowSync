@@ -22,6 +22,9 @@ public sealed class LoopRunner
 
     public int PassesRun { get; private set; }
 
+    /// <summary>The config as last read by the loop (for callers that want e.g. the log rotation setting).</summary>
+    public SyncConfig? LastConfig { get; private set; }
+
     public event Action? PassStarting;
     public event Action<PassResult>? PassCompleted;
 
@@ -41,6 +44,7 @@ public sealed class LoopRunner
             try
             {
                 cfg = SyncConfig.Load(_configPath);
+                LastConfig = cfg;
                 var problems = cfg.Validate();
                 if (problems.Count > 0)
                 {

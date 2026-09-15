@@ -157,7 +157,7 @@ public sealed partial class RunViewModel : ObservableObject
                 // Same cross-process lock as wfs.exe: never overlap with a scheduled or resident pass.
                 using var gate = PassLock.TryAcquire(configPath);
                 if (!gate.Acquired) throw new InvalidOperationException("Інший прохід уже виконується для цього конфігу (Планувальник або резидентний режим). Спробуйте пізніше.");
-                using var log = new FileSyncLog(logDir, (_, line) => AppendLog(line));
+                using var log = new FileSyncLog(logDir, (_, line) => AppendLog(line), keepDays: cfg.LogKeepDays);
                 return new SyncRunner(cfg, configPath, log).Run(dryRun, forceBackfill: false, token, onlyPair);
             }, _cts.Token);
 

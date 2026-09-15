@@ -13,6 +13,7 @@ public sealed class BackgroundLoop : IDisposable
 {
     private readonly string _configPath;
     private readonly Func<string> _logDir;
+    private readonly Func<int> _logKeepDays;
     private CancellationTokenSource? _cts;
     private Task? _task;
 
@@ -25,10 +26,11 @@ public sealed class BackgroundLoop : IDisposable
     /// <summary>Every log line of a background pass, so the window can show it live.</summary>
     public event Action<string>? LogLine;
 
-    public BackgroundLoop(string configPath, Func<string> logDir)
+    public BackgroundLoop(string configPath, Func<string> logDir, Func<int>? logKeepDays = null)
     {
         _configPath = configPath;
         _logDir = logDir;
+        _logKeepDays = logKeepDays ?? (() => FileSyncLog.KeepDays);
     }
 
     public bool IsActive => State is LoopState.Idle or LoopState.Running;
@@ -42,7 +44,7 @@ public sealed class BackgroundLoop : IDisposable
         Set(LoopState.Idle);
         _task = Task.Run(async () =>
         {
-            using var log = new FileSyncLog(_logDir(), (_, line) => LogLine?.Invoke(line));
+            using var log = new FileSyncLog(_logDir(), (_, line) => LogLine?.Invoke(line), keepDays: _logKeepDays());
             var loop = new LoopRunner(_configPath, log);
             loop.PassStarting += () => Set(LoopState.Running);
             loop.PassCompleted += r =>

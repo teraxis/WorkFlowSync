@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="WorkFlowSync.App.Views.Controls.Stepper"
+             Height="34" MinWidth="120">
+    <!--
+        Integer stepper in the app's own language: one rounded frame, a borderless text box and two quiet
+        buttons whose hover surface is clipped to the frame radius. Replaces NumericUpDown, whose Fluent
+        template cannot be restyled without clipped corners.
+    -->
+    <Border x:Name="Frame" Background="{DynamicResource SurfaceCard}" BorderBrush="{DynamicResource BorderStrong}"
+            BorderThickness="1" CornerRadius="{DynamicResource RadiusSm}" ClipToBounds="True">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBox x:Name="Box" Grid.Column="0" BorderThickness="0" Background="Transparent" MinHeight="0"
+                     VerticalContentAlignment="Center" Padding="10,0" Classes="stepper" />
+            <Button x:Name="UpButton" Grid.Column="1" Classes="stepper" Click="OnUp" ToolTip.Tip="Більше">
+                <Path Classes="ico" Data="M6 15l6-6 6 6" Width="11" Height="11" />
+            </Button>
+            <Button x:Name="DownButton" Grid.Column="2" Classes="stepper last" Click="OnDown" ToolTip.Tip="Менше">
+                <Path Classes="ico" Data="M6 9l6 6 6-6" Width="11" Height="11" />
+            </Button>
+        </Grid>
+    </Border>
+</UserControl>

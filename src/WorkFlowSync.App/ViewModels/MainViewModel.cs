@@ -46,6 +46,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _logPath = "logs";
     [ObservableProperty] private int _scanParallelism = 8;
     [ObservableProperty] private int _scanBufferKb = 256;
+    [ObservableProperty] private int _logKeepDays = 30;
 
     [ObservableProperty] private string _statusText = "";
     [ObservableProperty] private bool _statusIsError;
@@ -63,7 +64,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         ConfigPath = configPath;
         Pairs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasPairs));
-        Background = new BackgroundLoop(ConfigPath, ResolveLogDir);
+        Background = new BackgroundLoop(ConfigPath, ResolveLogDir, () => LogKeepDays);
         Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => false);
         Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
         Load();
@@ -125,6 +126,7 @@ public sealed partial class MainViewModel : ObservableObject
         LogPath = cfg.LogPath;
         ScanParallelism = cfg.ScanParallelism;
         ScanBufferKb = Math.Max(4, cfg.ScanBufferSize / 1024);
+        LogKeepDays = cfg.LogKeepDays;
         Theme = cfg.Theme;
         _loading = false;
         FollowPairStates();
@@ -150,6 +152,7 @@ public sealed partial class MainViewModel : ObservableObject
         LogPath = LogPath.Trim(),
         ScanParallelism = ScanParallelism,
         ScanBufferSize = ScanBufferKb * 1024,
+        LogKeepDays = LogKeepDays,
         Theme = Theme,
     };
 
@@ -289,4 +292,5 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnLogPathChanged(string value) { MarkDirty(); RaiseFolderPaths(); }
     partial void OnScanParallelismChanged(int value) => MarkDirty();
     partial void OnScanBufferKbChanged(int value) => MarkDirty();
+    partial void OnLogKeepDaysChanged(int value) => MarkDirty();
 }

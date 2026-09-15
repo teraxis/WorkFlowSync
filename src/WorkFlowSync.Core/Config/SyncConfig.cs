@@ -12,8 +12,11 @@ public sealed class SyncConfig
     /// <summary>SQLite state database path. Relative paths resolve against the config file folder.</summary>
     public string StatePath { get; set; } = "state.db";
 
-    /// <summary>Log folder. Relative paths resolve against the config file folder.</summary>
+    /// <summary>Log folder. Relative paths resolve against the config file folder (= the app folder).</summary>
     public string LogPath { get; set; } = "logs";
+
+    /// <summary>Daily log files older than this many days are deleted (rotation).</summary>
+    public int LogKeepDays { get; set; } = 30;
 
     /// <summary>Interval between passes in resident (loop) mode.</summary>
     public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(30);
@@ -62,6 +65,7 @@ public sealed class SyncConfig
         if (Interval < TimeSpan.FromMinutes(1)) problems.Add("Interval must be at least 1 minute.");
         if (ScanParallelism is < 1 or > 64) problems.Add("ScanParallelism must be within 1..64.");
         if (ScanBufferSize < 4096) problems.Add("ScanBufferSize must be at least 4096.");
+        if (LogKeepDays is < 1 or > 3650) problems.Add("LogKeepDays must be within 1..3650.");
         return problems;
     }
 }
