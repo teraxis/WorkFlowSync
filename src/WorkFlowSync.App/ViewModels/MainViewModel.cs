@@ -71,6 +71,19 @@ public sealed partial class MainViewModel : ObservableObject
         Run.RefreshSummary();
     }
 
+    /// <summary>Folder that holds config.json, state.db and logs — next to the executable by default.</summary>
+    public string AppFolder => Path.GetDirectoryName(Path.GetFullPath(ConfigPath))!;
+
+    public string StateFullPath => Path.IsPathRooted(StatePath.Trim()) ? StatePath.Trim() : Path.Combine(AppFolder, StatePath.Trim().Length == 0 ? "state.db" : StatePath.Trim());
+    public string LogFullPath => ResolveLogDir();
+
+    private void RaiseFolderPaths()
+    {
+        OnPropertyChanged(nameof(AppFolder));
+        OnPropertyChanged(nameof(StateFullPath));
+        OnPropertyChanged(nameof(LogFullPath));
+    }
+
     public string ResolveLogDir()
     {
         var log = LogPath.Trim();
@@ -82,11 +95,19 @@ public sealed partial class MainViewModel : ObservableObject
     {
         try
         {
+            var created = false;
+            if (!File.Exists(ConfigPath))
+            {
+                // Portable layout: the config lives next to the executable from the very first start.
+                ConfigFile.Save(new SyncConfig(), ConfigPath);
+                created = true;
+            }
             var cfg = ConfigFile.LoadOrDefault(ConfigPath);
             Apply(cfg);
             // No "loaded X" chatter: the status line is for things the user has to notice.
-            SetStatus(File.Exists(ConfigPath) ? "" : "Конфігурацію ще не збережено — натисніть «Зберегти».", error: false);
+            SetStatus(created ? $"Створено config.json у папці програми: {AppFolder}" : "", error: false);
             IsDirty = false;
+            RaiseFolderPaths();
         }
         catch (Exception ex)
         {
@@ -351,8 +372,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     partial void OnSelectedPairChanged(PairViewModel? value) => OnPropertyChanged(nameof(HasSelection));
     partial void OnIntervalMinutesChanged(int value) => MarkDirty();
-    partial void OnStatePathChanged(string value) => MarkDirty();
-    partial void OnLogPathChanged(string value) => MarkDirty();
+    partial void OnStatePathChanged(string value) { MarkDirty(); RaiseFolderPaths(); }
+    partial void OnLogPathChanged(string value) { MarkDirty(); RaiseFolderPaths(); }
     partial void OnScanParallelismChanged(int value) => MarkDirty();
     partial void OnScanBufferKbChanged(int value) => MarkDirty();
 }

@@ -48,7 +48,8 @@ public class PairViewModelTests
         try
         {
             var vm = new MainViewModel(path);
-            Assert.False(File.Exists(path));
+            Assert.True(File.Exists(path));                      // portable: created next to the app on first start
+            Assert.Empty(SyncConfig.Load(path).Pairs);
             vm.AddPair(new PairViewModel { Name = "p1", Source = @"C:\src", Target = @"C:\dst", HasRetention = true, RetentionDays = 30 });
             vm.IntervalMinutes = 15;
             vm.ScanBufferKb = 512;

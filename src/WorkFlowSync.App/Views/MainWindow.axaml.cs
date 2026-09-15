@@ -63,6 +63,19 @@ public partial class MainWindow : Window
         await Vm.TogglePairAsync(pair);
     }
 
+    private void OnOpenAppFolder(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{Vm.AppFolder}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Vm.StatusText = $"Не вдалося відкрити папку: {ex.Message}";
+            Vm.StatusIsError = true;
+        }
+    }
+
     private async void OnImportFfs(object? sender, RoutedEventArgs e)
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions

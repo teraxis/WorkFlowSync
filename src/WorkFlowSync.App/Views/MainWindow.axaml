@@ -300,15 +300,23 @@
                         <Border Classes="card">
                             <StackPanel Spacing="12">
                                 <TextBlock Classes="section" Text="ФАЙЛИ ПРОГРАМИ" />
-                                <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,10,Auto,10,Auto">
+                                <TextBlock Classes="secondary"
+                                           Text="Усе, що потрібно програмі — config.json, база стану та журнали — зберігається в папці, з якої вона запущена. Папку можна переносити разом із файлами." />
+                                <Grid ColumnDefinitions="240,*,Auto" RowDefinitions="Auto">
+                                    <TextBlock Grid.Column="0" Text="Папка програми" VerticalAlignment="Center" />
+                                    <TextBox Grid.Column="1" Text="{Binding AppFolder}" IsReadOnly="True" Classes="mono" />
+                                    <Button Grid.Column="2" Content="Відкрити" Margin="8,0,0,0" Click="OnOpenAppFolder" />
+                                </Grid>
+                                <Border Classes="divider" />
+                                <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,4,Auto,10,Auto,4,Auto">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="База стану" VerticalAlignment="Center" />
                                     <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding StatePath}" />
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Папка логів" VerticalAlignment="Center" />
-                                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding LogPath}" />
-                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Файл конфігурації" VerticalAlignment="Center" />
-                                    <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding ConfigPath}" IsReadOnly="True" Classes="mono" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption mono oneline" Text="{Binding StateFullPath}" ToolTip.Tip="{Binding StateFullPath}" />
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Папка логів" VerticalAlignment="Center" />
+                                    <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding LogPath}" />
+                                    <TextBlock Grid.Row="6" Grid.Column="1" Classes="caption mono oneline" Text="{Binding LogFullPath}" ToolTip.Tip="{Binding LogFullPath}" />
                                 </Grid>
-                                <TextBlock Classes="caption" Text="Відносні шляхи — від папки, де лежить config.json (поруч із програмою)." />
+                                <TextBlock Classes="caption" Text="Відносні шляхи відлічуються від папки програми; за замовчуванням усе лежить саме там." />
                             </StackPanel>
                         </Border>
                     </StackPanel>
