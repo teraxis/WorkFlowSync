@@ -29,7 +29,9 @@
             </Grid>
         </Border>
 
-        <ScrollViewer Margin="24,0,12,8" AllowAutoHide="False" Padding="0,0,16,0" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Margin="24,0,12,8" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+            <!-- width pinned to the viewport so no card can grow past the others (see MainWindow settings) -->
+            <Border Padding="0,0,16,0" Width="{Binding $parent[ScrollViewer].Viewport.Width}">
             <StackPanel Spacing="12">
 
                 <Border Classes="card">
@@ -87,6 +89,7 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
+            </Border>
         </ScrollViewer>
     </DockPanel>
 </Window>

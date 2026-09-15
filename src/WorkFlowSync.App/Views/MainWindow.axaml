@@ -190,8 +190,11 @@
                 </Panel>
 
                 <!-- ────────────────────────── page: settings ────────────────────────── -->
-                <ScrollViewer IsVisible="{Binding IsSettingsPage}" AllowAutoHide="False" Padding="0,0,12,0"
+                <ScrollViewer IsVisible="{Binding IsSettingsPage}" AllowAutoHide="False"
                               HorizontalScrollBarVisibility="Disabled">
+                    <!-- pinned to the viewport: a wrapped line that ends exactly at the edge otherwise
+                         reports a few extra pixels and its card grows wider than the others -->
+                    <Border Padding="0,0,12,0" Width="{Binding $parent[ScrollViewer].Viewport.Width}">
                     <StackPanel Spacing="12" Margin="0,0,0,4">
 
                         <Border Classes="card">
@@ -271,8 +274,10 @@
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Папка програми" VerticalAlignment="Center" />
                                     <Border Grid.Row="0" Grid.Column="1" Classes="sunken" Padding="12,0" Height="34" ClipToBounds="True"
                                             ToolTip.Tip="{Binding AppFolder}">
-                                        <TextBlock Text="{Binding AppFolder}" Classes="mono" VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                        <!-- a hidden-scroll viewer keeps the long path from widening the card -->
+                                        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                                            <TextBlock Text="{Binding AppFolder}" Classes="mono" VerticalAlignment="Center" TextWrapping="NoWrap" />
+                                        </ScrollViewer>
                                     </Border>
                                     <Button Grid.Row="0" Grid.Column="2" Content="Відкрити" Margin="8,0,0,0" Click="OnOpenAppFolder" />
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Зберігати журнали" VerticalAlignment="Center" />
@@ -285,6 +290,7 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
+                    </Border>
                 </ScrollViewer>
             </Panel>
         </DockPanel>
