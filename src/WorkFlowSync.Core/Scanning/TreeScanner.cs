@@ -25,9 +25,12 @@ public sealed class TreeScanner
     private readonly LinkMode _links;
     private readonly ExcludeMatcher _excludes;
     private readonly Func<string, bool>? _skipDirectory;
+    private readonly ThreadPriority _priority;
 
     /// <param name="skipDirectory">Relative directory path → true to neither record nor descend (tombstoned folders).</param>
-    public TreeScanner(int bufferSize, int parallelism, LinkMode links, ExcludeMatcher? excludes = null, Func<string, bool>? skipDirectory = null)
+    /// <param name="priority">Scheduling priority of the listing threads (docs F5: «Навантаження на процесор»).</param>
+    public TreeScanner(int bufferSize, int parallelism, LinkMode links, ExcludeMatcher? excludes = null,
+        Func<string, bool>? skipDirectory = null, ThreadPriority priority = ThreadPriority.Normal)
     {
         _options = new EnumerationOptions
         {
@@ -42,6 +45,7 @@ public sealed class TreeScanner
         _links = links;
         _excludes = excludes ?? ExcludeMatcher.Empty;
         _skipDirectory = skipDirectory;
+        _priority = priority;
     }
 
     /// <param name="RealPath">Physical directory behind <paramref name="FullPath"/> (differs once a link was followed).</param>
@@ -77,14 +81,19 @@ public sealed class TreeScanner
             throw new RootUnavailableException(root, ex);
         }
 
-        var workers = new Task[_parallelism];
+        // Dedicated threads, not the thread pool: only then does the priority below actually stick,
+        // and a long pass cannot starve the pool that the UI and the loop use.
+        var workers = new Thread[_parallelism];
+        var failures = new ConcurrentBag<Exception>();
         for (var w = 0; w < workers.Length; w++)
         {
-            workers[w] = Task.Run(async () =>
+            workers[w] = new Thread(() =>
             {
+              try
+              {
                 var local = new List<ScanEntry>(1024);
                 entries.Add(local);
-                while (await channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
+                while (WaitToRead(channel.Reader, ct))
                 {
                     while (channel.Reader.TryRead(out var item))
                     {
@@ -105,9 +114,20 @@ public sealed class TreeScanner
                         }
                     }
                 }
-            }, ct);
+              }
+              catch (OperationCanceledException) { /* Scan() rethrows via the token below */ }
+              catch (Exception ex) { failures.Add(ex); }
+            })
+            {
+                IsBackground = true,
+                Name = "wfs-scan",
+            };
+            CpuBudget.TrySetPriority(workers[w], _priority);
+            workers[w].Start();
         }
-        Task.WaitAll(workers, ct);
+        foreach (var t in workers) t.Join();
+        ct.ThrowIfCancellationRequested();
+        if (!failures.IsEmpty) throw new AggregateException(failures);
 
         foreach (var list in entries)
             foreach (var e in list)
@@ -118,6 +138,13 @@ public sealed class TreeScanner
         result.LinkCount = links;
         result.Elapsed = sw.Elapsed;
         return result;
+    }
+
+    /// <summary>Blocking wait for the next work item; returns false once the channel is complete.</summary>
+    private static bool WaitToRead(ChannelReader<WorkItem> reader, CancellationToken ct)
+    {
+        try { return reader.WaitToReadAsync(ct).AsTask().GetAwaiter().GetResult(); }
+        catch (OperationCanceledException) { return false; }
     }
 
     private void ProcessDirectory(WorkItem item, List<ScanEntry> local, ConcurrentBag<string> warnings, ChannelWriter<WorkItem> writer, ref int pending, ref int dirs, ref int files, ref int links)

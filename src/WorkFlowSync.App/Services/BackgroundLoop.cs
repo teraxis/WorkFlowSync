@@ -42,7 +42,7 @@ public sealed class BackgroundLoop : IDisposable
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
         Set(LoopState.Idle);
-        _task = Task.Run(async () =>
+        _task = RunOnOwnThread(async () =>
         {
             using var log = new FileSyncLog(_logDir(), (_, line) => LogLine?.Invoke(line), keepDays: _logKeepDays());
             var loop = new LoopRunner(_configPath, log);
@@ -66,7 +66,28 @@ public sealed class BackgroundLoop : IDisposable
             {
                 if (State != LoopState.Paused) Set(LoopState.Stopped);
             }
-        }, token);
+        });
+    }
+
+    /// <summary>
+    /// The loop runs on a dedicated background thread, not on the thread pool: a pass lowers the priority
+    /// of the thread it runs on (docs F5), and that must not leak into pool threads the UI also uses.
+    /// </summary>
+    private static Task RunOnOwnThread(Func<Task> work)
+    {
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try { work().GetAwaiter().GetResult(); tcs.TrySetResult(); }
+            catch (OperationCanceledException) { tcs.TrySetResult(); }
+            catch (Exception ex) { tcs.TrySetException(ex); }
+        })
+        {
+            IsBackground = true,
+            Name = "wfs-loop",
+        };
+        thread.Start();
+        return tcs.Task;
     }
 
     public void Stop()

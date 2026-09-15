@@ -122,6 +122,10 @@ internal static class Program
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
+        // wfs.exe is always the background worker (Startup loop, Task Scheduler), so the whole
+        // process yields to whatever the user is doing (docs F5: «Навантаження на процесор»).
+        CpuBudget.ApplyToCurrentProcess(cfg.CpuLoad);
+
         var logDir = Path.IsPathRooted(cfg.LogPath) ? cfg.LogPath : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(opts.ConfigPath))!, cfg.LogPath);
         using var log = new FileSyncLog(logDir, (level, line) =>
         {

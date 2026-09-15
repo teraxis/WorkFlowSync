@@ -29,6 +29,14 @@ public static class Converters
             _ => "Дзеркало (в один бік)",
         });
 
+    public static readonly IValueConverter CpuLoadName =
+        new FuncValueConverter<CpuLoad, string>(l => l switch
+        {
+            CpuLoad.Full => "Повне — найшвидше",
+            CpuLoad.Low => "Низьке — не заважати роботі",
+            _ => "Помірне — рекомендовано",
+        });
+
     public static readonly IValueConverter ThemeName =
         new FuncValueConverter<AppTheme, string>(t => t switch
         {

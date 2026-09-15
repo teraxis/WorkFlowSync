@@ -35,6 +35,8 @@ public sealed partial class MainViewModel : ObservableObject
         _ => "Налаштування",
     };
 
+    public IReadOnlyList<CpuLoad> CpuLoads { get; } = new[] { CpuLoad.Balanced, CpuLoad.Full, CpuLoad.Low };
+
     public IReadOnlyList<AppTheme> Themes { get; } = new[] { AppTheme.System, AppTheme.Light, AppTheme.Dark };
 
     /// <summary>Applied immediately and remembered in the config.</summary>
@@ -45,6 +47,9 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _statePath = "state.db";
     [ObservableProperty] private string _logPath = "logs";
     [ObservableProperty] private int _scanParallelism = 8;
+
+    /// <summary>How much of the machine a pass may take (docs F5).</summary>
+    [ObservableProperty] private CpuLoad _cpuLoad = CpuLoad.Balanced;
     [ObservableProperty] private int _scanBufferKb = 256;
     [ObservableProperty] private int _logKeepDays = 30;
 
@@ -125,6 +130,7 @@ public sealed partial class MainViewModel : ObservableObject
         StatePath = cfg.StatePath;
         LogPath = cfg.LogPath;
         ScanParallelism = cfg.ScanParallelism;
+        CpuLoad = cfg.CpuLoad;
         ScanBufferKb = Math.Max(4, cfg.ScanBufferSize / 1024);
         LogKeepDays = cfg.LogKeepDays;
         Theme = cfg.Theme;
@@ -151,6 +157,7 @@ public sealed partial class MainViewModel : ObservableObject
         StatePath = StatePath.Trim(),
         LogPath = LogPath.Trim(),
         ScanParallelism = ScanParallelism,
+        CpuLoad = CpuLoad,
         ScanBufferSize = ScanBufferKb * 1024,
         LogKeepDays = LogKeepDays,
         Theme = Theme,
@@ -291,6 +298,20 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnStatePathChanged(string value) { MarkDirty(); RaiseFolderPaths(); }
     partial void OnLogPathChanged(string value) { MarkDirty(); RaiseFolderPaths(); }
     partial void OnScanParallelismChanged(int value) => MarkDirty();
+
+    partial void OnCpuLoadChanged(CpuLoad value)
+    {
+        OnPropertyChanged(nameof(CpuLoadHint));
+        MarkDirty();
+    }
+
+    /// <summary>What the chosen load actually does, in the user's words.</summary>
+    public string CpuLoadHint => CpuLoad switch
+    {
+        CpuLoad.Full => "Стільки паралельних листингів, скільки задано нижче, зі звичайним пріоритетом. Найшвидше, але на слабкому ПК заважає роботі.",
+        CpuLoad.Low => "Два листинги з найнижчим пріоритетом: прохід триває довше, зате комп'ютер лишається чуйним.",
+        _ => "Не більше половини ядер, знижений пріоритет потоків. Прохід майже такий самий швидкий, а система лишається чуйною.",
+    };
     partial void OnScanBufferKbChanged(int value) => MarkDirty();
     partial void OnLogKeepDaysChanged(int value) => MarkDirty();
 }

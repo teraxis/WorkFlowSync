@@ -28,8 +28,11 @@ public sealed class SyncConfig
     /// <summary>Directory listing buffer for the scanner; large values cut SMB round-trips.</summary>
     public int ScanBufferSize { get; set; } = 256 * 1024;
 
-    /// <summary>Concurrent directory listings per pass.</summary>
+    /// <summary>Concurrent directory listings per pass (upper bound; <see cref="CpuLoad"/> may lower it).</summary>
     public int ScanParallelism { get; set; } = 8;
+
+    /// <summary>How much of the machine a pass may take: balanced (default), full speed, or low.</summary>
+    public CpuLoad CpuLoad { get; set; } = CpuLoad.Balanced;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

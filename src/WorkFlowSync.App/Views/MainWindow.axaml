@@ -255,6 +255,18 @@
                         <Border Classes="card">
                             <StackPanel Spacing="12">
                                 <TextBlock Classes="section" Text="ПРОДУКТИВНІСТЬ СКАНЕРА" />
+                                <Grid ColumnDefinitions="240,*">
+                                    <TextBlock Grid.Column="0" Text="Навантаження на процесор" VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding CpuLoads}" SelectedItem="{Binding CpuLoad}" Width="260"
+                                              HorizontalAlignment="Left">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="cfg:CpuLoad">
+                                                <TextBlock Text="{Binding Converter={x:Static app:Converters.CpuLoadName}}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </Grid>
+                                <TextBlock Classes="caption" Text="{Binding CpuLoadHint}" />
                                 <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,10,Auto">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Паралельних листингів" VerticalAlignment="Center" />
                                     <ctl:Stepper Grid.Row="0" Grid.Column="1" Value="{Binding ScanParallelism}" Minimum="1" Maximum="64" Width="130" HorizontalAlignment="Left" />

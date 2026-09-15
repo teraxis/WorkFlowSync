@@ -21,6 +21,8 @@
   "logPath": "logs",
   "logKeepDays": 30,
   "interval": "00:30:00",
+  // balanced (типово) / full / low — скільки процесора дозволено зайняти проходу
+  "cpuLoad": "balanced",
   "scanParallelism": 8,
   "scanBufferSize": 262144
 }

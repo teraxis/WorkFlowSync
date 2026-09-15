@@ -14,7 +14,14 @@ namespace WorkFlowSync.App.ViewModels;
 /// <summary>«Стан» tab: last pass summary from the state database, and running a pass (dry-run or real) with a live log.</summary>
 public sealed partial class RunViewModel : ObservableObject
 {
-    private const int MaxLogLines = 3000;
+    private const int MaxLogLines = 1500;
+
+    /// <summary>
+    /// A busy pass emits thousands of lines per second. Rebuilding the whole log text for each of them —
+    /// even once per UI turn — kept the UI thread at 100% and Windows marked the window «не відповідає».
+    /// Redraws are therefore capped at a few per second; the file log keeps every line regardless.
+    /// </summary>
+    private static readonly TimeSpan LogRedrawInterval = TimeSpan.FromMilliseconds(250);
 
     private readonly Func<SyncConfig> _configProvider;
     private readonly Func<string> _configPathProvider;
@@ -152,14 +159,16 @@ public sealed partial class RunViewModel : ObservableObject
         try
         {
             var token = _cts.Token;
-            var result = await Task.Run(() =>
+            // A dedicated thread of the configured priority (docs F5): on a weak PC a pass must not
+            // fight the UI for the CPU, and the thread pool must keep its normal priority.
+            var result = await CpuBudget.For(cfg).RunAsync(() =>
             {
                 // Same cross-process lock as wfs.exe: never overlap with a scheduled or resident pass.
                 using var gate = PassLock.TryAcquire(configPath);
                 if (!gate.Acquired) throw new InvalidOperationException("Інший прохід уже виконується для цього конфігу (Планувальник або резидентний режим). Спробуйте пізніше.");
                 using var log = new FileSyncLog(logDir, (_, line) => AppendLog(line), keepDays: cfg.LogKeepDays);
                 return new SyncRunner(cfg, configPath, log).Run(dryRun, forceBackfill: false, token, onlyPair);
-            }, _cts.Token);
+            }, token);
 
             var copied = result.Pairs.Sum(p => (p.Execution?.FilesCopied ?? 0) + (p.Execution?.FilesUpdated ?? 0));
             var planned = result.Pairs.Sum(p => (p.Plan?.New ?? 0) + (p.Plan?.Updated ?? 0));
@@ -181,13 +190,15 @@ public sealed partial class RunViewModel : ObservableObject
             IsRunning = false;
             _cts.Dispose();
             _cts = null;
+            FlushLog();          // the throttle may still owe the last lines
             RefreshSummary();
         }
     }
 
     private bool _flushPending;
+    private DateTime _lastFlushUtc = DateTime.MinValue;
 
-    /// <summary>Bursts of thousands of lines are coalesced into one UI update per UI-thread turn.</summary>
+    /// <summary>Bursts of thousands of lines are coalesced; at most one redraw per <see cref="LogRedrawInterval"/>.</summary>
     private void AppendLog(string line)
     {
         lock (_logLines)
@@ -197,9 +208,18 @@ public sealed partial class RunViewModel : ObservableObject
             if (_flushPending) return;
             _flushPending = true;
         }
-        OnUi(FlushLog);
+
+        var due = _lastFlushUtc + LogRedrawInterval - DateTime.UtcNow;
+        if (due <= TimeSpan.Zero)
+        {
+            OnUi(FlushLog);
+            return;
+        }
+        // Wait out the rest of the window on a timer thread, never on the UI thread.
+        _ = Task.Delay(due).ContinueWith(_ => OnUi(FlushLog), TaskScheduler.Default);
     }
 
+    /// <summary>Writes whatever has accumulated; the final state is flushed again when the pass ends.</summary>
     private void FlushLog()
     {
         string text;
@@ -208,6 +228,7 @@ public sealed partial class RunViewModel : ObservableObject
             _flushPending = false;
             text = string.Join(Environment.NewLine, _logLines);
         }
+        _lastFlushUtc = DateTime.UtcNow;
         LogText = text;
     }
 

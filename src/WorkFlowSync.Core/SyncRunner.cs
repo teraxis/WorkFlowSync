@@ -55,6 +55,8 @@ public sealed class SyncRunner
             ? _config.Pairs.Where(p => p.Enabled).ToList()
             : _config.Pairs.Where(p => p.Name.Equals(onlyPair, StringComparison.OrdinalIgnoreCase)).ToList();
         var paused = _config.Pairs.Count(p => !p.Enabled);
+        var passBudget = CpuBudget.For(_config);
+        _log.Debug($"cpu load={_config.CpuLoad} listings={passBudget.Parallelism} priority={passBudget.Priority}");
         _log.Info($"pass start  pairs={selected.Count}{(paused > 0 && onlyPair is null ? $" (paused: {paused})" : "")}{(onlyPair is null ? "" : $"  only={onlyPair}")}{(dryRun ? "  mode=dry-run" : "")}");
         if (onlyPair is not null && selected.Count == 0) _log.Error($"unknown pair: {onlyPair}");
 
@@ -79,6 +81,7 @@ public sealed class SyncRunner
     private PairRunResult RunPair(FolderPair pair, StateStore store, bool dryRun, bool forceBackfill, CancellationToken ct)
     {
         var tag = $"[{pair.Name}]";
+        var budget = CpuBudget.For(_config);
         var sw = Stopwatch.StartNew();
         var result = new PairRunResult { Pair = pair.Name };
         var now = DateTimeOffset.UtcNow;
@@ -98,7 +101,7 @@ public sealed class SyncRunner
         ScanResult source;
         try
         {
-            var scanner = new TreeScanner(_config.ScanBufferSize, _config.ScanParallelism, pair.Links, excludes, IsTombstoneDir);
+            var scanner = new TreeScanner(_config.ScanBufferSize, budget.Parallelism, pair.Links, excludes, IsTombstoneDir, budget.Priority);
             source = scanner.Scan(pair.Source, ct);
         }
         catch (RootUnavailableException ex)
@@ -125,8 +128,8 @@ public sealed class SyncRunner
         {
             // Two-way compares two equal sides, so the target is listed with the same rules as the source.
             var targetScanner = twoWay
-                ? new TreeScanner(_config.ScanBufferSize, _config.ScanParallelism, pair.Links, excludes)
-                : new TreeScanner(_config.ScanBufferSize, _config.ScanParallelism, LinkMode.Skip);
+                ? new TreeScanner(_config.ScanBufferSize, budget.Parallelism, pair.Links, excludes, null, budget.Priority)
+                : new TreeScanner(_config.ScanBufferSize, budget.Parallelism, LinkMode.Skip, null, null, budget.Priority);
             target = targetScanner.Scan(pair.Target, ct);
             foreach (var w in target.Warnings) _log.Warn($"{tag} target: {w}");
         }

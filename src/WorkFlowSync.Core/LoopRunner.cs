@@ -60,6 +60,8 @@ public sealed class LoopRunner
                     else
                     {
                         PassStarting?.Invoke();
+                        // Re-applied every pass: the setting can change between passes (the config is re-read above).
+                        CpuBudget.TrySetPriority(Thread.CurrentThread, CpuBudget.For(cfg).Priority);
                         var result = new SyncRunner(cfg, _configPath, _log).Run(_dryRun, forceBackfill: false, ct);
                         PassesRun++;
                         PassCompleted?.Invoke(result);
