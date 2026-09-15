@@ -5,7 +5,7 @@
         x:Class="WorkFlowSync.App.Views.PairDialog"
         x:DataType="vm:PairViewModel"
         Title="Пара папок"
-        Width="760" Height="620" MinWidth="620" MinHeight="520"
+        Width="760" Height="720" MinWidth="620" MinHeight="560"
         Background="{DynamicResource SurfaceCanvas}"
         WindowStartupLocation="CenterOwner">
 
@@ -30,7 +30,7 @@
             </Grid>
         </Border>
 
-        <ScrollViewer Margin="24,0,24,8">
+        <ScrollViewer Margin="24,0,10,8" AllowAutoHide="False" Padding="0,0,12,0">
             <StackPanel Spacing="12">
 
                 <Border Classes="card">
@@ -56,13 +56,11 @@
                     <StackPanel Spacing="12">
                         <TextBlock Classes="section" Text="ПРАВИЛА" />
 
-                        <Grid ColumnDefinitions="160,*">
-                            <TextBlock Grid.Column="0" Text="Лінки в джерелі" VerticalAlignment="Center" />
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
-                                <ComboBox ItemsSource="{x:Static vm:PairViewModel.LinkModes}" SelectedItem="{Binding Links}" Width="200" />
-                                <TextBlock Classes="caption" VerticalAlignment="Center"
-                                           Text="Follow — копіювати вміст як звичайну папку (потрібно для OneDrive)" />
-                            </StackPanel>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Лінки в джерелі" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.LinkModes}" SelectedItem="{Binding Links}" Width="200" HorizontalAlignment="Left" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption"
+                                       Text="Follow — копіювати вміст як звичайну папку (потрібно для OneDrive); Skip — не заходити в лінки." />
                         </Grid>
 
                         <Grid ColumnDefinitions="160,*">

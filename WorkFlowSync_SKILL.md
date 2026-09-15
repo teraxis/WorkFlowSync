@@ -14,7 +14,7 @@ plus `first_seen` timestamps and a retention window. Replaces FreeFileSync + a 2
 ```
 src/WorkFlowSync.Core/   Config/ (SyncConfig, FolderPair, LinkMode, ConfigFile)  Model/ (StateEntry, EntryStatus, EntryKind)
                          Scanning/ (TreeScanner, ExcludeMatcher, ScanEntry)  State/StateStore  Planning/ (SyncPlanner, SyncPlan)
-                         Execution/ (SyncExecutor, RecycleBin)  Logging/SyncLog (+Prune)  Ffs/FfsBatchImporter
+                         Execution/ (SyncExecutor, RecycleBin)  Logging/SyncLog (+Prune)
                          SyncRunner (one pass)  LoopRunner (resident)  PassLock (cross-process)  Autostart (Startup .lnk, schtasks)
 src/WorkFlowSync.Cli/    wfs.exe: Program.cs (commands), ConsoleOwner.cs (pause on double-click), app.manifest (asInvoker + longPathAware + UTF-8)
 src/WorkFlowSync.App/    WorkFlowSync.exe: Avalonia 11.3 GUI - Styles/ (Palette, Controls, Icons = design system, docs F12),
@@ -25,7 +25,7 @@ scripts/                 build.ps1, test.ps1, publish.ps1
 config.example.json      reference config
 ```
 
-Stage plan: `docs/requirements.md` §4. Stages 0–4 all done (scaffold, GUI, sync engine, retention/FFS import, resident mode + autostart, tray).
+Stage plan: `docs/requirements.md` §4. Stages 0–4 all done (scaffold, GUI, sync engine, retention, resident mode + autostart, tray). FFS import was REMOVED on 2026-09-15 at the customer's request (docs F9 kept as history).
 
 ## Commands
 
@@ -108,4 +108,4 @@ src\WorkFlowSync.App\bin\Debug\net8.0\win-x64\WorkFlowSync.exe --config config.e
 - Bash heredocs in the agent tool choke on C# raw strings / quotes — use Write for code files.
 - `Microsoft.Data.Sqlite` 10.0.12 (bundle_e_sqlite3) is compatible with net8.0 and single-file publish (`IncludeNativeLibrariesForSelfExtract`).
 - Publish size 34.6 MB with `EnableCompressionInSingleFile`; `DebugType=embedded` in `Directory.Build.props` keeps `.pdb` files out of `publish\`.
-- The user's real FFS config: `D:\OneDrive\Робоча папка\App\freefilesync\batch.ffs_batch` (6.6 MB, 22,569 excludes; pair `E:\vrp` → `E:\OneDrive\Робоча папка`). Real paths for the pairs are still to be confirmed (requirements open question 1).
+- (historical) The user's real FFS config: `D:\OneDrive\Робоча папка\App\freefilesync\batch.ffs_batch` (6.6 MB, 22,569 excludes; pair `E:\vrp` → `E:\OneDrive\Робоча папка`). Real paths for the pairs are still to be confirmed (requirements open question 1).

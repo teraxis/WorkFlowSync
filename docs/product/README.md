@@ -43,7 +43,6 @@
 | [configuration.md](features/configuration.md) | Формат `config.json`, значення за замовчуванням, валідація |
 | [cli-and-scheduling.md](features/cli-and-scheduling.md) | Команди, коди виходу, `--once`/`--loop`, автозапуск без адміністратора |
 | [logging-and-diagnostics.md](features/logging-and-diagnostics.md) | Формат логів, `status`, що робити при проблемах |
-| [ffs-migration.md](features/ffs-migration.md) | Імпорт виключень із `.ffs_batch`, паралельний запуск, відключення FFS |
 | [gui.md](features/gui.md) | Графічний інтерфейс: пари папок з вибором джерела/дзеркала, налаштування, стан |
 | [tray.md](features/tray.md) | Значок в області сповіщень, фоновий цикл у вікні, меню та пауза |
 | [design-system.md](features/design-system.md) | Токени кольорів, світла й темна теми, типографіка, іконки, структура вікна |

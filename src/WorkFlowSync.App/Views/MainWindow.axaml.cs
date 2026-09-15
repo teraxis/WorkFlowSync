@@ -1,6 +1,5 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using Avalonia.Platform.Storage;
 using WorkFlowSync.App.ViewModels;
 
 namespace WorkFlowSync.App.Views;
@@ -76,28 +75,4 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnImportFfs(object? sender, RoutedEventArgs e)
-    {
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title = "Файл налаштувань FreeFileSync",
-            AllowMultiple = false,
-            FileTypeFilter = new[]
-            {
-                new FilePickerFileType("FreeFileSync") { Patterns = new[] { "*.ffs_batch", "*.ffs_gui" } },
-                FilePickerFileTypes.All,
-            },
-        });
-        var path = files.Count > 0 ? files[0].TryGetLocalPath() : null;
-        if (path is null) return;
-        try
-        {
-            Vm.ImportFreeFileSync(path);
-        }
-        catch (Exception ex)
-        {
-            Vm.StatusText = $"Імпорт не вдався: {ex.Message}";
-            Vm.StatusIsError = true;
-        }
-    }
 }

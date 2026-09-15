@@ -35,7 +35,7 @@ OneDrive (ціль, власна).
 | F6 | Конфігурація | Затверджено (скелет реалізовано) | [configuration.md](product/features/configuration.md) |
 | F7 | CLI, режими запуску, автозапуск | Реалізовано (Етап 3): `--loop`, автозапуск (ярлик Startup / Планувальник) з консолі та GUI, спільний замок | [cli-and-scheduling.md](product/features/cli-and-scheduling.md) |
 | F8 | Журнал і діагностика | Реалізовано (ротація 30 днів — Етап 3) | [logging-and-diagnostics.md](product/features/logging-and-diagnostics.md) |
-| F9 | Міграція з FreeFileSync | Реалізовано (Етап 2): `wfs import-excludes`, кнопка в GUI, `wfs forget` | [ffs-migration.md](product/features/ffs-migration.md) |
+| F9 | Міграція з FreeFileSync | **Вилучено 2026-09-15 на прохання замовника** (імпорт `.ffs_batch` прибрано з GUI, консолі й ядра); `wfs forget` лишився | [ffs-migration.md](product/features/ffs-migration.md) |
 | F10 | Трей-режим | Реалізовано (Етап 4) | [tray.md](product/features/tray.md) |
 | F11 | Графічний інтерфейс (пари папок + налаштування) | Реалізовано (Етап 0.2) | [gui.md](product/features/gui.md) |
 | F12 | Дизайн-система, світла й темна теми | Реалізовано (2026-09-14) | [design-system.md](product/features/design-system.md) |
@@ -94,6 +94,9 @@ OneDrive (ціль, власна).
 
 ## 7. Журнал змін специфікації
 
+- `2026-09-15`: за зауваженнями замовника — автозбереження без кнопок, очищення інтерфейсу
+  (підзаголовки, індикатори, блок стану в рейці), сторінка «Синхронізація» = кнопка + журнал,
+  нові іконки (Feather), **вилучено міграцію з FreeFileSync (F9)**.
 - `2026-09-14`: додано F12 — дизайн-систему (токени кольорів, дві теми, типографіка, власні
   іконки) і перебудовано вікно: навігаційна рейка замість вкладок, сторінки Папки / Синхронізація /
   Налаштування, картки, постійна панель дій.

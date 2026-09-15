@@ -11,7 +11,6 @@
 wfs sync [--once | --loop] [--config <path>] [--dry-run]
 wfs status [--config <path>]
 wfs config validate [--config <path>]
-wfs import-excludes <batch.ffs_batch> [--pair <name>] [--dry-run] [--no-probe] [--config <path>]
 wfs forget <relative-path> [--pair <name>] [--config <path>]
 wfs version
 ```
@@ -28,7 +27,6 @@ wfs version
 | `autostart on\|off\|status [--tray]` | ярлик у папці автозавантаження: без `--tray` → `wfs sync --loop` (фоновий процес без вікна), з `--tray` → `WorkFlowSync.exe --tray` (значок біля годинника, F10) |
 | `task on\|off\|status` | завдання Планувальника `WorkFlowSync` → `wfs sync --once` кожні `interval` хв; від поточного користувача, лише коли увійшов, без `/RL HIGHEST` |
 | `config validate` | F6 |
-| `import-excludes` | F9 (реалізовано) |
 | `forget <шлях>` | забути запис(и) стану — F9 (реалізовано) |
 
 Коди виходу: `0` ок; `1` помилка виконання; `2` помилка використання/конфігу; `3` не реалізовано;

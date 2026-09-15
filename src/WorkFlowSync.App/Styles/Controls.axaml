@@ -330,6 +330,42 @@
         <Setter Property="Width" Value="10" />
         <Setter Property="Height" Value="10" />
     </Style>
+    <!-- the frame is rounded, so the outermost button must be rounded on that side too -->
+    <Style Selector="NumericUpDown RepeatButton#PART_DecreaseButton">
+        <Setter Property="CornerRadius" Value="0,6,6,0" />
+    </Style>
+    <Style Selector="NumericUpDown ButtonSpinner">
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+
+    <!-- scrollbars: a slim rail in its own lane, no arrow buttons, thumb from the palette -->
+    <Style Selector="ScrollBar:vertical">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal">
+        <Setter Property="Height" Value="10" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ScrollBar /template/ RepeatButton">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ScrollBar /template/ Border#TrackRect, ScrollBar /template/ Rectangle#TrackRect">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ScrollBar Thumb">
+        <Setter Property="Background" Value="{DynamicResource BorderStrong}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
+        <Setter Property="MinWidth" Value="6" />
+        <Setter Property="MinHeight" Value="6" />
+    </Style>
+    <Style Selector="ScrollBar Thumb /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource BorderStrong}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
+    </Style>
+    <Style Selector="ScrollBar Thumb:pointerover /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource Neutral}" />
+    </Style>
 
     <Style Selector="ComboBox">
         <Setter Property="MinHeight" Value="34" />

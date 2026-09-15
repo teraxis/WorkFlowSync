@@ -41,7 +41,7 @@
                     </ListBoxItem>
                     <ListBoxItem>
                         <StackPanel Orientation="Horizontal" Spacing="11">
-                            <Path Classes="ico" Data="{StaticResource IconActivity}" Width="17" Height="17" />
+                            <Path Classes="ico" Data="{StaticResource IconSync}" Width="17" Height="17" />
                             <TextBlock Text="Синхронізація" VerticalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
@@ -155,56 +155,34 @@
                 <Panel IsVisible="{Binding IsActivityPage}" Margin="0,0,16,0">
                 <DockPanel DataContext="{Binding Run}" x:DataType="vm:RunViewModel">
 
-                    <Border DockPanel.Dock="Top" Classes="card" Padding="16,14" Margin="0,0,0,12">
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
-                            <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
-                                <TextBlock Text="{Binding BackgroundStatus}" FontWeight="SemiBold" />
-                                <TextBlock Classes="caption"
-                                           Text="Автоматично перевіряються пари у стані «виконується» (зелена позначка на сторінці «Папки»). Закриття вікна перевірку не зупиняє." />
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10" Margin="0,0,0,12">
+                        <Button Classes="primary" Command="{Binding RunNowCommand}" MinWidth="170" IsVisible="{Binding !IsRunning}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Path Classes="ico" Data="{StaticResource IconRefresh}" />
+                                <TextBlock Text="Синхронізувати" />
                             </StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
-                                <Button Classes="ghost" Command="{Binding DryRunCommand}"
-                                        ToolTip.Tip="Показати, що буде зроблено, не змінюючи жодного файлу">
-                                    <StackPanel Orientation="Horizontal" Spacing="7">
-                                        <Path Classes="ico" Data="{StaticResource IconCheck}" />
-                                        <TextBlock Text="Показати план" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Classes="primary" Command="{Binding RunNowCommand}" MinWidth="150">
-                                    <StackPanel Orientation="Horizontal" Spacing="7">
-                                        <Path Classes="ico" Data="{StaticResource IconRefresh}" />
-                                        <TextBlock Text="Синхронізувати" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Classes="danger icon" Command="{Binding StopCommand}" IsVisible="{Binding IsRunning}"
-                                        ToolTip.Tip="Зупинити поточний прохід">
-                                    <Path Classes="icof" Data="{StaticResource IconStopFill}" />
-                                </Button>
+                        </Button>
+                        <Button Classes="danger" Command="{Binding StopCommand}" MinWidth="170" IsVisible="{Binding IsRunning}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Path Classes="icof" Data="{StaticResource IconStopFill}" />
+                                <TextBlock Text="Зупинити" />
                             </StackPanel>
-                            <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" IsIndeterminate="True" IsVisible="{Binding IsRunning}" Margin="0,12,0,0" />
-                        </Grid>
-                    </Border>
-
-                    <Border DockPanel.Dock="Top" Classes="card" Padding="16,12" Margin="0,0,0,12"
-                            IsVisible="{Binding LastResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                        <TextBlock Text="{Binding LastResult}" FontWeight="SemiBold" />
-                    </Border>
-
-                    <Border DockPanel.Dock="Top" Classes="sunken" Padding="16,12" Margin="0,0,0,12">
-                        <TextBlock Classes="mono" Text="{Binding Summary}" />
-                    </Border>
+                        </Button>
+                        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsRunning}" Width="160" VerticalAlignment="Center" />
+                    </StackPanel>
 
                     <Border Classes="card" Padding="6" Margin="0,0,0,8">
-                        <TextBox Text="{Binding LogText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                        <TextBox Text="{Binding LogText}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
                                  x:Name="RunLog" Classes="mono" BorderThickness="0" Background="Transparent" Padding="8,6"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ScrollViewer.AllowAutoHide="False" />
                     </Border>
                 </DockPanel>
                 </Panel>
 
                 <!-- ────────────────────────── page: settings ────────────────────────── -->
-                <ScrollViewer IsVisible="{Binding IsSettingsPage}">
-                    <StackPanel Spacing="12" Margin="0,0,10,4">
+                <ScrollViewer IsVisible="{Binding IsSettingsPage}" AllowAutoHide="False" Padding="0,0,12,0">
+                    <StackPanel Spacing="12" Margin="0,0,0,4">
 
                         <Border Classes="card">
                             <StackPanel Spacing="12">
@@ -240,20 +218,6 @@
                                 <TextBlock Text="{Binding Message}" IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                            Foreground="{Binding MessageIsError, Converter={x:Static app:Converters.StatusText}}" />
                                 <TextBlock Classes="caption" Text="{Binding StartupHint}" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Classes="card">
-                            <StackPanel Spacing="12">
-                                <TextBlock Classes="section" Text="МІГРАЦІЯ З FREEFILESYNC" />
-                                <TextBlock Classes="caption"
-                                           Text="Перенести з файлу налаштувань FreeFileSync шаблони виключень і позначки «не повертати», щоб після переходу не повернувся жоден раніше видалений файл." />
-                                <Button Classes="ghost" Click="OnImportFfs" IsEnabled="{Binding HasPairs}" HorizontalAlignment="Left">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Path Classes="ico" Data="{StaticResource IconImport}" />
-                                        <TextBlock Text="Вибрати файл .ffs_batch…" />
-                                    </StackPanel>
-                                </Button>
                             </StackPanel>
                         </Border>
 
