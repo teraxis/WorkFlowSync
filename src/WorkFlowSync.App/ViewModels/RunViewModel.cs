@@ -51,11 +51,6 @@ public sealed partial class RunViewModel : ObservableObject
     public void RefreshBackgroundStatus(int activePairs)
     {
         _activePairs = activePairs;
-        if (activePairs > 0 && _isDirty())
-        {
-            Set($"Пар у роботі: {activePairs} · є незбережені зміни — натисніть «Зберегти»");
-            return;
-        }
         OnBackgroundChanged();
     }
 

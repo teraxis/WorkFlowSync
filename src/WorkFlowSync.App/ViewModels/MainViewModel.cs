@@ -47,7 +47,6 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _scanParallelism = 8;
     [ObservableProperty] private int _scanBufferKb = 256;
 
-    [ObservableProperty] private bool _isDirty;
     [ObservableProperty] private string _statusText = "";
     [ObservableProperty] private bool _statusIsError;
 
@@ -65,7 +64,7 @@ public sealed partial class MainViewModel : ObservableObject
         ConfigPath = configPath;
         Pairs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasPairs));
         Background = new BackgroundLoop(ConfigPath, ResolveLogDir);
-        Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => IsDirty);
+        Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => false);
         Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
         Load();
         Run.RefreshSummary();
@@ -106,7 +105,6 @@ public sealed partial class MainViewModel : ObservableObject
             Apply(cfg);
             // No "loaded X" chatter: the status line is for things the user has to notice.
             SetStatus(created ? $"Створено config.json у папці програми: {AppFolder}" : "", error: false);
-            IsDirty = false;
             RaiseFolderPaths();
         }
         catch (Exception ex)
@@ -155,37 +153,35 @@ public sealed partial class MainViewModel : ObservableObject
         Theme = Theme,
     };
 
-    /// <summary>Returns validation problems (empty = OK) and reflects them in the status line.</summary>
-    public IReadOnlyList<string> Validate()
-    {
-        var problems = ToConfig().Validate();
-        SetStatus(problems.Count == 0 ? "Конфігурація коректна" : string.Join("  •  ", problems), error: problems.Count > 0);
-        return problems;
-    }
+    /// <summary>Returns validation problems (empty = OK).</summary>
+    public IReadOnlyList<string> Validate() => ToConfig().Validate();
 
-    [RelayCommand]
-    private void Save()
+    /// <summary>
+    /// Every change is written to config.json at once (atomic tmp + rename): there is no «Зберегти» button.
+    /// Invalid input (only possible via the pair dialog, which validates itself) is reported and not written.
+    /// </summary>
+    public bool SaveNow()
     {
+        if (_loading) return false;
         var problems = Validate();
-        if (problems.Count > 0) return;
+        if (problems.Count > 0)
+        {
+            SetStatus(string.Join("  •  ", problems), error: true);
+            return false;
+        }
         try
         {
             ConfigFile.Save(ToConfig(), ConfigPath);
-            IsDirty = false;
-            SetStatus($"Збережено {ConfigPath}", error: false);
+            if (StatusIsError) SetStatus("", error: false);
             FollowPairStates();
+            return true;
         }
         catch (Exception ex)
         {
-            SetStatus($"Не вдалося зберегти: {ex.Message}", error: true);
+            SetStatus($"Не вдалося зберегти налаштування: {ex.Message}", error: true);
+            return false;
         }
     }
-
-    [RelayCommand]
-    private void CheckConfig() => Validate();
-
-    [RelayCommand]
-    private void Reload() => Load();
 
     /// <summary>Adds a pair prepared by the dialog.</summary>
     public void AddPair(PairViewModel pair)
@@ -193,14 +189,13 @@ public sealed partial class MainViewModel : ObservableObject
         pair.RaiseSummaries();
         Pairs.Add(pair);
         SelectedPair = pair;
-        MarkDirty();
-        FollowPairStates();
+        SaveNow();
     }
 
     public void ReplacePair(PairViewModel target, PairViewModel edited)
     {
         target.CopyFrom(edited);
-        MarkDirty();
+        SaveNow();
     }
 
     /// <summary>Removes a pair from the list (its state rows stay, so re-adding it keeps the memory).</summary>
@@ -208,19 +203,8 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Pairs.Remove(pair);
         if (ReferenceEquals(SelectedPair, pair)) SelectedPair = null;
-        MarkDirty();
-        FollowPairStates();
-        SetStatus($"Пару «{pair.Name}» видалено зі списку. Натисніть «Зберегти», щоб застосувати.", error: false);
-    }
-
-    [RelayCommand]
-    private void RemoveSelected()
-    {
-        if (SelectedPair is null) return;
-        Pairs.Remove(SelectedPair);
-        SelectedPair = null;
-        MarkDirty();
-        FollowPairStates();
+        SaveNow();
+        SetStatus($"Пару «{pair.Name}» видалено зі списку.", error: false);
     }
 
     public string SuggestPairName(string source)
@@ -271,9 +255,9 @@ public sealed partial class MainViewModel : ObservableObject
             }
             lines.Add($"[{target.Name}] шаблонів +{r.Patterns}, «не повертати» +{r.Tombstones:N0} (уже було {r.TombstonesAlreadyPresent:N0}).");
         }
-        if (anyPatterns) MarkDirty();
+        if (anyPatterns) SaveNow();
         Run.RefreshSummary();
-        var text = string.Join(" ", lines) + (anyPatterns ? " Натисніть «Зберегти», щоб зберегти нові шаблони." : "");
+        var text = string.Join(" ", lines);
         SetStatus(text, error: false);
         return text;
     }
@@ -285,16 +269,7 @@ public sealed partial class MainViewModel : ObservableObject
     public async Task TogglePairAsync(PairViewModel pair)
     {
         pair.Enabled = !pair.Enabled;
-        var saved = PersistPairStates();
-        FollowPairStates();
-
-        if (!saved)
-        {
-            SetStatus(pair.Enabled
-                ? $"«{pair.Name}» — виконується. Є інші незбережені зміни: натисніть «Зберегти»."
-                : $"«{pair.Name}» — на паузі. Є інші незбережені зміни: натисніть «Зберегти».", error: false);
-            return;
-        }
+        if (!SaveNow()) return;
 
         if (pair.Enabled)
         {
@@ -304,22 +279,6 @@ public sealed partial class MainViewModel : ObservableObject
         else
         {
             SetStatus($"«{pair.Name}» — на паузі: автоматичні перевірки цієї пари зупинено.", error: false);
-        }
-    }
-
-    /// <summary>Writes the play/pause states to config.json. Returns false when other unsaved edits block it.</summary>
-    private bool PersistPairStates()
-    {
-        if (IsDirty) return false;
-        try
-        {
-            ConfigFile.Save(ToConfig(), ConfigPath);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            SetStatus($"Не вдалося зберегти стан пари: {ex.Message}", error: true);
-            return false;
         }
     }
 
@@ -339,11 +298,8 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    public void MarkDirty()
-    {
-        IsDirty = true;
-        SetStatus("Є незбережені зміни", error: false);
-    }
+    /// <summary>Any edited setting lands in config.json immediately.</summary>
+    private void MarkDirty() => SaveNow();
 
     private void SetStatus(string text, bool error)
     {
@@ -363,7 +319,6 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnThemeChanged(AppTheme value)
     {
         ThemeApplied?.Invoke(value);
-        if (_loading) return;
         MarkDirty();
     }
 

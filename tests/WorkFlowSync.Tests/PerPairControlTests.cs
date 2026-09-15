@@ -98,6 +98,11 @@ public sealed class PerPairControlTests : IDisposable
     [Fact]
     public async Task Running_one_pair_from_the_window_mirrors_only_that_pair()
     {
+        // Pause "a" on disk too, otherwise the automatic checker mirrors it before the assertions run.
+        var cfg = Config();
+        cfg.Pairs[0].Enabled = false;
+        ConfigFile.Save(cfg, _configPath);
+
         var vm = new MainViewModel(_configPath);
         await vm.RunPairAsync(vm.Pairs[1]);          // the paused one
 

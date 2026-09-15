@@ -53,13 +53,11 @@ public class PairViewModelTests
             vm.AddPair(new PairViewModel { Name = "p1", Source = @"C:\src", Target = @"C:\dst", HasRetention = true, RetentionDays = 30 });
             vm.IntervalMinutes = 15;
             vm.ScanBufferKb = 512;
-            Assert.True(vm.IsDirty);
+            vm.Background.Stop();                                // the added pair started the checker; not needed here
 
-            vm.SaveCommand.Execute(null);
-            Assert.False(vm.IsDirty);
-            Assert.True(File.Exists(path));
-
+            // Autosave: everything above is on disk without any explicit save.
             var reloaded = new MainViewModel(path);
+            reloaded.Background.Stop();
             Assert.Single(reloaded.Pairs);
             Assert.Equal("p1", reloaded.Pairs[0].Name);
             Assert.Equal(30, reloaded.Pairs[0].RetentionDays);

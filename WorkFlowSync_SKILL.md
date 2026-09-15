@@ -80,6 +80,9 @@ src\WorkFlowSync.App\bin\Debug\net8.0\win-x64\WorkFlowSync.exe --config config.e
 - There is NO global auto-check switch: `MainViewModel.FollowPairStates()` starts/stops the shared `BackgroundLoop`
   from the pair states (`FolderPair.Enabled`). `TogglePairAsync` writes config.json at once (when nothing else is dirty),
   re-evaluates the loop and runs that pair immediately. The tray's pause is a separate global pause (LoopState.Paused).
+- Autosave: `MainViewModel.SaveNow()` runs on every edit (MarkDirty → SaveNow); there is no IsDirty/SaveCommand any more.
+  Tests that construct MainViewModel with an ENABLED pair start the background checker immediately — write the pair paused
+  on disk (and flip `Enabled` in memory if a manual run must include it) to keep tests deterministic.
 - Design system: colours ONLY from Styles/Palette.axaml (ThemeDictionaries Light/Dark); style classes in Controls.axaml.
   Icons: `<Path Classes="ico">` (stroked outline) or `Classes="icof"` (filled); PathIcon FILLS its geometry and turns
   outline icons into black blobs — do not use it. Icon colour comes from `Button.<class> Path.ico` rules.

@@ -65,7 +65,6 @@ public sealed class AutoCheckPersistenceTests : IDisposable
         await vm.TogglePairAsync(vm.Pairs[0]);                     // pause "a"
         Assert.False(vm.Pairs[0].Enabled);
         Assert.False(SyncConfig.Load(_configPath).Pairs[0].Enabled);   // written immediately
-        Assert.False(vm.IsDirty);
         vm.Background.Stop();
 
         var restarted = new MainViewModel(_configPath);
@@ -81,22 +80,21 @@ public sealed class AutoCheckPersistenceTests : IDisposable
     }
 
     [Fact]
-    public async Task With_other_unsaved_edits_the_state_waits_for_save()
+    public async Task Every_edit_is_written_immediately_there_is_no_save_button()
     {
         var vm = new MainViewModel(_configPath);
-        vm.IntervalMinutes = 2;                                     // unsaved edit
-        Assert.True(vm.IsDirty);
+
+        vm.IntervalMinutes = 2;
+        Assert.Equal(2, SyncConfig.Load(_configPath).Interval.TotalMinutes);   // on disk already
+
+        vm.Theme = AppTheme.Dark;
+        Assert.Equal(AppTheme.Dark, SyncConfig.Load(_configPath).Theme);
 
         await vm.TogglePairAsync(vm.Pairs[1]);                      // play "b"
-
-        Assert.True(vm.Pairs[1].Enabled);                           // shown as playing in the window…
-        Assert.False(SyncConfig.Load(_configPath).Pairs[1].Enabled); // …but not written yet
-        Assert.Contains("Зберегти", vm.StatusText);
-
-        vm.SaveCommand.Execute(null);
         var saved = SyncConfig.Load(_configPath);
         Assert.True(saved.Pairs[1].Enabled);
-        Assert.Equal(2, saved.Interval.TotalMinutes);
+        Assert.Equal(2, saved.Interval.TotalMinutes);               // earlier edit survived the later write
+        Assert.DoesNotContain("Зберегти", vm.StatusText);           // nothing to nag about
         vm.Background.Stop();
     }
 

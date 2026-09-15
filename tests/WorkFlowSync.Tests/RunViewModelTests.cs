@@ -21,9 +21,11 @@ public sealed class RunViewModelTests : IDisposable
         Directory.CreateDirectory(src);
         File.WriteAllText(Path.Combine(src, "doc.txt"), "hello");
         var configPath = Path.Combine(_root, "config.json");
-        ConfigFile.Save(new SyncConfig { Pairs = { new FolderPair { Name = "t", Source = src, Target = dst } } }, configPath);
+        // Paused on disk so the automatic checker does not race this test; enabled in memory so «Синхронізувати» includes it.
+        ConfigFile.Save(new SyncConfig { Pairs = { new FolderPair { Name = "t", Source = src, Target = dst, Enabled = false } } }, configPath);
 
         var main = new MainViewModel(configPath);
+        main.Pairs[0].Enabled = true;
         var run = main.Run;
         Assert.Contains("Проходів ще не було", run.Summary);
 
