@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
 using WorkFlowSync.App.Services;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
@@ -94,4 +97,78 @@ public sealed class TrayModeTests : IDisposable
 
     private static string RepoRoot([System.Runtime.CompilerServices.CallerFilePath] string here = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", ".."));
+    /// <summary>
+    /// Autostart must be silent: `WorkFlowSync.exe --tray` may not put any window on screen
+    /// (the desktop lifetime shows whatever is assigned to MainWindow, so tray mode leaves it unset).
+    /// Skipped when the GUI executable has not been built next to the repository.
+    /// </summary>
+    [Fact]
+    public void Tray_mode_starts_without_showing_a_window()
+    {
+        var exe = FindGuiExe();
+        if (exe is null) return;
+
+        var configPath = Path.Combine(_root, "config.json");
+        ConfigFile.Save(new SyncConfig
+        {
+            Pairs = { new FolderPair { Name = "t", Source = Path.Combine(_root, "src"), Target = Path.Combine(_root, "dst") } },
+            Interval = TimeSpan.FromMinutes(30),
+            LogPath = Path.Combine(_root, "logs"),
+            StatePath = Path.Combine(_root, "state.db"),
+        }, configPath);
+
+        using var p = Process.Start(new ProcessStartInfo(exe, $"--tray --config \"{configPath}\"") { UseShellExecute = false })!;
+        try
+        {
+            // Give the app long enough to create and (wrongly) show its window.
+            var deadline = DateTime.UtcNow.AddSeconds(12);
+            while (DateTime.UtcNow < deadline && !p.HasExited)
+            {
+                Assert.Empty(VisibleWindowTitles(p.Id));
+                Thread.Sleep(250);
+            }
+            Assert.False(p.HasExited, "tray mode exited instead of staying resident");
+        }
+        finally
+        {
+            try { p.Kill(entireProcessTree: true); p.WaitForExit(5000); } catch { /* already gone */ }
+        }
+    }
+
+    private static string? FindGuiExe()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        for (; dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "src", "WorkFlowSync.App", "bin");
+            if (!Directory.Exists(candidate)) continue;
+            return Directory.EnumerateFiles(candidate, "WorkFlowSync.exe", SearchOption.AllDirectories)
+                .OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
+        }
+        return null;
+    }
+
+    private static List<string> VisibleWindowTitles(int pid)
+    {
+        var titles = new List<string>();
+        EnumWindows((h, _) =>
+        {
+            GetWindowThreadProcessId(h, out var owner);
+            if (owner == pid && IsWindowVisible(h))
+            {
+                var sb = new StringBuilder(256);
+                GetWindowText(h, sb, sb.Capacity);
+                titles.Add(sb.ToString());
+            }
+            return true;
+        }, IntPtr.Zero);
+        return titles;
+    }
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int pid);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
 }

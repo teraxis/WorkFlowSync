@@ -43,18 +43,20 @@ public partial class App : Application
             _vm.Background.Changed += UpdateTray;
             _window = new MainWindow { DataContext = _vm };
             _window.Closing += OnWindowClosing;
-            desktop.MainWindow = _window;
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             SetUpTray(desktop);
 
             if (trayMode)
             {
+                // Autostart must be silent: the window is never shown, so MainWindow stays unset —
+                // the desktop lifetime shows whatever is assigned to it once startup finishes.
                 _window.ShowInTaskbar = false;
                 StartLoop();
             }
             else
             {
+                desktop.MainWindow = _window;
                 _window.Show();
             }
 
@@ -132,6 +134,9 @@ public partial class App : Application
         if (_window is null) return;
         Dispatcher.UIThread.Post(() =>
         {
+            // First time out of the tray: the lifetime still has no main window.
+            if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d && d.MainWindow is null)
+                d.MainWindow = _window;
             _window.ShowInTaskbar = true;
             _window.Show();
             if (_window.WindowState == WindowState.Minimized) _window.WindowState = WindowState.Normal;

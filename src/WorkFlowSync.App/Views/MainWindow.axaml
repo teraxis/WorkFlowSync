@@ -220,7 +220,7 @@
                                           Content="Запускати разом із Windows" />
                                 <StackPanel Margin="26,0,0,0" Spacing="4" IsEnabled="{Binding StartupEnabled}">
                                     <RadioButton GroupName="StartupMode" IsChecked="{Binding StartupInTray}" IsEnabled="{Binding GuiAvailable}"
-                                                 Content="зі значком в області сповіщень" />
+                                                 Content="зі значком в області сповіщень (тихо, без вікна)" />
                                     <RadioButton GroupName="StartupMode" IsChecked="{Binding !StartupInTray}" IsEnabled="{Binding ConsoleAvailable}"
                                                  Content="фоновим процесом без вікна" />
                                 </StackPanel>
