@@ -15,8 +15,6 @@
         <Border DockPanel.Dock="Top" Padding="24,20,24,14">
             <StackPanel Spacing="3">
                 <TextBlock x:Name="HeaderText" Classes="display" Text="Нова пара" />
-                <TextBlock Classes="secondary"
-                           Text="Мережева папка тільки читається. Локальна — ваша: усе, що ви в ній видалите чи зміните, програма більше не чіпає." />
             </StackPanel>
         </Border>
 

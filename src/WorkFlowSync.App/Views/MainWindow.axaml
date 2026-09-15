@@ -269,8 +269,11 @@
                                            Text="Усе, що потрібно програмі — config.json, база стану та журнали — зберігається в папці, з якої вона запущена. Папку можна переносити разом із файлами." />
                                 <Grid ColumnDefinitions="240,*,Auto" RowDefinitions="Auto,10,Auto">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Папка програми" VerticalAlignment="Center" />
-                                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding AppFolder}" IsReadOnly="True" Classes="mono oneline-box"
-                                             ToolTip.Tip="{Binding AppFolder}" />
+                                    <Border Grid.Row="0" Grid.Column="1" Classes="sunken" Padding="12,0" Height="34" ClipToBounds="True"
+                                            ToolTip.Tip="{Binding AppFolder}">
+                                        <TextBlock Text="{Binding AppFolder}" Classes="mono" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                    </Border>
                                     <Button Grid.Row="0" Grid.Column="2" Content="Відкрити" Margin="8,0,0,0" Click="OnOpenAppFolder" />
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Зберігати журнали" VerticalAlignment="Center" />
                                     <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="10">
