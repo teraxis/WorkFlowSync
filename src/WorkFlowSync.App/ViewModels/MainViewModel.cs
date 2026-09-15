@@ -35,13 +35,6 @@ public sealed partial class MainViewModel : ObservableObject
         _ => "Налаштування",
     };
 
-    public string PageSubtitle => SelectedPage switch
-    {
-        0 => "Мережеві папки, за якими стежимо, і їхні локальні дзеркала",
-        1 => "Поточний стан, ручний запуск і журнал проходів",
-        _ => "Розклад, автозапуск, вигляд і службові файли",
-    };
-
     public IReadOnlyList<AppTheme> Themes { get; } = new[] { AppTheme.System, AppTheme.Light, AppTheme.Dark };
 
     /// <summary>Applied immediately and remembered in the config.</summary>
@@ -91,9 +84,8 @@ public sealed partial class MainViewModel : ObservableObject
         {
             var cfg = ConfigFile.LoadOrDefault(ConfigPath);
             Apply(cfg);
-            SetStatus(File.Exists(ConfigPath)
-                ? $"Завантажено {ConfigPath}"
-                : $"Конфіг ще не створено — буде збережено як {ConfigPath}", error: false);
+            // No "loaded X" chatter: the status line is for things the user has to notice.
+            SetStatus(File.Exists(ConfigPath) ? "" : "Конфігурацію ще не збережено — натисніть «Зберегти».", error: false);
             IsDirty = false;
         }
         catch (Exception ex)
@@ -344,7 +336,6 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsActivityPage));
         OnPropertyChanged(nameof(IsSettingsPage));
         OnPropertyChanged(nameof(PageTitle));
-        OnPropertyChanged(nameof(PageSubtitle));
         if (IsActivityPage) Run.RefreshSummary();
     }
 

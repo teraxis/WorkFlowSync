@@ -32,18 +32,6 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- background checker summary, always visible -->
-                <Border DockPanel.Dock="Bottom" Margin="14,10,14,16" Classes="sunken" Padding="12,10">
-                    <StackPanel Spacing="6" DataContext="{Binding Run}" x:DataType="vm:RunViewModel">
-                        <StackPanel Orientation="Horizontal" Spacing="7">
-                            <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                                     Fill="{Binding IsCheckerRunning, Converter={x:Static app:Converters.StateDot}}" />
-                            <TextBlock Classes="section" Text="ФОНОВА ПЕРЕВІРКА" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <TextBlock Classes="caption" Text="{Binding BackgroundStatus}" MaxLines="3" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BackgroundStatus}" />
-                    </StackPanel>
-                </Border>
-
                 <ListBox Classes="nav" SelectedIndex="{Binding SelectedPage}">
                     <ListBoxItem>
                         <StackPanel Orientation="Horizontal" Spacing="11">
@@ -73,19 +61,9 @@
             <!-- page header -->
             <Border DockPanel.Dock="Top" Padding="28,20,28,16">
                 <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Grid.Column="0" Spacing="3">
-                        <TextBlock Classes="display" Text="{Binding PageTitle}" />
-                        <TextBlock Classes="secondary" Text="{Binding PageSubtitle}" />
-                    </StackPanel>
+                    <TextBlock Grid.Column="0" Classes="display" Text="{Binding PageTitle}" VerticalAlignment="Center" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
                                 IsVisible="{Binding IsFoldersPage}">
-                        <Button Classes="ghost" Click="OnImportFfs" IsEnabled="{Binding HasPairs}"
-                                ToolTip.Tip="Перенести виключення й позначки «не повертати» з файлу FreeFileSync">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Path Classes="ico" Data="{StaticResource IconImport}" />
-                                <TextBlock Text="Імпорт із FreeFileSync" />
-                            </StackPanel>
-                        </Button>
                         <Button Classes="primary" Click="OnAddPair">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Path Classes="ico" Data="{StaticResource IconPlus}" />
@@ -119,19 +97,10 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:PairViewModel">
                                     <Border Classes="row">
-                                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
-
-                                            <!-- state dot -->
-                                            <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Width="34" Height="34"
-                                                    CornerRadius="{DynamicResource RadiusPill}" Margin="0,0,14,0"
-                                                    VerticalAlignment="Center"
-                                                    Background="{Binding Enabled, Converter={x:Static app:Converters.StateHalo}}">
-                                                <Ellipse Width="10" Height="10"
-                                                         Fill="{Binding Enabled, Converter={x:Static app:Converters.StateDot}}" />
-                                            </Border>
+                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
 
                                             <!-- name + state -->
-                                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Name}" Classes="title oneline" VerticalAlignment="Center" MaxWidth="360" />
                                                 <Border Classes="badge" Classes.success="{Binding Enabled}">
                                                     <TextBlock Text="{Binding StateSummary}" />
@@ -140,7 +109,7 @@
                                             </StackPanel>
 
                                             <!-- paths + facts -->
-                                            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3" Margin="0,6,0,0">
+                                            <StackPanel Grid.Row="1" Grid.Column="0" Spacing="3" Margin="0,6,0,0">
                                                 <Grid ColumnDefinitions="*,Auto,*">
                                                     <TextBlock Grid.Column="0" Classes="caption mono oneline" Text="{Binding Source}"
                                                                ToolTip.Tip="{Binding Source}" />
@@ -153,16 +122,13 @@
                                             </StackPanel>
 
                                             <!-- actions -->
-                                            <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" Orientation="Horizontal"
+                                            <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Orientation="Horizontal"
                                                         Spacing="6" VerticalAlignment="Center" Margin="14,0,0,0">
                                                 <Button Classes="icon accentsoft" Click="OnTogglePair" ToolTip.Tip="{Binding ToggleTip}">
                                                     <Path Classes="icof" Data="{Binding ToggleIcon}" Width="15" Height="15" />
                                                 </Button>
-                                                <Button Classes="ghost" Click="OnRunPair" ToolTip.Tip="Одноразова синхронізація саме цієї пари (працює й на паузі)">
-                                                    <StackPanel Orientation="Horizontal" Spacing="7">
-                                                        <Path Classes="ico" Data="{StaticResource IconRefresh}" />
-                                                        <TextBlock Text="Перевірити" />
-                                                    </StackPanel>
+                                                <Button Classes="ghost icon" Click="OnRunPair" ToolTip.Tip="Перевірити цю пару зараз (працює й на паузі)">
+                                                    <Path Classes="ico" Data="{StaticResource IconRefresh}" />
                                                 </Button>
                                                 <Button Classes="ghost icon" Click="OnEditPair" ToolTip.Tip="Редагувати пару">
                                                     <Path Classes="ico" Data="{StaticResource IconPencil}" />
@@ -280,6 +246,20 @@
                                 <TextBlock Text="{Binding Message}" IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                            Foreground="{Binding MessageIsError, Converter={x:Static app:Converters.StatusText}}" />
                                 <TextBlock Classes="caption" Text="{Binding StartupHint}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Classes="card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Classes="section" Text="МІГРАЦІЯ З FREEFILESYNC" />
+                                <TextBlock Classes="caption"
+                                           Text="Перенести з файлу налаштувань FreeFileSync шаблони виключень і позначки «не повертати», щоб після переходу не повернувся жоден раніше видалений файл." />
+                                <Button Classes="ghost" Click="OnImportFfs" IsEnabled="{Binding HasPairs}" HorizontalAlignment="Left">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Path Classes="ico" Data="{StaticResource IconImport}" />
+                                        <TextBlock Text="Вибрати файл .ffs_batch…" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Border>
 
