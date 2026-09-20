@@ -35,7 +35,7 @@ Use Ukrainian as the default language for all user-facing communication and for 
 Use English only for:
 - code identifiers, file paths, command names, and shell output;
 - logs, error messages, stack traces, and exact tool output;
-- source comments and agent-operational documents (`AGENTS.md`, `CLAUDE.md`, `docs/agent-playbook.md`, `docs/testing.md`, `docs/debugging.md`, `docs/deployment.md`, `docs/repository.md`);
+- source comments and agent-operational documents (`AGENTS.md`, `docs/agent-playbook.md`, `docs/testing.md`, `docs/debugging.md`, `docs/deployment.md`, `docs/repository.md`);
 - direct quotes from external documentation.
 
 If the user explicitly asks to use another language, follow that request for the current task.

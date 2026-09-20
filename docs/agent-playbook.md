@@ -32,7 +32,7 @@ status, and open questions so another agent can implement the feature without ch
 `docs/architecture.md` and `WorkFlowSync_SKILL.md` when technical knowledge changes.
 
 Product documents (`docs/requirements.md`, `docs/product/**`, `docs/architecture.md`) are written in
-Ukrainian; agent-operational documents (this file, `AGENTS.md`, `CLAUDE.md`, `docs/testing.md`,
+Ukrainian; agent-operational documents (this file, `AGENTS.md`, `docs/testing.md`,
 `docs/debugging.md`, `docs/deployment.md`, `docs/repository.md`) in English. Code identifiers,
 comments and log messages are English.
 
