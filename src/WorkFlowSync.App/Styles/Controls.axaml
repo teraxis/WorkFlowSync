@@ -569,7 +569,7 @@
 
     <Style Selector="ListBox.rows ListBoxItem">
         <Setter Property="Padding" Value="0" />
-        <Setter Property="Margin" Value="0,0,12,14" />
+        <Setter Property="Margin" Value="0,0,0,14" />
         <Setter Property="CornerRadius" Value="16" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />

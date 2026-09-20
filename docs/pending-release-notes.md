@@ -14,8 +14,8 @@ commits, or agent attribution.
 
 ## Fixed
 
-- Очищено файл зразка конфігурації `config.example.json` від локальних тестових шляхів та встановлено абстрактні шаблонні шляхи.
+<!-- Add bug fixes here for the next release -->
 
 ## Removed
 
-- Вилучено `config.example.json` із релізних пакетів (`config.json` автоматично створюється під час першого запуску програми).
+<!-- Add removals here for the next release -->
