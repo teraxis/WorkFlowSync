@@ -29,6 +29,17 @@ public sealed partial class PairViewModel : ObservableObject
             OnPropertyChanged(nameof(LinksSummary));
             OnPropertyChanged(nameof(SourceKindSummary));
             OnPropertyChanged(nameof(TargetKindSummary));
+            OnPropertyChanged(nameof(FolderName));
+            OnPropertyChanged(nameof(HasFolderName));
+            OnPropertyChanged(nameof(StatusBadgeText));
+            OnPropertyChanged(nameof(LastSyncSummary));
+            OnPropertyChanged(nameof(SyncStatusTitle));
+            OnPropertyChanged(nameof(SyncStatusSubtext));
+            OnPropertyChanged(nameof(ModeSummaryShort));
+            OnPropertyChanged(nameof(ApprovalSummaryShort));
+            OnPropertyChanged(nameof(VersioningSummaryShort));
+            OnPropertyChanged(nameof(WatchSummaryShort));
+            OnPropertyChanged(nameof(ExcludeCountSummary));
         };
     }
 
@@ -82,6 +93,102 @@ public sealed partial class PairViewModel : ObservableObject
     [ObservableProperty] private int _versionsKeepDays = 30;
     [ObservableProperty] private int _versionsMaxGb = 5;
 
+    [ObservableProperty] private DateTimeOffset? _lastSyncTime;
+    [ObservableProperty] private int _lastSyncFilesCount;
+    [ObservableProperty] private int _lastSyncErrors;
+
+    public string FolderName
+    {
+        get
+        {
+            var folder = Source.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
+            return !string.IsNullOrWhiteSpace(folder) && !string.Equals(folder, Name, StringComparison.OrdinalIgnoreCase)
+                ? folder
+                : "";
+        }
+    }
+
+    public bool HasFolderName => !string.IsNullOrEmpty(FolderName);
+
+    public bool IsPaused => !Enabled;
+    public bool IsActiveAndIdle => Enabled && !IsBusy;
+    public bool IsUpToDate => Enabled && !IsBusy && LastSyncErrors == 0;
+    public bool HasError => Enabled && !IsBusy && LastSyncErrors > 0;
+
+    public string StatusBadgeText => IsBusy
+        ? I18n.T("pair.badge_syncing")
+        : Enabled
+            ? I18n.T("pair.badge_active")
+            : I18n.T("pair.badge_paused");
+
+    public string LastSyncSummary => MainViewModel.FormatRelative(LastSyncTime);
+
+    public string SyncStatusTitle
+    {
+        get
+        {
+            if (IsBusy) return I18n.T("tasks.status_syncing");
+            if (!Enabled) return I18n.T("tasks.status_paused");
+            if (LastSyncErrors > 0) return I18n.T("tasks.status_error");
+            return I18n.T("tasks.status_up_to_date");
+        }
+    }
+
+    public string SyncStatusSubtext
+    {
+        get
+        {
+            if (IsBusy)
+            {
+                return LastSyncFilesCount > 0
+                    ? I18n.T("tasks.status_processed_files", LastSyncFilesCount.ToString("N0", I18n.Instance.Culture))
+                    : I18n.T("tasks.status_processing");
+            }
+            if (!Enabled) return I18n.T("tasks.status_auto_disabled");
+            if (LastSyncTime is null) return I18n.T("tasks.status_never_synced");
+            return I18n.T("tasks.last_sync_prefix", LastSyncSummary);
+        }
+    }
+
+    public string ModeSummaryShort => IsMirror
+        ? I18n.T("pair.mode_mirror_short")
+        : I18n.T("pair.mode_twoway_short");
+
+    public string ApprovalSummaryShort => RequireApproval
+        ? I18n.T("pair.approval_with")
+        : I18n.T("pair.approval_without");
+
+    public string VersioningSummaryShort => Versioning
+        ? $"{VersionsKeepDays} d ({VersionsMaxGb} GB)"
+        : I18n.T("pair.facts_off");
+
+    public string WatchSummaryShort => Watch switch
+    {
+        WatchMode.On => I18n.T("pair.watch_on"),
+        WatchMode.Off => I18n.T("pair.watch_off"),
+        _ => I18n.T("pair.facts_auto"),
+    };
+
+    public bool ShowWatch => Watch == WatchMode.On;
+    public bool ShowSchedule => Watch == WatchMode.Off;
+    public bool HasExcludes => ExcludeCount > 0;
+    public bool HasMoreItemsAfterLinks => RequireApproval || ShowWatch || HasExcludes;
+    public bool HasMoreItemsAfterApproval => ShowWatch || HasExcludes;
+    public bool HasMoreItemsAfterWatch => HasExcludes;
+    public string ExcludeCountSummary => I18n.T("pair.excludes_count", ExcludeCount);
+
+    public void RaiseSyncState()
+    {
+        OnPropertyChanged(nameof(LastSyncSummary));
+        OnPropertyChanged(nameof(StatusBadgeText));
+        OnPropertyChanged(nameof(SyncStatusTitle));
+        OnPropertyChanged(nameof(SyncStatusSubtext));
+        OnPropertyChanged(nameof(IsPaused));
+        OnPropertyChanged(nameof(IsActiveAndIdle));
+        OnPropertyChanged(nameof(IsUpToDate));
+        OnPropertyChanged(nameof(HasError));
+    }
+
     public static IReadOnlyList<LinkMode> LinkModes { get; } = Enum.GetValues<LinkMode>();
     public static IReadOnlyList<SyncMode> Modes { get; } = Enum.GetValues<SyncMode>();
     public static IReadOnlyList<WatchMode> WatchModes { get; } = Enum.GetValues<WatchMode>();
@@ -115,8 +222,20 @@ public sealed partial class PairViewModel : ObservableObject
     public string SourceKindSummary => KindSummary(Source);
     public string TargetKindSummary => KindSummary(Target);
 
+    public Geometry? SourceIcon => KindIcon(Source);
+    public Geometry? TargetIcon => KindIcon(Target);
+
     /// <summary>Why the pair reacts as fast (or as slowly) as it does — the two facts together explain it.</summary>
     public string WatchHint => "";
+
+    private static Geometry? KindIcon(string path) => string.IsNullOrWhiteSpace(path)
+        ? Icon("IconHardDrive")
+        : RootProbe.QuickKind(path) switch
+        {
+            RootKind.Removable => Icon("IconUsb"),
+            RootKind.LanShare or RootKind.RemoteShare => Icon("IconServer"),
+            _ => Icon("IconHardDrive"),
+        };
 
     private static string KindSummary(string path) => string.IsNullOrWhiteSpace(path)
         ? "—"
@@ -286,11 +405,27 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(SourceKindSummary));
         OnPropertyChanged(nameof(TargetKindSummary));
         OnPropertyChanged(nameof(WatchHint));
+        OnPropertyChanged(nameof(FolderName));
+        OnPropertyChanged(nameof(HasFolderName));
+        OnPropertyChanged(nameof(ModeSummaryShort));
+        OnPropertyChanged(nameof(ApprovalSummaryShort));
+        OnPropertyChanged(nameof(VersioningSummaryShort));
+        OnPropertyChanged(nameof(WatchSummaryShort));
+        OnPropertyChanged(nameof(ShowWatch));
+        OnPropertyChanged(nameof(HasExcludes));
+        OnPropertyChanged(nameof(ExcludeCountSummary));
+        RaiseSyncState();
         RaiseMode();
     }
 
     private static List<string> ParseExcludes(string text) =>
         text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    partial void OnNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(FolderName));
+        OnPropertyChanged(nameof(HasFolderName));
+    }
 
     partial void OnEnabledChanged(bool value)
     {
@@ -298,10 +433,14 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(ToggleGlyph));
         OnPropertyChanged(nameof(ToggleTip));
         OnPropertyChanged(nameof(StateSummary));
+        RaiseSyncState();
     }
 
-    partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(StateSummary));
-
+    partial void OnIsBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(StateSummary));
+        RaiseSyncState();
+    }
 
     partial void OnIntervalMinutesChanged(int value) => RaiseFacts(nameof(IntervalSummary));
 
@@ -311,7 +450,30 @@ public sealed partial class PairViewModel : ObservableObject
     partial void OnAutoCleanDaysChanged(int value) => RaiseFacts(nameof(AutoCleanSummary));
     partial void OnLinksChanged(LinkMode value) => RaiseFacts(nameof(LinksSummary));
 
-    partial void OnWatchChanged(WatchMode value) => RaiseFacts(nameof(WatchHint));
+    partial void OnWatchChanged(WatchMode value)
+    {
+        RaiseFacts(nameof(WatchHint));
+        OnPropertyChanged(nameof(WatchSummaryShort));
+        OnPropertyChanged(nameof(ShowWatch));
+        OnPropertyChanged(nameof(ShowSchedule));
+        OnPropertyChanged(nameof(HasMoreItemsAfterLinks));
+        OnPropertyChanged(nameof(HasMoreItemsAfterApproval));
+        OnPropertyChanged(nameof(HasMoreItemsAfterWatch));
+    }
+
+    partial void OnRequireApprovalChanged(bool value)
+    {
+        RaiseFacts(nameof(Facts));
+        OnPropertyChanged(nameof(ApprovalSummaryShort));
+        OnPropertyChanged(nameof(HasMoreItemsAfterLinks));
+        OnPropertyChanged(nameof(HasMoreItemsAfterApproval));
+    }
+
+    partial void OnVersioningChanged(bool value)
+    {
+        RaiseFacts(nameof(Facts));
+        OnPropertyChanged(nameof(VersioningSummaryShort));
+    }
 
     partial void OnCloudFilesChanged(CloudFileMode value) => RaiseCloudFiles();
 
@@ -321,6 +483,8 @@ public sealed partial class PairViewModel : ObservableObject
     {
         RaiseFacts(nameof(SourceKindSummary));
         RaiseCloudFiles();
+        OnPropertyChanged(nameof(FolderName));
+        OnPropertyChanged(nameof(HasFolderName));
     }
 
     partial void OnTargetChanged(string value)

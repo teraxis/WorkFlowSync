@@ -1,6 +1,7 @@
 using WorkFlowSync.App.ViewModels;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
+using WorkFlowSync.Core.I18n;
 
 namespace WorkFlowSync.Tests;
 
@@ -8,8 +9,13 @@ namespace WorkFlowSync.Tests;
 /// Stage 5.2 (docs/plan-etap5.md §4.1): a pair knows what kind of storage it sits on and whether it may
 /// watch for changes. Nothing about synchronisation changes yet — only classification and what is shown.
 /// </summary>
+[Collection("I18n Tests")]
 public class WatchModeTests
 {
+    public WatchModeTests()
+    {
+        I18n.Instance.SetLanguage("uk");
+    }
     [Fact]
     public void A_config_written_before_this_feature_reads_as_auto()
     {

@@ -12,6 +12,7 @@ using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
 using WorkFlowSync.Core.I18n;
 using WorkFlowSync.Core.Notifications;
+using WorkFlowSync.Core.Update;
 
 namespace WorkFlowSync.App;
 
@@ -29,6 +30,7 @@ public partial class App : Application
     private RecentChangesWindow? _recentWindow;
     private RecentChangesViewModel? _recentModel;
     private NotificationWindow? _notification;
+    private UpdateNotificationWindow? _updateWindow;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -79,6 +81,12 @@ public partial class App : Application
             // After the window exists: the nav ListBox writes its own SelectedIndex into the binding while it
             // initialises, so setting the page earlier would be overwritten.
             if (page != 0) Dispatcher.UIThread.Post(() => _vm!.SelectedPage = page);
+
+            // Clean up leftovers from a previous update and check for a new one.
+            var currentExe = Environment.ProcessPath
+                ?? Path.Combine(AppContext.BaseDirectory, "WorkFlowSync.exe");
+            UpdateInstaller.CleanupPreviousUpdate(currentExe);
+            _ = CheckForUpdateAsync();
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -294,5 +302,56 @@ public partial class App : Application
         _vm?.Background.Dispose();
         if (_tray is not null) _tray.IsVisible = false;
         desktop.Shutdown();
+    }
+
+    // ------------------------------------------------------------------ auto-update
+
+    /// <summary>
+    /// Silent update check: runs once on startup. If a newer version is available and the user
+    /// has not opted out (autoUpdate=false) or skipped this particular version, shows the
+    /// update notification window near the tray.
+    /// </summary>
+    private async Task CheckForUpdateAsync()
+    {
+        if (_vm is null || !_vm.AutoUpdate) return;
+
+        var info = await UpdateChecker.CheckAsync(
+            WorkFlowSyncInfo.Version,
+            _vm.SkippedVersion).ConfigureAwait(false);
+
+        if (info is null) return;
+
+        Dispatcher.UIThread.Post(() => ShowUpdateNotification(info));
+    }
+
+    private void ShowUpdateNotification(UpdateInfo info)
+    {
+        _updateWindow ??= new UpdateNotificationWindow();
+
+        _updateWindow.UpdateRequested += OnUpdateRequested;
+        _updateWindow.LaterRequested += () => { /* window hides itself; next launch will check again */ };
+        _updateWindow.SkipRequested += version =>
+        {
+            if (_vm is null) return;
+            _vm.SkippedVersion = version;
+            _vm.SaveNow();
+        };
+
+        _updateWindow.ShowUpdate(info);
+    }
+
+    private void OnUpdateRequested(UpdateInfo info)
+    {
+        // The download is already done at this point (the window handled it).
+        // Launch the replacement script and exit.
+        var currentExe = Environment.ProcessPath
+            ?? Path.Combine(AppContext.BaseDirectory, "WorkFlowSync.exe");
+        var updateExe = UpdateInstaller.UpdateExePath(currentExe);
+
+        UpdateInstaller.LaunchAndExit(currentExe, updateExe);
+
+        // Shut down the application so the script can replace the exe.
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            Shutdown(desktop);
     }
 }

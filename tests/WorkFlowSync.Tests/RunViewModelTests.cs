@@ -3,6 +3,7 @@ using WorkFlowSync.Core.Config;
 
 namespace WorkFlowSync.Tests;
 
+[Collection("I18n Tests")]
 [Trait("Category", "E2E")]
 public sealed class RunViewModelTests : IDisposable
 {
@@ -25,6 +26,7 @@ public sealed class RunViewModelTests : IDisposable
         ConfigFile.Save(new SyncConfig { Pairs = { new FolderPair { Name = "t", Source = src, Target = dst, Enabled = false } } }, configPath);
 
         var main = new MainViewModel(configPath);
+        main.Background.Pause();
         main.Pairs[0].Enabled = true;
         main.Background.Stop();
         var run = main.Run;

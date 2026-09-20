@@ -1,3 +1,5 @@
+using WorkFlowSync.Core;
+using WorkFlowSync.Core.I18n;
 using WorkFlowSync.Core.Config;
 using WorkFlowSync.App.ViewModels;
 using WorkFlowSync.Core.Model;
@@ -9,6 +11,7 @@ namespace WorkFlowSync.Tests;
 /// What the tray window shows (docs/plan-etap5.md §5.6): the list itself and the way times are written,
 /// which is the part a person reads rather than parses.
 /// </summary>
+[Collection("I18n Tests")]
 public class RecentChangesViewModelTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "wfs-recentvm-" + Guid.NewGuid().ToString("N"));
@@ -17,12 +20,14 @@ public class RecentChangesViewModelTests : IDisposable
 
     public RecentChangesViewModelTests()
     {
+        I18n.Instance.SetLanguage("uk");
         Directory.CreateDirectory(_dir);
         _dbPath = Path.Combine(_dir, "state.db");
     }
 
     public void Dispose()
     {
+        I18n.Instance.SetLanguage("uk");
         try { Directory.Delete(_dir, recursive: true); } catch { /* best effort */ }
         GC.SuppressFinalize(this);
     }

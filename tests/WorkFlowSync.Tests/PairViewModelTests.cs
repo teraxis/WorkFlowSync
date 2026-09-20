@@ -1,10 +1,16 @@
 using WorkFlowSync.App.ViewModels;
 using WorkFlowSync.Core.Config;
+using WorkFlowSync.Core.I18n;
 
 namespace WorkFlowSync.Tests;
 
+[Collection("I18n Tests")]
 public class PairViewModelTests
 {
+    public PairViewModelTests()
+    {
+        I18n.Instance.SetLanguage("uk");
+    }
     [Fact]
     public void Round_trips_model_including_retention_and_excludes()
     {

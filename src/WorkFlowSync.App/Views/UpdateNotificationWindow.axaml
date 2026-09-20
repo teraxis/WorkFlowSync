@@ -1,0 +1,41 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WorkFlowSync.App.Views.UpdateNotificationWindow"
+        Title="WorkFlowSync"
+        Width="400" SizeToContent="Height"
+        SystemDecorations="None" CanResize="False"
+        ShowInTaskbar="False" Topmost="True" ShowActivated="False"
+        Background="Transparent">
+
+    <Border Background="{DynamicResource SurfaceCard}"
+            BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1" CornerRadius="10">
+        <Grid ColumnDefinitions="4,*">
+            <!-- Accent stripe on the left -->
+            <Border Grid.Column="0" Background="{DynamicResource Accent}"
+                    CornerRadius="10,0,0,10" />
+
+            <StackPanel Grid.Column="1" Margin="16,14" Spacing="8">
+
+                <!-- Title -->
+                <TextBlock x:Name="TitleText" FontWeight="SemiBold" FontSize="14" />
+
+                <!-- Body (what's new) -->
+                <TextBlock x:Name="BodyText" Classes="caption" TextWrapping="Wrap" MaxLines="4" />
+
+                <!-- Action buttons (visible before download starts) -->
+                <StackPanel x:Name="ButtonsPanel" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                    <Button x:Name="UpdateBtn" Classes="primary" Click="OnUpdate" MinWidth="100" />
+                    <Button x:Name="LaterBtn" Classes="ghost" Click="OnLater" />
+                    <Button x:Name="SkipBtn" Classes="ghost" Click="OnSkip" />
+                </StackPanel>
+
+                <!-- Download progress (hidden until download starts) -->
+                <StackPanel x:Name="ProgressPanel" IsVisible="False" Spacing="6">
+                    <ProgressBar x:Name="DownloadProgress" Minimum="0" Maximum="100" Value="0" Height="6" />
+                    <TextBlock x:Name="ProgressText" Classes="caption" />
+                </StackPanel>
+
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

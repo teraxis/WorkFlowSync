@@ -39,6 +39,12 @@ public sealed class SyncConfig
     /// <summary>How many files the «Останні зміни» window lists. Capped so a million-row pair cannot reach it.</summary>
     public int RecentLimit { get; set; } = 40;
 
+    /// <summary>Whether to check GitHub for newer versions on startup (and once a day while running).</summary>
+    public bool AutoUpdate { get; set; } = true;
+
+    /// <summary>Release tag the user chose to skip (e.g. "0.2.0"). Null = remind about everything.</summary>
+    public string? SkippedVersion { get; set; }
+
     /// <summary>
     /// Hour (0–23) from which routine messages are held back, and the hour they resume. Equal values mean
     /// no quiet period. The range may cross midnight (22 → 8 is the obvious one). Problems are always shown:

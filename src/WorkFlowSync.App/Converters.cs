@@ -100,6 +100,9 @@ public static class Converters
             _ => I18n.T("enum.lang.system"),
         });
 
+    public static readonly IValueConverter GreaterThanZero =
+        new FuncValueConverter<int, bool>(n => n > 0);
+
     /// <summary>Looks a brush up in the application resources for the current theme variant.</summary>
     private static IBrush? Brush(string key, bool wanted)
     {

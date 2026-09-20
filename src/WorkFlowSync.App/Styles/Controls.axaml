@@ -499,16 +499,17 @@
 
     <Style Selector="ListBox.nav">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Padding" Value="10,0" />
         <Setter Property="BorderThickness" Value="0" />
     </Style>
 
     <Style Selector="ListBox.nav ListBoxItem">
-        <Setter Property="Padding" Value="10,9" />
-        <Setter Property="Margin" Value="0,2" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+        <Setter Property="Padding" Value="14,11" />
+        <Setter Property="Margin" Value="0,3" />
+        <Setter Property="CornerRadius" Value="10" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
-        <Setter Property="FontSize" Value="{DynamicResource FontBody}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="ListBox.nav ListBoxItem:pointerover /template/ ContentPresenter">
@@ -524,19 +525,55 @@
         <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
     </Style>
 
+    <!-- Nav badge (counter on Tasks) -->
+    <Style Selector="Border.nav-badge">
+        <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.nav-badge-text">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem:selected Border.nav-badge">
+        <Setter Property="Background" Value="{DynamicResource Accent}" />
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem:selected TextBlock.nav-badge-text">
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccent}" />
+    </Style>
+
+    <!-- System status dot (sidebar bottom) -->
+    <Style Selector="Ellipse.system-dot">
+        <Setter Property="Width" Value="9" />
+        <Setter Property="Height" Value="9" />
+        <Setter Property="Fill" Value="{DynamicResource Success}" />
+    </Style>
+    <Style Selector="Ellipse.system-dot.warning">
+        <Setter Property="Fill" Value="{DynamicResource Warning}" />
+    </Style>
+    <Style Selector="Ellipse.system-dot.danger">
+        <Setter Property="Fill" Value="{DynamicResource Danger}" />
+    </Style>
+
     <!-- ============================================================ pair list -->
 
     <Style Selector="ListBox.rows">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
     </Style>
 
     <Style Selector="ListBox.rows ListBoxItem">
         <Setter Property="Padding" Value="0" />
-        <Setter Property="Margin" Value="0,0,0,8" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
+        <Setter Property="Margin" Value="0,0,12,14" />
+        <Setter Property="CornerRadius" Value="16" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     </Style>
     <Style Selector="ListBox.rows ListBoxItem:pointerover /template/ ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
@@ -550,8 +587,8 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
-        <Setter Property="Padding" Value="14,12" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="22,20" />
     </Style>
     <Style Selector="ListBox.rows ListBoxItem:pointerover Border.row">
         <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
@@ -562,22 +599,125 @@
 
     <!-- ============================================================ badges -->
 
+    <!-- scrollbars: a slim rail in its own lane, no arrow buttons, thumb from the palette -->
+    <Style Selector="ScrollBar:vertical">
+        <Setter Property="Width" Value="6" />
+        <Setter Property="Margin" Value="2,0,0,0" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal">
+        <Setter Property="Height" Value="6" />
+        <Setter Property="Margin" Value="0,2,0,0" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ScrollBar /template/ RepeatButton">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ScrollBar /template/ Border#TrackRect, ScrollBar /template/ Rectangle#TrackRect">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="ScrollBar Thumb">
+        <Setter Property="Background" Value="{DynamicResource TextMuted}" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="Opacity" Value="0.4" />
+        <Setter Property="MinWidth" Value="4" />
+        <Setter Property="MinHeight" Value="20" />
+    </Style>
+    <Style Selector="ScrollBar Thumb /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource TextMuted}" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="Opacity" Value="0.4" />
+    </Style>
+    <Style Selector="ScrollBar Thumb:pointerover /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="Opacity" Value="0.85" />
+    </Style>
+
+    <!-- ============================================================ badges -->
+
     <Style Selector="Border.badge">
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
         <Setter Property="Padding" Value="8,3" />
         <Setter Property="Background" Value="{DynamicResource NeutralSoft}" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
-    <Style Selector="Border.badge TextBlock">
-        <Setter Property="FontSize" Value="{DynamicResource FontCaption}" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
-    </Style>
     <Style Selector="Border.badge.success">
         <Setter Property="Background" Value="{DynamicResource SuccessSoft}" />
     </Style>
-    <Style Selector="Border.badge.success TextBlock">
+    <Style Selector="Border.badge.busy">
+        <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+    </Style>
+    <Style Selector="Border.badge.paused">
+        <Setter Property="Background" Value="{DynamicResource NeutralSoft}" />
+    </Style>
+
+    <Style Selector="Ellipse.badge-dot">
+        <Setter Property="Width" Value="6" />
+        <Setter Property="Height" Value="6" />
+        <Setter Property="Fill" Value="{DynamicResource Neutral}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+    </Style>
+    <Style Selector="Ellipse.badge-dot.success">
+        <Setter Property="Fill" Value="{DynamicResource Success}" />
+    </Style>
+    <Style Selector="Ellipse.badge-dot.busy">
+        <Setter Property="Fill" Value="{DynamicResource Accent}" />
+    </Style>
+    <Style Selector="Ellipse.badge-dot.paused">
+        <Setter Property="Fill" Value="{DynamicResource Neutral}" />
+    </Style>
+
+    <Style Selector="TextBlock.badge-text">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.badge-text.success">
         <Setter Property="Foreground" Value="{DynamicResource Success}" />
+    </Style>
+    <Style Selector="TextBlock.badge-text.busy">
+        <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+    </Style>
+    <Style Selector="TextBlock.badge-text.paused">
+        <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+    </Style>
+
+    <!-- Status widget title -->
+    <Style Selector="TextBlock.status-title">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="TextAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.status-title.success">
+        <Setter Property="Foreground" Value="{DynamicResource Success}" />
+    </Style>
+    <Style Selector="TextBlock.status-title.busy">
+        <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+    </Style>
+    <Style Selector="TextBlock.status-title.paused">
+        <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+    </Style>
+    <Style Selector="TextBlock.status-title.error">
+        <Setter Property="Foreground" Value="{DynamicResource Danger}" />
+    </Style>
+
+    <!-- ToggleSwitch: off state styled solid gray matching on state -->
+    <Style Selector="ToggleSwitch">
+        <Setter Property="Cursor" Value="Hand" />
+        <Style.Resources>
+            <SolidColorBrush x:Key="ToggleSwitchFillOff" Color="#9CA3AF" />
+            <SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#6B7280" />
+            <SolidColorBrush x:Key="ToggleSwitchFillOffPressed" Color="#4B5563" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOff" Color="Transparent" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOffPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOffPressed" Color="Transparent" />
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOff" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOffPointerOver" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOffPressed" Color="#FFFFFF" />
+        </Style.Resources>
     </Style>
 
     <!-- ============================================================ misc -->

@@ -12,7 +12,7 @@
         Background="{DynamicResource SurfaceCanvas}"
         WindowStartupLocation="CenterScreen">
 
-    <Grid ColumnDefinitions="248,*">
+    <Grid ColumnDefinitions="252,*">
 
         <!-- ═══════════════════════════ navigation rail ═══════════════════════════ -->
         <Border Grid.Column="0" Background="{DynamicResource SurfaceRail}"
@@ -20,38 +20,62 @@
             <DockPanel>
 
                 <!-- identity -->
-                <StackPanel DockPanel.Dock="Top" Margin="18,20,18,18" Spacing="2">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Border Width="30" Height="30" CornerRadius="{DynamicResource RadiusSm}"
+                <StackPanel DockPanel.Dock="Top" Margin="20,22,20,18" Spacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Border Width="38" Height="38" CornerRadius="10"
                                 Background="{DynamicResource Accent}">
-                            <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="17" Height="17"
-                                  Stroke="{DynamicResource TextOnAccent}" HorizontalAlignment="Center" />
+                            <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="20" Height="20"
+                                  Stroke="{DynamicResource TextOnAccent}" StrokeThickness="2"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="WorkFlowSync" FontWeight="SemiBold" FontSize="14.5" />
-                            <TextBlock Classes="caption" Text="{Binding Version}" />
+                        <StackPanel VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="WorkFlowSync" FontWeight="Bold" FontSize="15" />
+                            <TextBlock Classes="caption" Text="{Binding Version}" FontSize="12" />
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>
 
+                <!-- bottom status card -->
+                <Border DockPanel.Dock="Bottom" Margin="14,14,14,16" Padding="14,12"
+                        Background="{DynamicResource SurfaceSunken}"
+                        CornerRadius="{DynamicResource RadiusMd}"
+                        BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1">
+                    <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                        <Ellipse Grid.Column="0" Classes="system-dot"
+                                 Classes.warning="{Binding IsSystemWarning}"
+                                 Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="{Binding SystemStatusText}" FontWeight="SemiBold" FontSize="12"
+                                       Foreground="{DynamicResource TextPrimary}" Classes="oneline" />
+                            <TextBlock Text="{Binding LastCheckSummary}" FontSize="11"
+                                       Foreground="{DynamicResource TextMuted}" Classes="oneline" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- navigation items -->
                 <ListBox Classes="nav" SelectedIndex="{Binding SelectedPage}">
                     <ListBoxItem>
-                        <StackPanel Orientation="Horizontal" Spacing="11">
-                            <Path Classes="ico" Data="{StaticResource IconFolders}" Width="17" Height="17" />
-                            <TextBlock Text="{loc:Loc nav.tasks}" VerticalAlignment="Center" />
-                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Path Grid.Column="0" Classes="ico" Data="{StaticResource IconFolders}" Width="18" Height="18" Margin="0,0,12,0" />
+                            <TextBlock Grid.Column="1" Text="{loc:Loc nav.tasks}" VerticalAlignment="Center" />
+                            <Border Grid.Column="2" Classes="nav-badge"
+                                    IsVisible="{Binding Pairs.Count, Converter={x:Static app:Converters.GreaterThanZero}}">
+                                <TextBlock Text="{Binding Pairs.Count}" Classes="nav-badge-text" />
+                            </Border>
+                        </Grid>
                     </ListBoxItem>
                     <ListBoxItem>
-                        <StackPanel Orientation="Horizontal" Spacing="11">
-                            <Path Classes="ico" Data="{StaticResource IconSync}" Width="17" Height="17" />
-                            <TextBlock Text="{loc:Loc nav.events}" VerticalAlignment="Center" />
-                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Path Grid.Column="0" Classes="ico" Data="{StaticResource IconClock}" Width="18" Height="18" Margin="0,0,12,0" />
+                            <TextBlock Grid.Column="1" Text="{loc:Loc nav.events}" VerticalAlignment="Center" />
+                        </Grid>
                     </ListBoxItem>
                     <ListBoxItem>
-                        <StackPanel Orientation="Horizontal" Spacing="11">
-                            <Path Classes="ico" Data="{StaticResource IconSettings}" Width="17" Height="17" />
-                            <TextBlock Text="{loc:Loc nav.settings}" VerticalAlignment="Center" />
-                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Path Grid.Column="0" Classes="ico" Data="{StaticResource IconSettings}" Width="18" Height="18" Margin="0,0,12,0" />
+                            <TextBlock Grid.Column="1" Text="{loc:Loc nav.settings}" VerticalAlignment="Center" />
+                        </Grid>
                     </ListBoxItem>
                 </ListBox>
             </DockPanel>
@@ -61,15 +85,18 @@
         <DockPanel Grid.Column="1">
 
             <!-- page header -->
-            <Border DockPanel.Dock="Top" Padding="16,20,16,16">
+            <Border DockPanel.Dock="Top" Padding="24,20,24,14">
                 <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Classes="display" Text="{Binding PageTitle}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Classes="display" Text="{Binding PageTitle}" FontSize="26" FontWeight="Bold" />
+                    </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
                                 IsVisible="{Binding IsFoldersPage}">
-                        <Button Classes="primary" Click="OnAddPair">
+                        <Button Classes="primary" Click="OnAddPair" CornerRadius="10" Padding="16,10">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Path Classes="ico" Data="{StaticResource IconPlus}" />
-                                <TextBlock Text="{loc:Loc nav.add_task}" />
+                                <Path Classes="ico" Data="{StaticResource IconPlus}" Width="15" Height="15"
+                                      Stroke="{DynamicResource TextOnAccent}" StrokeThickness="2" />
+                                <TextBlock Text="{loc:Loc nav.add_task}" FontWeight="SemiBold" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -85,47 +112,198 @@
                            Foreground="{Binding StatusIsError, Converter={x:Static app:Converters.StatusText}}" />
             </Border>
 
-            <Panel Margin="16,0,4,12">
+            <Panel Margin="24,0,24,16">
 
                 <!-- ────────────────────────── page: folders ────────────────────────── -->
-                <Panel IsVisible="{Binding IsFoldersPage}" Margin="0,0,12,0">
-                    <ListBox Classes="rows" ItemsSource="{Binding Pairs}" SelectedItem="{Binding SelectedPair}">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:PairViewModel">
-                                    <Border Classes="row">
-                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                <Panel IsVisible="{Binding IsFoldersPage}">
+                    <ListBox Classes="rows" ItemsSource="{Binding Pairs}" SelectedItem="{Binding SelectedPair}"
+                             Padding="0,0,12,0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.AllowAutoHide="False">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PairViewModel">
+                                <Border Classes="row" DoubleTapped="OnRowDoubleTapped" Background="Transparent">
+                                    <Grid ColumnDefinitions="*,Auto">
 
-                                            <!-- name + state -->
-                                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Name}" Classes="title oneline" VerticalAlignment="Center" MaxWidth="360" />
-                                                <Border Classes="badge" Classes.success="{Binding Enabled}">
-                                                    <TextBlock Text="{Binding StateSummary}" />
+                                        <!-- Left & Middle: Task details -->
+                                        <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto" Margin="0,0,24,0">
+
+                                            <!-- Row 0: Header with folder icon, title, and badge -->
+                                            <Grid Grid.Row="0" ColumnDefinitions="Auto,*">
+                                                <!-- Folder icon in soft blue rounded box -->
+                                                <Border Grid.Column="0" Width="42" Height="42" CornerRadius="10"
+                                                        Background="{DynamicResource AccentSoft}" Margin="0,0,12,0"
+                                                        VerticalAlignment="Center">
+                                                    <Path Classes="ico" Data="{StaticResource IconFolders}" Width="20" Height="20"
+                                                          Stroke="{DynamicResource Accent}" StrokeThickness="1.8"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                 </Border>
-                                                <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Width="70" VerticalAlignment="Center" />
-                                            </StackPanel>
 
-                                            <!-- paths + facts -->
-                                            <StackPanel Grid.Row="1" Grid.Column="0" Spacing="3" Margin="0,6,0,0">
-                                                <Grid ColumnDefinitions="*,Auto,*">
-                                                    <TextBlock Grid.Column="0" Classes="caption mono oneline" Text="{Binding Source}"
-                                                               ToolTip.Tip="{Binding Source}" />
-                                                    <Path Grid.Column="1" Classes="ico" Data="{Binding ModeIcon}" Width="14" Height="NaN"
-                                                          Margin="8,0" Stroke="{DynamicResource TextMuted}" StrokeThickness="1.5"
-                                                          ToolTip.Tip="{Binding ModeSummary}" />
-                                                    <TextBlock Grid.Column="2" Classes="caption mono oneline" Text="{Binding Target}"
-                                                               ToolTip.Tip="{Binding Target}" />
-                                                </Grid>
-                                                <TextBlock Classes="caption oneline" Text="{Binding Facts}" />
-                                            </StackPanel>
+                                                <!-- Title, Status badge, and ToggleSwitch -->
+                                                <StackPanel Grid.Column="1" Orientation="Vertical" Spacing="4" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                    <!-- Title line -->
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="15"
+                                                               Foreground="{DynamicResource TextPrimary}"
+                                                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                                               MaxWidth="360" VerticalAlignment="Center" HorizontalAlignment="Left" />
 
-                                            <!-- actions -->
-                                            <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Orientation="Horizontal"
-                                                        Spacing="6" VerticalAlignment="Center" Margin="14,0,0,0">
-                                                <Button Classes="icon accentsoft" Click="OnTogglePair" ToolTip.Tip="{Binding ToggleTip}">
-                                                    <Path Classes="icof" Data="{Binding ToggleIcon}" Width="NaN" Height="15" />
-                                                </Button>
-                                                <Button Classes="ghost icon" ToolTip.Tip="Дії із завданням">
-                                                    <Path Classes="icof" Data="{StaticResource IconMoreFill}" Width="18" Height="NaN" />
+                                                    <!-- Status Badge & ToggleSwitch side-by-side with matched height (24px) -->
+                                                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                        <!-- Status Badge -->
+                                                        <Border Classes="badge" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0" Padding="8,4" Height="24"
+                                                                Classes.success="{Binding IsActiveAndIdle}"
+                                                                Classes.busy="{Binding IsBusy}"
+                                                                Classes.paused="{Binding IsPaused}">
+                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <Ellipse Classes="badge-dot"
+                                                                         Classes.success="{Binding IsActiveAndIdle}"
+                                                                         Classes.busy="{Binding IsBusy}"
+                                                                         Classes.paused="{Binding IsPaused}" />
+                                                                <TextBlock Classes="badge-text"
+                                                                           Classes.success="{Binding IsActiveAndIdle}"
+                                                                           Classes.busy="{Binding IsBusy}"
+                                                                           Classes.paused="{Binding IsPaused}"
+                                                                           Text="{Binding StatusBadgeText}" />
+                                                            </StackPanel>
+                                                        </Border>
+
+                                                        <!-- Toggle switch placed next to status badge -->
+                                                        <ToggleSwitch IsChecked="{Binding Enabled}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                                      VerticalAlignment="Center" Margin="0" MinWidth="0" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <!-- Row 1: Source -> Target flow boxes -->
+                                            <Grid Grid.Row="1" ColumnDefinitions="*,Auto,*" Margin="0,15,0,15">
+                                                <!-- Source Box -->
+                                                <Border Grid.Column="0" Background="{DynamicResource SurfaceSunken}" CornerRadius="10" Padding="14,10"
+                                                        BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+                                                        Cursor="Hand" Tag="{Binding Source}" PointerPressed="OnOpenFolderPointerPressed"
+                                                        ToolTip.Tip="{loc:Loc tasks.open_folder_tooltip}">
+                                                    <Grid ColumnDefinitions="Auto,*" Margin="0">
+                                                        <Path Grid.Column="0" Classes="ico" Data="{Binding SourceIcon}"
+                                                              Width="18" Height="18" Stroke="{DynamicResource Accent}"
+                                                              VerticalAlignment="Center" Margin="0,0,12,0" />
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                            <TextBlock Text="{loc:Loc pair.source_title}" FontSize="11" FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource TextSecondary}" />
+                                                            <TextBlock Text="{Binding Source}" Classes="mono oneline" FontSize="12"
+                                                                       Foreground="{DynamicResource TextPrimary}" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+
+                                                <!-- Flow arrow -->
+                                                <Path Grid.Column="1" Classes="ico" Data="{Binding ModeIcon}" Width="16" Height="16"
+                                                      Stroke="{DynamicResource TextMuted}" Margin="12,0" VerticalAlignment="Center" />
+
+                                                <!-- Target Box -->
+                                                <Border Grid.Column="2" Background="{DynamicResource SurfaceSunken}" CornerRadius="10" Padding="14,10"
+                                                        BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+                                                        Cursor="Hand" Tag="{Binding Target}" PointerPressed="OnOpenFolderPointerPressed"
+                                                        ToolTip.Tip="{loc:Loc tasks.open_folder_tooltip}">
+                                                    <Grid ColumnDefinitions="Auto,*" Margin="0">
+                                                        <Path Grid.Column="0" Classes="ico" Data="{Binding TargetIcon}"
+                                                              Width="18" Height="18" Stroke="{DynamicResource Accent}"
+                                                              VerticalAlignment="Center" Margin="0,0,12,0" />
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                            <TextBlock Text="{loc:Loc pair.target_title}" FontSize="11" FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource TextSecondary}" />
+                                                            <TextBlock Text="{Binding Target}" Classes="mono oneline" FontSize="12"
+                                                                       Foreground="{DynamicResource TextPrimary}" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </Grid>
+
+                                            <!-- Row 2: Bottom metadata chips with vertical dividers -->
+                                            <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0">
+                                                <!-- Schedule (only when watching is off) -->
+                                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,16,6" VerticalAlignment="Center"
+                                                            IsVisible="{Binding ShowSchedule}">
+                                                    <Path Classes="ico" Data="{StaticResource IconClock}" Width="14" Height="14"
+                                                          Stroke="{DynamicResource TextMuted}" VerticalAlignment="Center" />
+                                                    <StackPanel VerticalAlignment="Center" Spacing="1">
+                                                        <TextBlock Text="{loc:Loc pair.meta_schedule}" FontSize="10" Foreground="{DynamicResource TextMuted}" />
+                                                        <TextBlock Text="{Binding IntervalSummary}" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- Links (with divider if Schedule was visible) -->
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,16,6">
+                                                    <Border Width="1" Height="18" Background="{DynamicResource BorderSubtle}" VerticalAlignment="Center"
+                                                            Margin="0,0,16,0" Opacity="0.7" IsVisible="{Binding ShowSchedule}" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                        <Path Classes="ico" Data="{StaticResource IconLink}" Width="14" Height="14"
+                                                              Stroke="{DynamicResource TextMuted}" VerticalAlignment="Center" />
+                                                        <StackPanel VerticalAlignment="Center" Spacing="1">
+                                                            <TextBlock Text="{loc:Loc pair.meta_links}" FontSize="10" Foreground="{DynamicResource TextMuted}" />
+                                                            <TextBlock Text="{Binding LinksSummary}" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- Approval (if two-way) -->
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,16,6"
+                                                            IsVisible="{Binding RequireApproval}">
+                                                    <Border Width="1" Height="18" Background="{DynamicResource BorderSubtle}" VerticalAlignment="Center"
+                                                            Margin="0,0,16,0" Opacity="0.7" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                        <Path Classes="ico" Data="{StaticResource IconUsers}" Width="14" Height="14"
+                                                              Stroke="{DynamicResource TextMuted}" VerticalAlignment="Center" />
+                                                        <StackPanel VerticalAlignment="Center" Spacing="1">
+                                                            <TextBlock Text="{loc:Loc pair.meta_approval}" FontSize="10" Foreground="{DynamicResource TextMuted}" />
+                                                            <TextBlock Text="{Binding ApprovalSummaryShort}" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                 <!-- Watch (only when explicitly enabled: On) -->
+                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,16,6"
+                                                             IsVisible="{Binding ShowWatch}">
+                                                    <Border Width="1" Height="18" Background="{DynamicResource BorderSubtle}" VerticalAlignment="Center"
+                                                            Margin="0,0,16,0" Opacity="0.7" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                        <Path Classes="ico" Data="{StaticResource IconEye}" Width="14" Height="14"
+                                                              Stroke="{DynamicResource TextMuted}" VerticalAlignment="Center" />
+                                                        <StackPanel VerticalAlignment="Center" Spacing="1">
+                                                            <TextBlock Text="{loc:Loc pair.meta_watch}" FontSize="10" Foreground="{DynamicResource TextMuted}" />
+                                                            <TextBlock Text="{Binding WatchSummaryShort}" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- Exclusions (if any) -->
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,16,6"
+                                                            IsVisible="{Binding HasExcludes}">
+                                                    <Border Width="1" Height="18" Background="{DynamicResource BorderSubtle}" VerticalAlignment="Center"
+                                                            Margin="0,0,16,0" Opacity="0.7" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                        <Path Classes="ico" Data="{StaticResource IconFileText}" Width="14" Height="14"
+                                                              Stroke="{DynamicResource TextMuted}" VerticalAlignment="Center" />
+                                                        <StackPanel VerticalAlignment="Center" Spacing="1">
+                                                            <TextBlock Text="{loc:Loc pair.meta_exclusions}" FontSize="10" Foreground="{DynamicResource TextMuted}" />
+                                                            <TextBlock Text="{Binding ExcludeCountSummary}" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </WrapPanel>
+                                        </Grid>
+
+                                        <!-- Right Column: Actions Button (Top Right) & Status Widget (Lower) -->
+                                        <Grid Grid.Column="1" Width="165" RowDefinitions="Auto,*">
+                                            <!-- Top Right: Actions button in place of former switch -->
+                                            <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,0,8">
+                                                <Button Classes="icon" ToolTip.Tip="{loc:Loc tasks.menu_tooltip}"
+                                                        Width="36" Height="24" CornerRadius="6" Padding="0"
+                                                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Background="{DynamicResource AccentSoft}" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1">
+                                                    <Path Classes="icof" Data="{StaticResource IconMoreVertical}" Width="13" Height="13"
+                                                          Fill="{DynamicResource Accent}"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     <Button.Flyout>
                                                         <MenuFlyout Placement="BottomEdgeAlignedRight">
                                                             <MenuItem Header="{loc:Loc tasks.run_now}" Click="OnRunPair">
@@ -142,22 +320,125 @@
                                                     </Button.Flyout>
                                                 </Button>
                                             </StackPanel>
+
+                                            <!-- Lowered Status Indicator & Sync Action Button -->
+                                            <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" Margin="0,6,0,0">
+                                                <!-- Circle status indicator -->
+                                                <Panel Width="48" Height="48" HorizontalAlignment="Center">
+                                                    <!-- Up to date indicator -->
+                                                    <Border Width="48" Height="48" CornerRadius="24"
+                                                            BorderBrush="{DynamicResource Success}" BorderThickness="2"
+                                                            Background="Transparent"
+                                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                            IsVisible="{Binding IsUpToDate}">
+                                                        <Path Data="{StaticResource IconCheck}" Width="20" Height="20"
+                                                              Stroke="{DynamicResource Success}" StrokeThickness="2.4"
+                                                              StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Path.RenderTransform>
+                                                                <TranslateTransform Y="3" />
+                                                            </Path.RenderTransform>
+                                                        </Path>
+                                                    </Border>
+
+                                                    <!-- Syncing / busy indicator -->
+                                                    <Panel Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsBusy}">
+                                                        <Path Data="{StaticResource IconProgressRing}" Width="48" Height="48"
+                                                              Stroke="{DynamicResource Accent}" StrokeThickness="2.5"
+                                                              StrokeLineCap="Round" Stretch="Uniform"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="18" Height="18"
+                                                              Stroke="{DynamicResource Accent}" StrokeThickness="2"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    </Panel>
+
+                                                    <!-- Paused indicator -->
+                                                    <Border Width="48" Height="48" CornerRadius="24"
+                                                            BorderBrush="{DynamicResource Neutral}" BorderThickness="2"
+                                                            Background="Transparent"
+                                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                            IsVisible="{Binding IsPaused}">
+                                                        <Path Classes="icof" Data="{StaticResource IconPauseFill}" Width="16" Height="16"
+                                                              Fill="{DynamicResource Neutral}"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    </Border>
+
+                                                    <!-- Error indicator -->
+                                                    <Border Width="48" Height="48" CornerRadius="24"
+                                                            BorderBrush="{DynamicResource Danger}" BorderThickness="2"
+                                                            Background="Transparent"
+                                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                            IsVisible="{Binding HasError}">
+                                                        <Path Classes="ico" Data="{StaticResource IconDismiss}" Width="18" Height="18"
+                                                              Stroke="{DynamicResource Danger}" StrokeThickness="2"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    </Border>
+                                                </Panel>
+
+                                                <!-- Status Title & Subtext -->
+                                                <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                                    <TextBlock Classes="status-title"
+                                                               Classes.success="{Binding IsUpToDate}"
+                                                               Classes.busy="{Binding IsBusy}"
+                                                               Classes.paused="{Binding IsPaused}"
+                                                               Classes.error="{Binding HasError}"
+                                                               Text="{Binding SyncStatusTitle}" />
+                                                    <TextBlock Text="{Binding SyncStatusSubtext}" FontSize="11"
+                                                               Foreground="{DynamicResource TextMuted}"
+                                                               HorizontalAlignment="Center" TextAlignment="Center"
+                                                               MaxWidth="160" Classes="oneline" />
+                                                </StackPanel>
+
+                                                <!-- Action Button: Sync now OR View details -->
+                                                <Panel Margin="0,4,0,0">
+                                                    <!-- Sync now button (when not busy) -->
+                                                    <Button Classes="accentsoft" Click="OnRunPair"
+                                                            CornerRadius="8" Padding="14,7" MinHeight="32"
+                                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                            IsVisible="{Binding !IsBusy}">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                                            <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="14" Height="14"
+                                                                  Stroke="{DynamicResource AccentText}" />
+                                                            <TextBlock Text="{loc:Loc tasks.sync_now}" FontSize="12" FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource AccentText}" />
+                                                        </StackPanel>
+                                                    </Button>
+
+                                                    <!-- View details button (when busy) -->
+                                                    <Button Classes="accentsoft" Click="OnViewDetails"
+                                                            CornerRadius="8" Padding="14,7" MinHeight="32"
+                                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                            IsVisible="{Binding IsBusy}">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                                            <Path Classes="ico" Data="{StaticResource IconBarChart}" Width="14" Height="14"
+                                                                  Stroke="{DynamicResource AccentText}" />
+                                                            <TextBlock Text="{loc:Loc tasks.view_details}" FontSize="12" FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource AccentText}" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </Panel>
+                                            </StackPanel>
                                         </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
                     </ListBox>
 
                     <!-- empty state -->
                     <Border Classes="card" IsVisible="{Binding !HasPairs}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                            Padding="40,32" MaxWidth="460">
-                        <StackPanel Spacing="10" HorizontalAlignment="Center">
-                            <Path Classes="ico" Data="{StaticResource IconFolders}" Width="34" Height="34" StrokeThickness="1.3"
-                                  Stroke="{DynamicResource TextMuted}" HorizontalAlignment="Center" />
-                            <TextBlock Classes="title" Text="{loc:Loc tasks.title}" HorizontalAlignment="Center" />
+                            Padding="48,40" MaxWidth="480" CornerRadius="16">
+                        <StackPanel Spacing="14" HorizontalAlignment="Center">
+                            <Border Width="56" Height="56" CornerRadius="14" Background="{DynamicResource AccentSoft}"
+                                    HorizontalAlignment="Center">
+                                <Path Classes="ico" Data="{StaticResource IconFolders}" Width="28" Height="28" StrokeThickness="1.6"
+                                      Stroke="{DynamicResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Classes="title" Text="{loc:Loc tasks.title}" HorizontalAlignment="Center" FontWeight="Bold" FontSize="18" />
                             <TextBlock Classes="secondary" TextAlignment="Center"
                                        Text="{loc:Loc tasks.empty}" />
-                            <Button Classes="primary" Content="{loc:Loc nav.add_task}" Click="OnAddPair" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                            <Button Classes="primary" Content="{loc:Loc nav.add_task}" Click="OnAddPair"
+                                    HorizontalAlignment="Center" Margin="0,8,0,0" CornerRadius="10" Padding="18,10" />
                         </StackPanel>
                     </Border>
                 </Panel>
@@ -212,6 +493,13 @@
                                           Content="{loc:Loc settings.task_scheduler}" />
                                 <TextBlock Text="{Binding Message}" IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                            Foreground="{Binding MessageIsError, Converter={x:Static app:Converters.StatusText}}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Classes="card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Classes="section" Text="{loc:Loc settings.update_section}" />
+                                <CheckBox IsChecked="{Binding AutoUpdate}" Content="{loc:Loc settings.auto_update}" />
                             </StackPanel>
                         </Border>
 

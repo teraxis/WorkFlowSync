@@ -41,6 +41,36 @@ public partial class MainWindow : Window
             Vm.ReplacePair(pair, draft);
     }
 
+    private void OnRowDoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e)
+    {
+        OnEditPair(sender, e);
+    }
+
+    private void OnOpenFolderPointerPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        if ((sender as Control)?.Tag is string path && !string.IsNullOrWhiteSpace(path))
+        {
+            try
+            {
+                if (System.IO.Directory.Exists(path) || System.IO.File.Exists(path))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+                }
+                else
+                {
+                    Vm.StatusText = $"Тека не існує: {path}";
+                    Vm.StatusIsError = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Vm.StatusText = $"Не вдалося відкрити теку: {ex.Message}";
+                Vm.StatusIsError = true;
+            }
+            e.Handled = true;
+        }
+    }
+
     private async void OnDeletePair(object? sender, RoutedEventArgs e)
     {
         if (PairOf(sender) is not { } pair) return;
@@ -61,6 +91,11 @@ public partial class MainWindow : Window
     {
         if (PairOf(sender) is not { } pair) return;
         await Vm.TogglePairAsync(pair);
+    }
+
+    private void OnViewDetails(object? sender, RoutedEventArgs e)
+    {
+        Vm.SelectedPage = 1;
     }
 
     private void OnOpenApproval(object? sender, RoutedEventArgs e)

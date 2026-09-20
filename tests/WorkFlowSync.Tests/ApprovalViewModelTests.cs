@@ -1,9 +1,11 @@
 using WorkFlowSync.App.ViewModels;
+using WorkFlowSync.Core.I18n;
 using WorkFlowSync.Core.Model;
 using WorkFlowSync.Core.State;
 
 namespace WorkFlowSync.Tests;
 
+[Collection("I18n Tests")]
 public class ApprovalViewModelTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "wfs-approvalvm-" + Guid.NewGuid().ToString("N"));
@@ -14,6 +16,7 @@ public class ApprovalViewModelTests : IDisposable
 
     public ApprovalViewModelTests()
     {
+        I18n.Instance.SetLanguage("uk");
         _src = Path.Combine(_dir, "src");
         _dst = Path.Combine(_dir, "dst");
         Directory.CreateDirectory(_src);

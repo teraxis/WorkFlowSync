@@ -8,6 +8,7 @@ using Xunit;
 
 namespace WorkFlowSync.Tests;
 
+[Collection("I18n Tests")]
 public sealed class LocalizationTests
 {
     [Fact]

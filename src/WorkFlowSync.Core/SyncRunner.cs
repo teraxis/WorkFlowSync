@@ -253,6 +253,9 @@ public sealed class SyncRunner
             {
                 VersionStore.Prune(pair.Target, pair.VersionsKeepDays, pair.VersionsMaxGb, pair.VersionsPath, _log);
             }
+            store.SetMeta($"last_run_{pair.Name}", StateStore.Fmt(DateTimeOffset.UtcNow));
+            store.SetMeta($"last_files_{pair.Name}", (exec.FilesCopied + exec.FilesUpdated).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            store.SetMeta($"last_errors_{pair.Name}", exec.Errors.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
         result.Elapsed = sw.Elapsed;

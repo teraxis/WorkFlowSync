@@ -35,5 +35,7 @@
   // balanced (типово) / full / low — скільки процесора дозволено зайняти проходу
   "cpuLoad": "balanced",
   "scanParallelism": 8,
-  "scanBufferSize": 262144
+  "scanBufferSize": 262144,
+  // Автооновлення: перевіряти наявність нових версій на GitHub при запуску
+  "autoUpdate": true
 }

@@ -5,6 +5,7 @@ using WorkFlowSync.App.Services;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
 using WorkFlowSync.Core.I18n;
+using WorkFlowSync.Core.State;
 
 namespace WorkFlowSync.App.ViewModels;
 
@@ -64,6 +65,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>How many files the «Останні зміни» window lists.</summary>
     [ObservableProperty] private int _recentLimit = 40;
 
+    /// <summary>Whether to check GitHub for newer versions on startup.</summary>
+    [ObservableProperty] private bool _autoUpdate = true;
+
+    /// <summary>Release version the user chose to skip (written to config, read by the checker).</summary>
+    public string? SkippedVersion { get; set; }
+
     /// <summary>Hours when routine messages are held back. Equal values = no quiet period.</summary>
     [ObservableProperty] private int _quietHoursFrom;
     [ObservableProperty] private int _quietHoursTo;
@@ -88,6 +95,44 @@ public sealed partial class MainViewModel : ObservableObject
     public bool HasPairs => Pairs.Count > 0;
     public bool HasSelection => SelectedPair is not null;
 
+    [ObservableProperty] private DateTimeOffset? _lastCheckTime;
+
+    public string LastCheckSummary => I18n.T("nav.last_check_format", FormatRelative(LastCheckTime));
+
+    public bool IsSystemOperational => Background.State != LoopState.Paused && Pairs.All(p => p.LastSyncErrors == 0);
+    public bool IsSystemWarning => !IsSystemOperational;
+
+    public string SystemStatusText => IsSystemWarning
+        ? I18n.T("nav.system_status_warning")
+        : I18n.T("nav.system_status_ok");
+
+    public void RaiseLastCheckSummary()
+    {
+        OnPropertyChanged(nameof(LastCheckSummary));
+        OnPropertyChanged(nameof(IsSystemOperational));
+        OnPropertyChanged(nameof(IsSystemWarning));
+        OnPropertyChanged(nameof(SystemStatusText));
+    }
+
+    public static string FormatRelative(DateTimeOffset? time)
+    {
+        if (time is null) return I18n.T("common.time_never");
+        var elapsed = DateTimeOffset.UtcNow - time.Value;
+        if (elapsed.TotalSeconds < 60) return I18n.T("common.time_just_now");
+        if (elapsed.TotalMinutes < 60) return I18n.T("common.time_mins_ago", Math.Max(1, (int)elapsed.TotalMinutes));
+        if (elapsed.TotalHours < 24) return I18n.T("common.time_hours_ago", Math.Max(1, (int)elapsed.TotalHours));
+        var days = Math.Max(1, (int)elapsed.TotalDays);
+        return I18n.T("common.time_days_ago", days);
+    }
+
+    private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
+
+    private void OnUi(Action action)
+    {
+        if (_ui is null || ReferenceEquals(SynchronizationContext.Current, _ui)) action();
+        else _ui.Post(_ => action(), null);
+    }
+
     public RunViewModel Run { get; }
     public AutostartViewModel Autostart { get; }
 
@@ -97,7 +142,11 @@ public sealed partial class MainViewModel : ObservableObject
     public MainViewModel(string configPath)
     {
         ConfigPath = configPath;
-        Pairs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasPairs));
+        Pairs.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasPairs));
+            RaiseLastCheckSummary();
+        };
         I18n.Instance.LanguageChanged += () =>
         {
             OnPropertyChanged(nameof(PageTitle));
@@ -108,8 +157,31 @@ public sealed partial class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(Themes));
             OnPropertyChanged(nameof(CpuLoads));
             OnPropertyChanged(nameof(NotifyModes));
+            RaiseLastCheckSummary();
         };
         Background = new BackgroundLoop(ConfigPath, ResolveLogDir, () => LogKeepDays);
+        Background.PassCompleted += r =>
+        {
+            OnUi(() =>
+            {
+                LastCheckTime = DateTimeOffset.UtcNow;
+                foreach (var pr in r.Pairs)
+                {
+                    var pairVm = Pairs.FirstOrDefault(p => string.Equals(p.Name, pr.Pair, StringComparison.OrdinalIgnoreCase));
+                    if (pairVm != null)
+                    {
+                        pairVm.LastSyncTime = DateTimeOffset.UtcNow;
+                        if (pr.Execution is { } ex)
+                        {
+                            pairVm.LastSyncFilesCount = ex.FilesCopied + ex.FilesUpdated;
+                            pairVm.LastSyncErrors = ex.Errors;
+                        }
+                        pairVm.RaiseSyncState();
+                    }
+                }
+                RaiseLastCheckSummary();
+            });
+        };
         Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => false);
         Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
         Load();
@@ -186,10 +258,53 @@ public sealed partial class MainViewModel : ObservableObject
         I18n.Instance.SetLanguage(Language);
         Notifications = cfg.Notifications;
         RecentLimit = cfg.RecentLimit;
+        AutoUpdate = cfg.AutoUpdate;
+        SkippedVersion = cfg.SkippedVersion;
         QuietHoursFrom = cfg.QuietHoursFrom;
         QuietHoursTo = cfg.QuietHoursTo;
         _loading = false;
         FollowPairStates();
+        LoadSyncStates();
+    }
+
+    public void LoadSyncStates()
+    {
+        try
+        {
+            if (File.Exists(StateFullPath))
+            {
+                using var store = new StateStore(StateFullPath);
+                var last = store.GetMeta("last_run");
+                if (last is not null && DateTimeOffset.TryParse(last, out var t))
+                {
+                    LastCheckTime = t;
+                }
+                foreach (var pair in Pairs)
+                {
+                    var pTime = store.GetMeta($"last_run_{pair.Name}") ?? last;
+                    if (pTime is not null && DateTimeOffset.TryParse(pTime, out var pt))
+                    {
+                        pair.LastSyncTime = pt;
+                    }
+                    var pFiles = store.GetMeta($"last_files_{pair.Name}");
+                    if (pFiles is not null && int.TryParse(pFiles, out var f))
+                    {
+                        pair.LastSyncFilesCount = f;
+                    }
+                    var pErrors = store.GetMeta($"last_errors_{pair.Name}");
+                    if (pErrors is not null && int.TryParse(pErrors, out var e))
+                    {
+                        pair.LastSyncErrors = e;
+                    }
+                    pair.RaiseSyncState();
+                }
+                RaiseLastCheckSummary();
+            }
+        }
+        catch
+        {
+            // ignore database read errors on initial load
+        }
     }
 
     /// <summary>
@@ -220,6 +335,8 @@ public sealed partial class MainViewModel : ObservableObject
         Language = Language,
         Notifications = Notifications,
         RecentLimit = RecentLimit,
+        AutoUpdate = AutoUpdate,
+        SkippedVersion = SkippedVersion,
         QuietHoursFrom = QuietHoursFrom,
         QuietHoursTo = QuietHoursTo,
     };
@@ -320,6 +437,10 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             await Run.RunPairAsync(pair.Name);
+            pair.LastSyncTime = DateTimeOffset.UtcNow;
+            LastCheckTime = DateTimeOffset.UtcNow;
+            pair.RaiseSyncState();
+            RaiseLastCheckSummary();
             SetStatus(Run.LastResult, error: false);
         }
         finally
@@ -360,6 +481,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     partial void OnNotificationsChanged(NotifyMode value) { MarkDirty(); OnPropertyChanged(nameof(NotificationsHint)); }
     partial void OnRecentLimitChanged(int value) => MarkDirty();
+    partial void OnAutoUpdateChanged(bool value) => MarkDirty();
     partial void OnQuietHoursFromChanged(int value) { MarkDirty(); OnPropertyChanged(nameof(NotificationsHint)); }
     partial void OnQuietHoursToChanged(int value) { MarkDirty(); OnPropertyChanged(nameof(NotificationsHint)); }
     partial void OnStatePathChanged(string value) { MarkDirty(); RaiseFolderPaths(); }
