@@ -133,7 +133,7 @@
 
 ```json
 {
-  "name": "vrp", "source": "E:\\vrp", "target": "D:\\OneDrive\\Робоча папка",
+  "name": "docs", "source": "E:\\docs", "target": "D:\\Sync\\docs",
   "maxAge": "365.00:00:00",
   "autoClean": null
 }

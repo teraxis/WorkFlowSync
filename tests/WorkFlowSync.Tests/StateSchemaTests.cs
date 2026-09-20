@@ -68,20 +68,20 @@ public class StateSchemaTests : IDisposable
     {
         var seen = new DateTimeOffset(2024, 3, 7, 14, 21, 9, TimeSpan.Zero);
         WriteLegacyDatabase(
-            ("vrp", @"Засідання ВРП\протокол.docx", seen, 1234),
-            ("vrp", @"Засідання ВРП", seen, null),
+            ("docs", @"Документи\протокол.docx", seen, 1234),
+            ("docs", @"Документи", seen, null),
             ("other", @"a.txt", seen.AddDays(-10), 7));
 
         using var store = new StateStore(DbPath);
-        var vrp = store.Load("vrp");
+        var docs = store.Load("docs");
 
-        Assert.Equal(2, vrp.Count);
+        Assert.Equal(2, docs.Count);
         Assert.Equal(1, store.Count("other"));
-        var file = vrp[@"Засідання ВРП\протокол.docx"];
+        var file = docs[@"Документи\протокол.docx"];
         Assert.Equal(seen, file.FirstSeenUtc);                       // the date survives the text -> integer rewrite
         Assert.Equal(seen.AddSeconds(30), file.SourceMtimeUtc);
         Assert.Equal(1234, file.SourceSize);
-        Assert.Null(vrp[@"Засідання ВРП"].SourceSize);
+        Assert.Null(docs[@"Документи"].SourceSize);
 
         Assert.Equal("3", store.GetMeta("schema_version"));
         Assert.NotNull(store.MigratedFromBackup);
@@ -93,7 +93,7 @@ public class StateSchemaTests : IDisposable
     {
         var seen = new DateTimeOffset(2026, 3, 7, 14, 21, 9, TimeSpan.Zero);
         WriteV2Database(
-            ("vrp", @"Засідання ВРП\протокол.docx", seen, 5432),
+            ("docs", @"Документи\протокол.docx", seen, 5432),
             ("other", @"test.txt", seen, 12));
 
         using var store = new StateStore(DbPath);
@@ -104,9 +104,9 @@ public class StateSchemaTests : IDisposable
         Assert.True(File.Exists(store.MigratedFromBackup), "v2 database must be backed up before v3 migration");
 
         // entries are completely preserved
-        var vrp = store.Load("vrp");
-        Assert.Single(vrp);
-        Assert.Equal(5432, vrp[@"Засідання ВРП\протокол.docx"].SourceSize);
+        var docs = store.Load("docs");
+        Assert.Single(docs);
+        Assert.Equal(5432, docs[@"Документи\протокол.docx"].SourceSize);
         Assert.Equal(1, store.Count("other"));
 
         // pending table exists and works

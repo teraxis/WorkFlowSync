@@ -20,14 +20,14 @@
 {
   "pairs": [
     {
-      "name": "vrp",
+      "name": "Documents",
       "mode": "mirror",
-      "source": "E:\\vrp",
-      "target": "D:\\OneDrive\\Робоча папка",
+      "source": "\\\\server\\share\\Documents",
+      "target": "D:\\Sync\\Documents",
       "links": "follow",
       "maxAge": "365.00:00:00",
       "autoClean": null,
-      "exclude": [ "\\Друга дисциплінарна палата\\*Робочий.docx" ]
+      "exclude": [ "\\Temp\\*Draft.docx" ]
     }
   ],
   "statePath": "state.db",

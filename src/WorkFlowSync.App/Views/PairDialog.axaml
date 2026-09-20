@@ -49,7 +49,7 @@
                             <Button Grid.Row="2" Grid.Column="2" Content="{loc:Loc common.browse}" Margin="8,0,0,0" Click="OnBrowseSource" />
 
                             <TextBlock Grid.Row="4" Grid.Column="0" Text="{Binding TargetLabel}" VerticalAlignment="Center" />
-                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Target}" Classes="mono" Watermark="D:\OneDrive\…" />
+                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Target}" Classes="mono" Watermark="D:\Sync\тека" />
                             <Button Grid.Row="4" Grid.Column="2" Content="{loc:Loc common.browse}" Margin="8,0,0,0" Click="OnBrowseTarget" />
                         </Grid>
                     </StackPanel>

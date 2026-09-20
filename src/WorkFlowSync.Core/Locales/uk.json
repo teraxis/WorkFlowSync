@@ -101,7 +101,7 @@
   "pair.versioning_keep_label": "Зберігати",
   "pair.versioning_max_label": "днів, не більше",
   "pair.section_excludes": "ВИКЛЮЧЕННЯ",
-  "pair.excludes_hint": "По одному шаблону в рядку, відносно вихідної теки. Приклади: \\Тимчасове · *.tmp · \\Палата\\*Робочий.docx",
+  "pair.excludes_hint": "По одному шаблону в рядку, відносно вихідної теки. Приклади: \\Тимчасове · *.tmp · \\Папка\\*Чернетка.docx",
 
   "approval.title": "Погодження змін",
   "approval.approve_all": "Підтвердити всі",

@@ -13,9 +13,9 @@ public class ExcludeMatcherTests
     [InlineData("*.tmp", @"x\y\b.tmpx", false)]
     [InlineData(@"~$*", @"docs\~$report.docx", true)]
     [InlineData(@"~$*", @"docs\a~$report.docx", false)]               // must start at a segment boundary
-    [InlineData(@"\Друга дисциплінарна палата\*Робочий.docx", @"Друга дисциплінарна палата\2025_рік\10_Робочий.docx", true)]
-    [InlineData(@"\Друга дисциплінарна палата\*Робочий.docx", @"Друга дисциплінарна палата\2025_рік\10_Робочий.docx\x", true)]
-    [InlineData(@"\Друга дисциплінарна палата\*Робочий.docx", @"Друга дисциплінарна палата\2025_рік\10.docx", false)]
+    [InlineData(@"\Проєкти\*Робочий.docx", @"Проєкти\2025_рік\10_Робочий.docx", true)]
+    [InlineData(@"\Проєкти\*Робочий.docx", @"Проєкти\2025_рік\10_Робочий.docx\x", true)]
+    [InlineData(@"\Проєкти\*Робочий.docx", @"Проєкти\2025_рік\10.docx", false)]
     [InlineData("obj", @"src\obj\x.o", true)]
     [InlineData("obj", @"src\object\x.o", false)]
     public void Matches_like_freefilesync(string pattern, string path, bool expected)

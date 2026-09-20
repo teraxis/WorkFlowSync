@@ -11,7 +11,7 @@ public class SyncConfigTests
         {
           // comments are allowed
           "pairs": [
-            { "name": "vrp", "source": "E:\\vrp", "target": "D:\\OneDrive\\Робоча папка", "links": "follow", "retention": "365.00:00:00" }
+            { "name": "docs", "source": "E:\\docs", "target": "D:\\Sync\\docs", "links": "follow", "retention": "365.00:00:00" }
           ],
           "interval": "00:30:00"
         }

@@ -16,9 +16,9 @@ public class PairViewModelTests
     {
         var model = new FolderPair
         {
-            Name = "vrp",
-            Source = @"E:\vrp",
-            Target = @"D:\OneDrive\Робоча папка",
+            Name = "docs",
+            Source = @"E:\docs",
+            Target = @"D:\Sync\docs",
             Links = LinkMode.Skip,
             MaxAge = TimeSpan.FromDays(400),
             AutoClean = TimeSpan.FromDays(700),

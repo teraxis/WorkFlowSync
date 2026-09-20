@@ -8,12 +8,12 @@
 
 ```
 2026-09-14 13:40:02 INFO  pass start  pairs=1 config=D:\Tools\WorkFlowSync\config.json
-2026-09-14 13:40:31 INFO  [vrp] scan source  dirs=48213 files=471902 links=3 took=28.4s
-2026-09-14 13:40:33 INFO  [vrp] scan target  dirs=47990 files=469110 took=1.9s
-2026-09-14 13:40:33 INFO  [vrp] plan  new=214 update=37 tombstone=5 local_modified=2 retention=0
-2026-09-14 13:41:05 INFO  [vrp] copy  \2026\звіт.docx  1.2MB
-2026-09-14 13:41:05 WARN  [vrp] link cycle  \Архів\Назад -> E:\vrp  skipped
-2026-09-14 13:41:40 INFO  [vrp] done  copied=251 bytes=812MB errors=0 took=97.3s
+2026-09-14 13:40:31 INFO  [Docs] scan source  dirs=48213 files=471902 links=3 took=28.4s
+2026-09-14 13:40:33 INFO  [Docs] scan target  dirs=47990 files=469110 took=1.9s
+2026-09-14 13:40:33 INFO  [Docs] plan  new=214 update=37 tombstone=5 local_modified=2 retention=0
+2026-09-14 13:41:05 INFO  [Docs] copy  \2026\звіт.docx  1.2MB
+2026-09-14 13:41:05 WARN  [Docs] link cycle  \Архів\Назад -> E:\Docs  skipped
+2026-09-14 13:41:40 INFO  [Docs] done  copied=251 bytes=812MB errors=0 took=97.3s
 2026-09-14 13:41:40 INFO  pass end  result=ok
 ```
 

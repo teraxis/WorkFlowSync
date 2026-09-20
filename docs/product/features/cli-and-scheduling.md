@@ -43,12 +43,12 @@ wfs version
 «що це за папка і чого від неї очікувати», перш ніж вмикати для неї відстеження змін.
 
 ```
-> wfs probe S:\
-root: S:\
+> wfs probe X:\
+root: X:\
   kind:         RemoteShare
   drive type:   Network
-  unc:          \\<host>\<share>
-  host:         <host> -> 91.98.240.208 (public)
+  unc:          \\storage.example.com\share
+  host:         storage.example.com -> 203.0.113.10 (public)
   available:    yes
   first entry:  169,8 ms   (roughly one round trip)
   root listing: 80,5 ms for 25 entries

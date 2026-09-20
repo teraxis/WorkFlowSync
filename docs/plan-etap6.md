@@ -403,7 +403,7 @@ Windows це той самий шлях, а первинний ключ бази
 
 ```json
 {
-  "name": "Засідання ВРП",
+  "name": "Документи",
   "mode": "twoWay",
   "requireApproval": true,
   "approvalSide": "target",

@@ -188,5 +188,4 @@ WorkFlowSync is fully bilingual (Ukrainian and English) with dynamic runtime lan
 - Edit `.cs`/`.md`/`.json` with Edit/Write only; PowerShell 5.1 `Set-Content` without `-Encoding utf8` corrupts Cyrillic.
 - Bash heredocs in the agent tool choke on C# raw strings / quotes — use Write for code files.
 - `Microsoft.Data.Sqlite` 10.0.12 (bundle_e_sqlite3) is compatible with net8.0 and single-file publish (`IncludeNativeLibrariesForSelfExtract`).
-- Publish size 34.6 MB with `EnableCompressionInSingleFile`; `DebugType=embedded` in `Directory.Build.props` keeps `.pdb` files out of `publish\`.
-- (historical) The user's real FFS config: `D:\OneDrive\Робоча папка\App\freefilesync\batch.ffs_batch` (6.6 MB, 22,569 excludes; pair `E:\vrp` → `E:\OneDrive\Робоча папка`). Real paths for the pairs are still to be confirmed (requirements open question 1).
+- (historical) FFS migration benchmark was tested against a 6.6 MB batch.ffs_batch file with 22,569 excludes.

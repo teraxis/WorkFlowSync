@@ -11,9 +11,9 @@
 
 ## Вихідна точка
 
-`D:\OneDrive\Робоча папка\App\freefilesync\batch.ffs_batch` (XmlFormat 23):
+`D:\Tools\FreeFileSync\batch.ffs_batch` (XmlFormat 23):
 
-- пара `E:\vrp\` → `E:\OneDrive\Робоча папка\`, порівняння `TimeAndSize`, `Symlinks=Follow`;
+- пара `\\server\share\docs\` → `D:\Sync\docs\`, порівняння `TimeAndSize`, `Symlinks=Follow`;
 - зміни: `Left Create=right Update=right Delete=none`, `Right — none` (тобто саме правила 1–2);
 - `<Exclude>` — **22 569** шляхів: ручна реалізація правила 3 (те, що користувач видалив локально);
 - запуск через Планувальник завдань Windows.
@@ -27,7 +27,7 @@ wfs import-excludes "D:\...\batch.ffs_batch" [--pair <name>] [--dry-run] [--no-p
 1. Читає `<FolderPairs>`; кожна FFS-пара зіставляється з парою конфігу за **джерелом** (`Left`,
    без урахування регістру й кінцевого `\`) або береться явно через `--pair`. Пара без
    відповідника — повідомлення «додайте пару і повторіть» (пари не створюються автоматично: ціль
-   у FFS могла переїхати, як `E:\OneDrive` → `D:\OneDrive`).
+   у FFS могла переїхати, як `E:\Sync` → `D:\Sync`).
 2. Читає глобальний `<Filter><Exclude>` і фільтр пари:
    - записи з шаблонами (`*`, `?`) → у `exclude` пари (дублікати не додаються);
    - конкретні шляхи → у базу стану як `tombstone` з `first_seen = status_changed = момент

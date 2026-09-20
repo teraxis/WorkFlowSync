@@ -12,9 +12,9 @@ public class RootProbeTests
 {
     [Theory]
     [InlineData(@"\\server\share\folder", true, "server", "share", null)]
-    [InlineData(@"\\u298899-sub1.your-storagebox.de\u298899-sub1", true, "u298899-sub1.your-storagebox.de", "u298899-sub1", null)]
+    [InlineData(@"\\storage.example.com\share", true, "storage.example.com", "share", null)]
     [InlineData(@"\\?\UNC\server\share\deep", true, "server", "share", null)]
-    [InlineData(@"S:\tmp\test", false, null, null, 'S')]
+    [InlineData(@"X:\data\folder", false, null, null, 'X')]
     [InlineData(@"c:\", false, null, null, 'C')]
     [InlineData(@"\\?\C:\long\path", false, null, null, 'C')]
     [InlineData(@"relative\path", false, null, null, null)]

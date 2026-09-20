@@ -38,7 +38,7 @@
 
 ```json
 {
-  "name": "Документи ВРП",
+  "name": "Спільні документи",
   "mode": "twoWay",
   "requireApproval": true,
   "approvalSide": "target",

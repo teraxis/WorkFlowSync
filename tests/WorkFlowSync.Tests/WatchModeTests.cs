@@ -20,7 +20,7 @@ public class WatchModeTests
     public void A_config_written_before_this_feature_reads_as_auto()
     {
         const string json = """
-        { "pairs": [ { "name": "vrp", "source": "S:\\src", "target": "D:\\dst" } ] }
+        { "pairs": [ { "name": "docs", "source": "C:\\src", "target": "D:\\dst" } ] }
         """;
 
         var cfg = SyncConfig.Parse(json);

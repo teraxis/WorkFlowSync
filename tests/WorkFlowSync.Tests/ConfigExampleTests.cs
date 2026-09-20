@@ -26,7 +26,7 @@ public class ConfigExampleTests
         var raw = File.ReadAllText(configPath);
 
         // Disallow sensitive/user personal paths and identifiers
-        string[] forbidden = ["S:\\", "OneDrive", "ВРП", "tmp\\test", "teraxis"];
+        string[] forbidden = ["S:\\", "OneDrive", "ВРП", "tmp\\test", "teraxis", "storagebox", "u298899", "91.98"];
         foreach (var item in forbidden)
         {
             Assert.DoesNotContain(item, raw, StringComparison.OrdinalIgnoreCase);
