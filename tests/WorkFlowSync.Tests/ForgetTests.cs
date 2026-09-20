@@ -16,8 +16,8 @@ public class ForgetTests
             store.Upsert(new[] { Row(@"Архів\a.txt"), Row(@"Архів\b\c.txt"), Row(@"Архівний\z.txt"), Row("top.txt") });
 
             Assert.Equal(2, store.DeleteSubtree("t", @"\архів\"));
-            var left = store.Load("t").Keys.OrderBy(k => k).ToArray();
-            Assert.Equal(new[] { @"Архівний\z.txt", "top.txt" }, left);
+            var left = store.Load("t").Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToArray();
+            Assert.Equal(new[] { "top.txt", @"Архівний\z.txt" }, left);
         }
         finally
         {
