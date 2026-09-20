@@ -26,7 +26,8 @@ jobs:
         run: dotnet test WorkFlowSync.sln --no-build --nologo
 
       - name: Publish portable exe
-        run: dotnet publish src/WorkFlowSync.Cli/WorkFlowSync.Cli.csproj -c Release -r win-x64 -o publish/portable --nologo
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1
 
       - name: Smoke
-        run: publish/portable/WorkFlowSync.exe config validate --config config.example.json
+        run: .\publish\portable\wfs.exe config validate --config config.example.json
+
