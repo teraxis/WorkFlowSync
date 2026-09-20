@@ -213,14 +213,29 @@ public sealed class LoopRunner
             await Task.Delay(remaining < PollInterval ? remaining : PollInterval, ct).ConfigureAwait(false);
             if (ct.IsCancellationRequested) return false;
 
-            foreach (var ready in watchers.TakeReady())
+            var readyList = watchers.TakeReady();
+            if (readyList.Count > 0)
             {
-                if (ready.Batch.NeedsFullPass)
+                var fullPassNeeded = false;
+                foreach (var ready in readyList)
                 {
-                    _log.Info($"[{ready.PairName}] {ready.Batch.Reason} — running a full pass now");
-                    return true;    // the outer loop does exactly that
+                    if (ct.IsCancellationRequested) return false;
+
+                    if (ready.Batch.NeedsFullPass)
+                    {
+                        _log.Info($"[{ready.PairName}] {ready.Batch.Reason} — running a full pass now");
+                        _nextDue[ready.PairName] = DateTimeOffset.MinValue;
+                        fullPassNeeded = true;
+                    }
+                    else if (!RunScoped(ready, cfg, ct))
+                    {
+                        if (ct.IsCancellationRequested) return false;
+                        _log.Info($"[{ready.PairName}] change requires a full pass — running a full pass now");
+                        _nextDue[ready.PairName] = DateTimeOffset.MinValue;
+                        fullPassNeeded = true;
+                    }
                 }
-                if (!RunScoped(ready, cfg, ct)) return true;
+                if (fullPassNeeded) return true;
             }
         }
         return false;
@@ -234,6 +249,11 @@ public sealed class LoopRunner
     {
         var pair = cfg.Pairs.FirstOrDefault(p => p.Name.Equals(ready.PairName, StringComparison.OrdinalIgnoreCase));
         if (pair is null || !pair.Enabled) return true;   // paused or removed while we were waiting
+
+        // If any candidate cannot be scoped to (e.g. a top-level file, a deleted folder, or an empty path),
+        // a full pass is required. Checking this upfront avoids running partial passes right before a full pass anyway.
+        if (ready.Batch.Directories.Any(d => string.IsNullOrEmpty(d) || !Directory.Exists(Path.Combine(ready.Root, d))))
+            return false;
 
         foreach (var dir in ready.Batch.Directories)
         {
