@@ -45,4 +45,21 @@ public class ConfigExampleTests
             Assert.False(string.IsNullOrWhiteSpace(pair.Target));
         }
     }
+
+    [Fact]
+    public void Portable_publish_excludes_config_example_json_when_staged()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var publishPortable = Path.Combine(dir.FullName, "publish", "portable");
+            if (Directory.Exists(publishPortable))
+            {
+                var exampleInPublish = Path.Combine(publishPortable, "config.example.json");
+                Assert.False(File.Exists(exampleInPublish), "config.example.json must not be present in publish/portable");
+                break;
+            }
+            dir = dir.Parent;
+        }
+    }
 }

@@ -125,15 +125,25 @@ public sealed class BackgroundLoop : IDisposable
         Set(LoopState.Paused);
     }
 
+    private readonly object _syncLock = new();
+
     /// <summary>Cancels the worker and gives it a moment to unwind, so a following Start() is not a no-op.</summary>
     private void CancelAndWait()
     {
-        if (_cts is null) return;
-        _cts.Cancel();
-        try { _task?.Wait(TimeSpan.FromSeconds(5)); } catch { /* cancellation surfaces here */ }
-        _cts.Dispose();
-        _cts = null;
-        _task = null;
+        CancellationTokenSource? cts;
+        Task? task;
+        lock (_syncLock)
+        {
+            cts = _cts;
+            task = _task;
+            _cts = null;
+            _task = null;
+        }
+
+        if (cts is null) return;
+        try { cts.Cancel(); } catch { /* ignore */ }
+        try { task?.Wait(TimeSpan.FromSeconds(5)); } catch { /* cancellation surfaces here */ }
+        try { cts.Dispose(); } catch { /* ignore */ }
     }
 
     public void Resume()

@@ -9,15 +9,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish.ps1
 ```
 
 Output: `publish\portable\WorkFlowSync.exe` (GUI, ~45 MB) and `wfs.exe` (console, ~35 MB), both
-self-contained single-file win-x64, plus `config.example.json`. No .NET runtime installation is required on the target machine.
+self-contained single-file win-x64. No .NET runtime installation is required on the target machine.
 
 ## Install for the user (no administrator rights)
 
-1. Copy `WorkFlowSync.exe`, `wfs.exe` and `config.example.json` to a folder the user owns, e.g. `D:\Tools\WorkFlowSync\`.
+1. Copy `WorkFlowSync.exe` and `wfs.exe` to a folder the user owns, e.g. `D:\Tools\WorkFlowSync\`.
    Everything the app writes (config.json, state.db, logs\) lands in that same folder, whatever the working directory.
    Do not put it inside OneDrive (state.db would be synced and locked).
-2. Start `WorkFlowSync.exe`, add the folder pairs and settings, press «Зберегти» (creates `config.json`);
-   or rename `config.example.json` → `config.json` and edit by hand.
+2. Start `WorkFlowSync.exe`, add the folder pairs and settings (automatically creates `config.json`).
 3. `wfs config validate`.
 4. Migrate from FreeFileSync: `docs/product/features/ffs-migration.md`.
 5. Choose the run mode (`docs/product/features/cli-and-scheduling.md`):

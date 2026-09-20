@@ -18,4 +18,4 @@ commits, or agent attribution.
 
 ## Removed
 
-<!-- Add removals here for the next release -->
+- Вилучено `config.example.json` із релізних пакетів (`config.json` автоматично створюється під час першого запуску програми).

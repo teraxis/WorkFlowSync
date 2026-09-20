@@ -10,37 +10,15 @@ $out = Join-Path $root "publish\portable"
 Copy-Item -LiteralPath (Join-Path $root "portable\README.txt") -Destination $out -Force
 
 # Strict security & privacy checks: prevent any live user data, personal paths, or logs from leaking into the release package.
-foreach ($leftover in "config.json", "state.db", "state.db-wal", "state.db-shm", "logs", ".wfsversions") {
+# Releases are packaged without config.example.json or user-specific files; config.json is created automatically on first run.
+foreach ($leftover in "config.example.json", "config.json", "state.db", "state.db-wal", "state.db-shm", "logs", ".wfsversions") {
     $path = Join-Path $out $leftover
     if (Test-Path $path) { Remove-Item $path -Recurse -Force }
 }
 
 $exampleConfig = Join-Path $out "config.example.json"
-if (-not (Test-Path $exampleConfig)) {
-    throw "Security check failed: config.example.json missing from publish package."
-}
-
-$exampleContent = Get-Content $exampleConfig -Raw
-$vrpString = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xD0, 0x92, 0xD0, 0xA0, 0xD0, 0x9F))
-$forbiddenPatterns = @(
-    'S:\',
-    'OneDrive',
-    $vrpString,
-    'teraxis',
-    'tmp\test'
-)
-foreach ($pattern in $forbiddenPatterns) {
-    if ($exampleContent.IndexOf($pattern, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-        throw "Security check failed: config.example.json contains user-specific/sensitive pattern '$pattern'. Aborting release build."
-    }
-}
-
-$wfsExe = Join-Path $out "wfs.exe"
-if (Test-Path $wfsExe) {
-    & $wfsExe config validate --config $exampleConfig
-    if ($LASTEXITCODE -ne 0) {
-        throw "Validation failed for config.example.json in package."
-    }
+if (Test-Path $exampleConfig) {
+    throw "Security check failed: config.example.json must not be included in the release package."
 }
 
 $version = (Get-Item (Join-Path $out "WorkFlowSync.exe")).VersionInfo.ProductVersion
