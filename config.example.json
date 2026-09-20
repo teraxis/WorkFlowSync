@@ -1,14 +1,14 @@
 {
   // WorkFlowSync configuration. Copy to config.json next to WorkFlowSync.exe / wfs.exe and adjust,
-  // or simply start WorkFlowSync.exe and use the «Папки» / «Налаштування» tabs.
+  // or simply start WorkFlowSync.exe and use the «Завдання» / «Налаштування» tabs.
   // Times use .NET TimeSpan format: "d.hh:mm:ss" (365 days = "365.00:00:00", 30 minutes = "00:30:00").
   "pairs": [
     {
-      "name": "test",
+      "name": "Documents",
       // "mirror" — у один бік із памʼяттю (типово), "twoWay" — повна синхронізація в обидва боки
       "mode": "mirror",
-      "source": "S:\\tmp\\test\\Засідання ВРП",
-      "target": "D:\\OneDrive\\tmp\\test",
+      "source": "\\\\server\\share\\Documents",
+      "target": "D:\\Sync\\Documents",
       "links": "follow",
       // "auto" (типово) — стежити за змінами там, де сховище це дозволяє; "on" — завжди; "off" — лише за інтервалом
       "watch": "auto",

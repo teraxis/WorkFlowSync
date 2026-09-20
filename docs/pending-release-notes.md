@@ -14,7 +14,7 @@ commits, or agent attribution.
 
 ## Fixed
 
-<!-- Add bug fixes here for the next release -->
+- Очищено файл зразка конфігурації `config.example.json` від локальних тестових шляхів та встановлено абстрактні шаблонні шляхи.
 
 ## Removed
 
