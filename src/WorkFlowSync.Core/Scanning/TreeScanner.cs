@@ -16,9 +16,8 @@ public sealed class TreeScanner
 {
     private const int MaxLinkDepth = 8;
 
-    // Cloud-file placeholders (OneDrive Files On-Demand) are reparse points too; they are ordinary files/dirs for us.
-    private const FileAttributes RecallOnOpen = (FileAttributes)0x40000;
-    private const FileAttributes RecallOnDataAccess = (FileAttributes)0x400000;
+    // Cloud-file placeholders (OneDrive Files On-Demand) are reparse points too; they are ordinary files/dirs
+    // for the scanner. The flags themselves live in CloudFiles, which the executor also consults.
 
     private readonly EnumerationOptions _options;
     private readonly int _parallelism;
@@ -55,11 +54,18 @@ public sealed class TreeScanner
     private readonly record struct RawEntry(string Name, string FullPath, bool IsDirectory, long Length,
         DateTimeOffset Mtime, DateTimeOffset Ctime, FileAttributes Attributes);
 
-    public ScanResult Scan(string root, CancellationToken ct = default)
+    /// <param name="relativeRoot">
+    /// Scan only this subtree, while still reporting paths relative to <paramref name="root"/> — what a
+    /// partial pass needs, so its entries line up with the state database (docs/plan-etap5.md §4.2).
+    /// </param>
+    public ScanResult Scan(string root, CancellationToken ct = default, string? relativeRoot = null)
     {
         var sw = Stopwatch.StartNew();
         root = Path.GetFullPath(root).TrimEnd('\\', '/');
-        if (!Directory.Exists(root)) throw new RootUnavailableException(root);
+        var relative = relativeRoot?.Trim().Trim('\\', '/') ?? string.Empty;
+        // Everything below walks from here; only the relative paths handed out keep the pair root as origin.
+        var start = relative.Length == 0 ? root : Path.Combine(root, relative);
+        if (!Directory.Exists(start)) throw new RootUnavailableException(start);
 
         var result = new ScanResult();
         var warnings = new ConcurrentBag<string>();
@@ -68,17 +74,17 @@ public sealed class TreeScanner
 
         var channel = Channel.CreateUnbounded<WorkItem>(new UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
         var pending = 1;
-        channel.Writer.TryWrite(new WorkItem(root, "", root, Array.Empty<string>(), false, 0));
+        channel.Writer.TryWrite(new WorkItem(start, relative, start, Array.Empty<string>(), false, 0));
 
         // Probe the root synchronously so an offline share fails fast and loudly.
         try
         {
-            using var probe = new FileSystemEnumerable<int>(root, (ref FileSystemEntry _) => 0, _options).GetEnumerator();
+            using var probe = new FileSystemEnumerable<int>(start, (ref FileSystemEntry _) => 0, _options).GetEnumerator();
             probe.MoveNext();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new RootUnavailableException(root, ex);
+            throw new RootUnavailableException(start, ex);
         }
 
         // Dedicated threads, not the thread pool: only then does the priority below actually stick,
@@ -97,12 +103,16 @@ public sealed class TreeScanner
                 {
                     while (channel.Reader.TryRead(out var item))
                     {
-                        ct.ThrowIfCancellationRequested();
                         try
                         {
+                            ct.ThrowIfCancellationRequested();
                             ProcessDirectory(item, local, warnings, channel.Writer, ref pending, ref dirs, ref files, ref links);
                         }
-                        catch (OperationCanceledException) { throw; }
+                        catch (OperationCanceledException)
+                        {
+                            channel.Writer.TryComplete();
+                            throw;
+                        }
                         catch (Exception ex)
                         {
                             warnings.Add($"{item.RelativePath}: {ex.GetType().Name}: {ex.Message}");
@@ -132,6 +142,23 @@ public sealed class TreeScanner
         foreach (var list in entries)
             foreach (var e in list)
                 result.Entries[e.RelativePath] = e;
+
+        // A scan reports children, never the directory it started from. For a full pass that is right — the pair
+        // root has no state row. A scoped scan does start from a folder the state knows about, so without this
+        // the planner would see that folder in the state, miss it in both scans, and conclude it had vanished.
+        if (relative.Length > 0 && !result.Entries.ContainsKey(relative))
+        {
+            var info = new DirectoryInfo(start);   // one call per pass, not per entry
+            result.Entries[relative] = new ScanEntry
+            {
+                RelativePath = relative,
+                Kind = EntryKind.Directory,
+                MtimeUtc = new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero),
+                CtimeUtc = new DateTimeOffset(info.CreationTimeUtc, TimeSpan.Zero),
+            };
+            dirs++;
+        }
+
         result.Warnings.AddRange(warnings);
         result.DirectoryCount = dirs;
         result.FileCount = files;
@@ -167,6 +194,7 @@ public sealed class TreeScanner
         foreach (var r in raw)
         {
             var rel = item.RelativePath.Length == 0 ? r.Name : item.RelativePath + "\\" + r.Name;
+            if (IsReservedName(rel, r.Name)) continue;
             if (_excludes.IsExcluded(rel)) continue;
 
             if (!r.IsDirectory)
@@ -218,6 +246,15 @@ public sealed class TreeScanner
         }
     }
 
+    private static bool IsReservedName(string relPath, string name)
+    {
+        if (name.Equals(".wfsversions", StringComparison.OrdinalIgnoreCase)) return true;
+        if (name.EndsWith(".wfs-tmp", StringComparison.OrdinalIgnoreCase)) return true;
+        if (relPath.Equals(".wfsversions", StringComparison.OrdinalIgnoreCase) ||
+            relPath.StartsWith(".wfsversions\\", StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
     /// <summary>A link target that contains (or is) the current physical directory, or any directory a link on this
     /// path was followed from, would recurse forever. Sibling links (two names for one folder) are fine and mirrored twice.</summary>
     private static bool IsCycle(string target, string currentReal, string[] chain)
@@ -232,8 +269,7 @@ public sealed class TreeScanner
         path.StartsWith(ancestor + "\\", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsLinkCandidate(FileAttributes a) =>
-        a.HasFlag(FileAttributes.ReparsePoint) &&
-        (a & (RecallOnOpen | RecallOnDataAccess | FileAttributes.Offline)) == 0;
+        a.HasFlag(FileAttributes.ReparsePoint) && !CloudFiles.IsPlaceholder(a);
 
     /// <summary>Final target of a symlink/junction, or null when the reparse point is not a link.</summary>
     private static string? TryResolveLink(string fullPath)

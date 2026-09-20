@@ -8,7 +8,10 @@ using Avalonia.Threading;
 using WorkFlowSync.App.Services;
 using WorkFlowSync.App.ViewModels;
 using WorkFlowSync.App.Views;
+using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
+using WorkFlowSync.Core.I18n;
+using WorkFlowSync.Core.Notifications;
 
 namespace WorkFlowSync.App;
 
@@ -19,6 +22,13 @@ public partial class App : Application
     private TrayIcon? _tray;
     private NativeMenuItem? _pauseItem;
     private NativeMenuItem? _statusItem;
+    private NativeMenuItem? _recentItem;
+    private NativeMenuItem? _openItem;
+    private NativeMenuItem? _syncNowItem;
+    private NativeMenuItem? _exitItem;
+    private RecentChangesWindow? _recentWindow;
+    private RecentChangesViewModel? _recentModel;
+    private NotificationWindow? _notification;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -41,11 +51,17 @@ public partial class App : Application
             _vm.ThemeApplied += ApplyTheme;
             ApplyTheme(_vm.Theme);
             _vm.Background.Changed += UpdateTray;
+            _vm.Background.PassCompleted += OnPassCompleted;
             _window = new MainWindow { DataContext = _vm };
             _window.Closing += OnWindowClosing;
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             SetUpTray(desktop);
+
+            // Launching the program again (Start menu, shortcut, double-click) must not open a second window:
+            // the other process exits straight away and asks this one to come forward. ShowWindow already
+            // marshals to the UI thread, so the background signal can call it directly.
+            SingleInstance.Current?.ListenForOtherLaunches(ShowWindow);
 
             if (trayMode)
             {
@@ -86,28 +102,35 @@ public partial class App : Application
             var icon = new WindowIcon(stream);
             _window!.Icon = icon;
 
-            _statusItem = new NativeMenuItem("Фоновий режим: вимкнено") { IsEnabled = false };
-            var open = new NativeMenuItem("Відкрити вікно");
-            open.Click += (_, _) => ShowWindow();
-            var syncNow = new NativeMenuItem("Синхронізувати зараз");
-            syncNow.Click += (_, _) => SyncNow();
-            _pauseItem = new NativeMenuItem("Запустити фоновий режим");
+            _statusItem = new NativeMenuItem(I18n.T("tray.status_off")) { IsEnabled = false };
+            _recentItem = new NativeMenuItem(I18n.T("tray.recent"));
+            _recentItem.Click += (_, _) => ShowRecentChanges();
+            _openItem = new NativeMenuItem(I18n.T("tray.open"));
+            _openItem.Click += (_, _) => ShowWindow();
+            _syncNowItem = new NativeMenuItem(I18n.T("tray.sync_now"));
+            _syncNowItem.Click += (_, _) => SyncNow();
+            _pauseItem = new NativeMenuItem(I18n.T("tray.resume"));
             _pauseItem.Click += (_, _) => ToggleLoop();
-            var exit = new NativeMenuItem("Вийти");
-            exit.Click += (_, _) => Shutdown(desktop);
+            _exitItem = new NativeMenuItem(I18n.T("tray.exit"));
+            _exitItem.Click += (_, _) => Shutdown(desktop);
 
             var menu = new NativeMenu();
             menu.Add(_statusItem);
             menu.Add(new NativeMenuItemSeparator());
-            menu.Add(open);
-            menu.Add(syncNow);
+            menu.Add(_recentItem);
+            menu.Add(_openItem);
+            menu.Add(_syncNowItem);
             menu.Add(_pauseItem);
             menu.Add(new NativeMenuItemSeparator());
-            menu.Add(exit);
+            menu.Add(_exitItem);
 
             _tray = new TrayIcon { Icon = icon, ToolTipText = "WorkFlowSync", Menu = menu, IsVisible = true };
-            _tray.Clicked += (_, _) => ShowWindow();
+            // Left click shows what has arrived lately — the question people open a sync tool to answer.
+            // The full window stays one menu item (or one more click) away.
+            _tray.Clicked += (_, _) => ShowRecentChanges();
             TrayIcon.SetIcons(this, new TrayIcons { _tray });
+
+            I18n.Instance.LanguageChanged += RefreshTrayText;
         }
         catch (Exception ex)
         {
@@ -125,8 +148,81 @@ public partial class App : Application
             _window!.Hide();
             _window.ShowInTaskbar = false;
             if (_vm is not null)
-                _vm.StatusText = "Програма згорнулася в область сповіщень. Значок біля годинника: відкрити вікно, синхронізувати, вийти.";
+                _vm.StatusText = I18n.T("tray.minimized_hint");
         }
+    }
+
+    /// <summary>
+    /// Decides whether a finished pass is worth a word, and says it. The rules live in
+    /// <see cref="NotificationPolicy"/> so they can be tested; this only puts them on screen.
+    /// </summary>
+    private void OnPassCompleted(PassResult result)
+    {
+        if (_vm is null) return;
+
+        var added = result.Pairs.Sum(p => p.Execution?.FilesCopied ?? 0);
+        var heldBack = result.Pairs.Sum(p => p.HeldBackRemovals);
+        var note = NotificationPolicy.ForPass(_vm.ToConfig(), added, result.Errors, heldBack, DateTimeOffset.Now);
+        if (note is null) return;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_notification is null)
+            {
+                _notification = new NotificationWindow();
+                _notification.Clicked += ShowRecentChanges;
+            }
+            _notification.Show(note);
+        });
+    }
+
+    /// <summary>
+    /// The list of what arrived lately, in the corner by the clock. Created once and reused: it is opened
+    /// often and briefly, and rebuilding a window each time would flicker.
+    /// </summary>
+    private void ShowRecentChanges()
+    {
+        if (_vm is null) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _recentModel ??= new RecentChangesViewModel(
+                () => _vm!.StateFullPath,
+                () => _vm!.Pairs.ToDictionary(p => p.Name, p => p.Target, StringComparer.OrdinalIgnoreCase),
+                () => _vm!.RecentLimit);
+
+            if (_recentWindow is null)
+            {
+                _recentWindow = new RecentChangesWindow();
+                _recentWindow.MainWindowRequested += ShowWindow;
+                _recentWindow.ApprovalWindowRequested += ShowApprovalWindow;
+            }
+            _recentWindow.ShowNearTray(_recentModel);
+        });
+    }
+
+    private ApprovalWindow? _approvalWindow;
+    private ApprovalViewModel? _approvalModel;
+
+    public void ShowApprovalWindow()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_vm is null) return;
+            _approvalModel ??= new ApprovalViewModel(
+                () => _vm.StateFullPath,
+                () => _vm.Pairs.ToDictionary(p => p.Name, p => (p.Source, p.Target), StringComparer.OrdinalIgnoreCase),
+                msg => _vm?.Run.AppendLog(msg));
+
+            if (_approvalWindow is null)
+            {
+                _approvalWindow = new ApprovalWindow();
+                _approvalWindow.Closed += (_, _) => _approvalWindow = null;
+            }
+            _approvalWindow.DataContext = _approvalModel;
+            _approvalModel.Load();
+            _approvalWindow.Show();
+            _approvalWindow.Activate();
+        });
     }
 
     private void ShowWindow()
@@ -175,12 +271,21 @@ public partial class App : Application
     private void UpdateTray() => Dispatcher.UIThread.Post(() =>
     {
         var loop = _vm?.Background;
-        var text = loop is null || loop.State == LoopState.Stopped ? "Фоновий режим: вимкнено" : loop.StatusText;
+        var text = loop is null || loop.State == LoopState.Stopped ? I18n.T("tray.status_off") : loop.StatusText;
         if (_statusItem is not null) _statusItem.Header = text;
         if (_tray is not null) _tray.ToolTipText = $"WorkFlowSync — {text}";
         if (_pauseItem is not null)
-            _pauseItem.Header = loop is { IsActive: true } ? "Призупинити фоновий режим" : "Запустити фоновий режим";
+            _pauseItem.Header = loop is { IsActive: true } ? I18n.T("tray.pause") : I18n.T("tray.resume");
         _vm?.Run.SyncFromLoop();
+    });
+
+    private void RefreshTrayText() => Dispatcher.UIThread.Post(() =>
+    {
+        UpdateTray();
+        if (_recentItem is not null) _recentItem.Header = I18n.T("tray.recent");
+        if (_openItem is not null) _openItem.Header = I18n.T("tray.open");
+        if (_syncNowItem is not null) _syncNowItem.Header = I18n.T("tray.sync_now");
+        if (_exitItem is not null) _exitItem.Header = I18n.T("tray.exit");
     });
 
     private void Shutdown(IClassicDesktopStyleApplicationLifetime desktop)

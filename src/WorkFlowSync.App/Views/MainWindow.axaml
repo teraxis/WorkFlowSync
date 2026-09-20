@@ -4,6 +4,7 @@
         xmlns:app="using:WorkFlowSync.App"
         xmlns:cfg="using:WorkFlowSync.Core.Config"
         xmlns:ctl="using:WorkFlowSync.App.Views.Controls"
+        xmlns:loc="using:WorkFlowSync.App.Localization"
         x:Class="WorkFlowSync.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="{Binding Title}"
@@ -37,19 +38,19 @@
                     <ListBoxItem>
                         <StackPanel Orientation="Horizontal" Spacing="11">
                             <Path Classes="ico" Data="{StaticResource IconFolders}" Width="17" Height="17" />
-                            <TextBlock Text="Папки" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Loc nav.tasks}" VerticalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem>
                         <StackPanel Orientation="Horizontal" Spacing="11">
                             <Path Classes="ico" Data="{StaticResource IconSync}" Width="17" Height="17" />
-                            <TextBlock Text="Синхронізація" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Loc nav.events}" VerticalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem>
                         <StackPanel Orientation="Horizontal" Spacing="11">
                             <Path Classes="ico" Data="{StaticResource IconSettings}" Width="17" Height="17" />
-                            <TextBlock Text="Налаштування" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Loc nav.settings}" VerticalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
                 </ListBox>
@@ -60,7 +61,7 @@
         <DockPanel Grid.Column="1">
 
             <!-- page header -->
-            <Border DockPanel.Dock="Top" Padding="28,20,28,16">
+            <Border DockPanel.Dock="Top" Padding="16,20,16,16">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Grid.Column="0" Classes="display" Text="{Binding PageTitle}" VerticalAlignment="Center" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
@@ -68,7 +69,7 @@
                         <Button Classes="primary" Click="OnAddPair">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Path Classes="ico" Data="{StaticResource IconPlus}" />
-                                <TextBlock Text="Додати пару" />
+                                <TextBlock Text="{loc:Loc nav.add_task}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -76,7 +77,7 @@
             </Border>
 
             <!-- message line: only when there is something to say (errors, confirmations); changes save themselves -->
-            <Border DockPanel.Dock="Bottom" Padding="28,10" Background="{DynamicResource SurfaceRail}"
+            <Border DockPanel.Dock="Bottom" Padding="16,10" Background="{DynamicResource SurfaceRail}"
                     BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
                     IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                 <TextBlock Classes="oneline" Text="{Binding StatusText}" VerticalAlignment="Center"
@@ -84,10 +85,10 @@
                            Foreground="{Binding StatusIsError, Converter={x:Static app:Converters.StatusText}}" />
             </Border>
 
-            <Panel Margin="28,0,12,12">
+            <Panel Margin="16,0,4,12">
 
                 <!-- ────────────────────────── page: folders ────────────────────────── -->
-                <Panel IsVisible="{Binding IsFoldersPage}" Margin="0,0,16,0">
+                <Panel IsVisible="{Binding IsFoldersPage}" Margin="0,0,12,0">
                     <ListBox Classes="rows" ItemsSource="{Binding Pairs}" SelectedItem="{Binding SelectedPair}">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:PairViewModel">
@@ -123,18 +124,18 @@
                                                 <Button Classes="icon accentsoft" Click="OnTogglePair" ToolTip.Tip="{Binding ToggleTip}">
                                                     <Path Classes="icof" Data="{Binding ToggleIcon}" Width="NaN" Height="15" />
                                                 </Button>
-                                                <Button Classes="ghost icon" ToolTip.Tip="Дії з парою">
+                                                <Button Classes="ghost icon" ToolTip.Tip="Дії із завданням">
                                                     <Path Classes="icof" Data="{StaticResource IconMoreFill}" Width="18" Height="NaN" />
                                                     <Button.Flyout>
                                                         <MenuFlyout Placement="BottomEdgeAlignedRight">
-                                                            <MenuItem Header="Перевірити зараз" Click="OnRunPair">
+                                                            <MenuItem Header="{loc:Loc tasks.run_now}" Click="OnRunPair">
                                                                 <MenuItem.Icon><Path Classes="ico" Data="{StaticResource IconRefresh}" /></MenuItem.Icon>
                                                             </MenuItem>
-                                                            <MenuItem Header="Редагувати…" Click="OnEditPair">
+                                                            <MenuItem Header="{loc:Loc tasks.edit}" Click="OnEditPair">
                                                                 <MenuItem.Icon><Path Classes="ico" Data="{StaticResource IconPencil}" /></MenuItem.Icon>
                                                             </MenuItem>
                                                             <Separator />
-                                                            <MenuItem Header="Видалити" Click="OnDeletePair" Classes="danger">
+                                                            <MenuItem Header="{loc:Loc tasks.delete}" Click="OnDeletePair" Classes="danger">
                                                                 <MenuItem.Icon><Path Classes="ico" Data="{StaticResource IconTrash}" /></MenuItem.Icon>
                                                             </MenuItem>
                                                         </MenuFlyout>
@@ -153,32 +154,33 @@
                         <StackPanel Spacing="10" HorizontalAlignment="Center">
                             <Path Classes="ico" Data="{StaticResource IconFolders}" Width="34" Height="34" StrokeThickness="1.3"
                                   Stroke="{DynamicResource TextMuted}" HorizontalAlignment="Center" />
-                            <TextBlock Classes="title" Text="Пар ще немає" HorizontalAlignment="Center" />
+                            <TextBlock Classes="title" Text="{loc:Loc tasks.title}" HorizontalAlignment="Center" />
                             <TextBlock Classes="secondary" TextAlignment="Center"
-                                       Text="Додайте мережеву папку, за якою стежити, і локальну папку для дзеркала. Джерело лише читається." />
-                            <Button Classes="primary" Content="Додати пару" Click="OnAddPair" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                                       Text="{loc:Loc tasks.empty}" />
+                            <Button Classes="primary" Content="{loc:Loc nav.add_task}" Click="OnAddPair" HorizontalAlignment="Center" Margin="0,6,0,0" />
                         </StackPanel>
                     </Border>
                 </Panel>
 
                 <!-- ────────────────────────── page: activity ────────────────────────── -->
-                <Panel IsVisible="{Binding IsActivityPage}" Margin="0,0,16,0">
+                <Panel IsVisible="{Binding IsActivityPage}" Margin="0,0,12,0">
                 <DockPanel DataContext="{Binding Run}" x:DataType="vm:RunViewModel">
 
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10" Margin="0,0,0,12">
-                        <Button Classes="primary" Command="{Binding RunNowCommand}" MinWidth="170" IsVisible="{Binding !IsRunning}">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Path Classes="ico" Data="{StaticResource IconRefresh}" />
-                                <TextBlock Text="Синхронізувати" />
-                            </StackPanel>
-                        </Button>
                         <Button Classes="danger" Command="{Binding StopCommand}" MinWidth="170" IsVisible="{Binding IsRunning}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Path Classes="icof" Data="{StaticResource IconStopFill}" />
-                                <TextBlock Text="Зупинити" />
+                                <TextBlock Text="{loc:Loc common.cancel}" />
                             </StackPanel>
                         </Button>
                         <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsRunning}" Width="160" VerticalAlignment="Center" />
+                        <Button Classes="ghost" Command="{Binding ClearLogCommand}" IsEnabled="{Binding !IsRunning}"
+                                HorizontalAlignment="Right" ToolTip.Tip="{loc:Loc log.clear}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Path Classes="ico" Data="{StaticResource IconTrash}" />
+                                <TextBlock Text="{loc:Loc log.clear}" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
 
                     <Border Classes="card" Padding="6" Margin="0,0,0,8">
@@ -198,48 +200,38 @@
                     <Border Padding="0,0,12,0" Width="{Binding $parent[ScrollViewer].Viewport.Width}">
                     <StackPanel Spacing="12" Margin="0,0,0,4">
 
-                        <Border Classes="card">
-                            <StackPanel Spacing="12">
-                                <TextBlock Classes="section" Text="РОЗКЛАД" />
-                                <Grid ColumnDefinitions="240,*">
-                                    <TextBlock Grid.Column="0" Text="Інтервал перевірки" VerticalAlignment="Center" />
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
-                                        <ctl:Stepper Value="{Binding IntervalMinutes}" Minimum="1" Maximum="1440" Increment="5" Width="130" />
-                                        <TextBlock Text="хвилин" VerticalAlignment="Center" Classes="secondary" />
-                                    </StackPanel>
-                                </Grid>
-                                <TextBlock Classes="caption"
-                                           Text="Період між автоматичними проходами. Зміну підхоплює і фоновий режим, і трей; завдання Планувальника треба перестворити перемикачем нижче." />
-                            </StackPanel>
-                        </Border>
-
+                        <!-- The schedule lives on each pair now (docs F7): one number never fitted both a
+                             working folder and a 50 000-folder archive, so there is nothing shared to set. -->
                         <Border Classes="card">
                             <StackPanel Spacing="12" DataContext="{Binding Autostart}" x:DataType="vm:AutostartViewModel">
-                                <TextBlock Classes="section" Text="АВТОМАТИЧНИЙ ЗАПУСК" />
+                                <TextBlock Classes="section" Text="{loc:Loc settings.autostart_section}" />
                                 <CheckBox IsChecked="{Binding StartupEnabled}" IsEnabled="{Binding CanAutostart}"
-                                          Content="Запускати разом із Windows" />
-                                <StackPanel Margin="26,0,0,0" Spacing="4" IsEnabled="{Binding StartupEnabled}">
-                                    <RadioButton GroupName="StartupMode" IsChecked="{Binding StartupInTray}" IsEnabled="{Binding GuiAvailable}"
-                                                 Content="зі значком в області сповіщень (тихо, без вікна)" />
-                                    <RadioButton GroupName="StartupMode" IsChecked="{Binding !StartupInTray}" IsEnabled="{Binding ConsoleAvailable}"
-                                                 Content="фоновим процесом без вікна" />
-                                </StackPanel>
+                                          Content="{loc:Loc settings.startup_shortcut}" />
                                 <Border Classes="divider" />
                                 <CheckBox IsChecked="{Binding TaskEnabled}" IsEnabled="{Binding ConsoleAvailable}"
-                                          Content="Завдання Планувальника Windows: один прохід за інтервалом" />
-                                <TextBlock Classes="caption" Text="{Binding TaskHint}" />
+                                          Content="{loc:Loc settings.task_scheduler}" />
                                 <TextBlock Text="{Binding Message}" IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                            Foreground="{Binding MessageIsError, Converter={x:Static app:Converters.StatusText}}" />
-                                <TextBlock Classes="caption" Text="{Binding StartupHint}" />
                             </StackPanel>
                         </Border>
 
                         <Border Classes="card">
                             <StackPanel Spacing="12">
-                                <TextBlock Classes="section" Text="ВИГЛЯД" />
+                                <TextBlock Classes="section" Text="{loc:Loc settings.appearance_section}" />
                                 <Grid ColumnDefinitions="240,*">
-                                    <TextBlock Grid.Column="0" Text="Тема оформлення" VerticalAlignment="Center" />
-                                    <ComboBox Grid.Column="1" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" Width="230"
+                                    <TextBlock Grid.Column="0" Text="{loc:Loc settings.language}" VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" Width="320"
+                                              HorizontalAlignment="Left">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{Binding Converter={x:Static app:Converters.LanguageName}}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </Grid>
+                                <Grid ColumnDefinitions="240,*">
+                                    <TextBlock Grid.Column="0" Text="{loc:Loc settings.theme}" VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" Width="320"
                                               HorizontalAlignment="Left">
                                         <ComboBox.ItemTemplate>
                                             <DataTemplate x:DataType="cfg:AppTheme">
@@ -248,16 +240,49 @@
                                         </ComboBox.ItemTemplate>
                                     </ComboBox>
                                 </Grid>
-                                <TextBlock Classes="caption" Text="«Як у Windows» перемикається разом із системною темою." />
                             </StackPanel>
                         </Border>
 
                         <Border Classes="card">
                             <StackPanel Spacing="12">
-                                <TextBlock Classes="section" Text="ПРОДУКТИВНІСТЬ СКАНЕРА" />
+                                <TextBlock Classes="section" Text="{loc:Loc settings.notifications_section}" />
                                 <Grid ColumnDefinitions="240,*">
-                                    <TextBlock Grid.Column="0" Text="Навантаження на процесор" VerticalAlignment="Center" />
-                                    <ComboBox Grid.Column="1" ItemsSource="{Binding CpuLoads}" SelectedItem="{Binding CpuLoad}" Width="260"
+                                    <TextBlock Grid.Column="0" Text="{loc:Loc settings.notify_after_pass}" VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:MainViewModel.NotifyModes}"
+                                              SelectedItem="{Binding Notifications}" Width="320" HorizontalAlignment="Left">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="cfg:NotifyMode">
+                                                <TextBlock Text="{Binding Converter={x:Static app:Converters.NotifyName}}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </Grid>
+                                <Grid ColumnDefinitions="240,*">
+                                    <TextBlock Grid.Column="0" Text="{loc:Loc settings.quiet_hours}" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{loc:Loc common.from}" VerticalAlignment="Center" Classes="secondary" />
+                                        <ctl:Stepper Value="{Binding QuietHoursFrom}" Minimum="0" Maximum="23" Increment="1" Width="110" />
+                                        <TextBlock Text="{loc:Loc common.to}" VerticalAlignment="Center" Classes="secondary" />
+                                        <ctl:Stepper Value="{Binding QuietHoursTo}" Minimum="0" Maximum="23" Increment="1" Width="110" />
+                                        <TextBlock Text="{loc:Loc common.hours}" VerticalAlignment="Center" Classes="secondary" />
+                                    </StackPanel>
+                                </Grid>
+                                <Grid ColumnDefinitions="240,*">
+                                    <TextBlock Grid.Column="0" Text="{loc:Loc settings.recent_limit}" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                                        <ctl:Stepper Value="{Binding RecentLimit}" Minimum="5" Maximum="500" Increment="10" Width="130" />
+                                        <TextBlock Text="{loc:Loc common.latest}" VerticalAlignment="Center" Classes="secondary" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Classes="card">
+                            <StackPanel Spacing="12">
+                                <TextBlock Classes="section" Text="{loc:Loc settings.scanner_section}" />
+                                <Grid ColumnDefinitions="240,*">
+                                    <TextBlock Grid.Column="0" Text="{loc:Loc settings.cpu_load}" VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding CpuLoads}" SelectedItem="{Binding CpuLoad}" Width="320"
                                               HorizontalAlignment="Left">
                                         <ComboBox.ItemTemplate>
                                             <DataTemplate x:DataType="cfg:CpuLoad">
@@ -266,25 +291,20 @@
                                         </ComboBox.ItemTemplate>
                                     </ComboBox>
                                 </Grid>
-                                <TextBlock Classes="caption" Text="{Binding CpuLoadHint}" />
                                 <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,10,Auto">
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Паралельних листингів" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc settings.parallel_scans}" VerticalAlignment="Center" />
                                     <ctl:Stepper Grid.Row="0" Grid.Column="1" Value="{Binding ScanParallelism}" Minimum="1" Maximum="64" Width="130" HorizontalAlignment="Left" />
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Буфер листингу, КБ" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Loc settings.scan_buffer}" VerticalAlignment="Center" />
                                     <ctl:Stepper Grid.Row="2" Grid.Column="1" Value="{Binding ScanBufferKb}" Minimum="4" Maximum="4096" Increment="64" Width="130" HorizontalAlignment="Left" />
                                 </Grid>
-                                <TextBlock Classes="caption"
-                                           Text="Великий буфер зменшує кількість мережевих запитів до SMB-сервера; типово 256 КБ. Паралелізм 8–16 для локальної мережі." />
                             </StackPanel>
                         </Border>
 
                         <Border Classes="card">
                             <StackPanel Spacing="12">
-                                <TextBlock Classes="section" Text="ФАЙЛИ ПРОГРАМИ" />
-                                <TextBlock Classes="secondary"
-                                           Text="Усе, що потрібно програмі — config.json, база стану та журнали — зберігається в папці, з якої вона запущена. Папку можна переносити разом із файлами." />
+                                <TextBlock Classes="section" Text="{loc:Loc settings.app_files_section}" />
                                 <Grid ColumnDefinitions="240,*,Auto" RowDefinitions="Auto,10,Auto">
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Папка програми" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc settings.app_folder}" VerticalAlignment="Center" />
                                     <Border Grid.Row="0" Grid.Column="1" Classes="sunken" Padding="12,0" Height="34" ClipToBounds="True"
                                             ToolTip.Tip="{Binding AppFolder}">
                                         <!-- a hidden-scroll viewer keeps the long path from widening the card -->
@@ -292,14 +312,13 @@
                                             <TextBlock Text="{Binding AppFolder}" Classes="mono" VerticalAlignment="Center" TextWrapping="NoWrap" />
                                         </ScrollViewer>
                                     </Border>
-                                    <Button Grid.Row="0" Grid.Column="2" Content="Відкрити" Margin="8,0,0,0" Click="OnOpenAppFolder" />
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Зберігати журнали" VerticalAlignment="Center" />
+                                    <Button Grid.Row="0" Grid.Column="2" Content="{loc:Loc common.open}" Margin="8,0,0,0" Click="OnOpenAppFolder" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Loc settings.log_keep_days}" VerticalAlignment="Center" />
                                     <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="10">
                                         <ctl:Stepper Value="{Binding LogKeepDays}" Minimum="1" Maximum="3650" Increment="5" Width="130" />
-                                        <TextBlock Text="днів" VerticalAlignment="Center" Classes="secondary" />
+                                        <TextBlock Text="{loc:Loc common.days}" VerticalAlignment="Center" Classes="secondary" />
                                     </StackPanel>
                                 </Grid>
-                                <TextBlock Classes="caption" Text="Старіші файли журналу видаляються автоматично при наступному проході. База стану (state.db) і журнали (logs\) лежать у папці програми." />
                             </StackPanel>
                         </Border>
                     </StackPanel>

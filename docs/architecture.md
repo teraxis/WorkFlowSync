@@ -18,7 +18,7 @@ WorkFlowSync.sln
 | `Model/` | `StateEntry`, `EntryStatus`, `EntryKind` — реалізовано |
 | `Scanning/` | ✅ `TreeScanner` (черга папок + N воркерів через `Channel`, `FileSystemEnumerable`, буфер з конфігу, reparse points з ланцюжковою перевіркою циклів), `ExcludeMatcher` (FFS-шаблони → regex), `ScanEntry`/`ScanResult` |
 | `State/` | ✅ `StateStore` (SQLite, WAL, `Load(pair)` → `Dictionary`, `Upsert` однією транзакцією, `meta`) |
-| `Planning/` | ✅ `SyncPlanner`: чиста функція (source, target, state, now, backfill, retention) → `SyncPlan` (Actions з `Proposed` рядком стану + StateUpdates + Stats) за таблицею F1 + ретенція F3 (файли → tombstone, порожні папки → forget) |
+| `Planning/` | ✅ `SyncPlanner`: чиста функція (source, target, state, now, backfill, maxAge, autoClean) → `SyncPlan` (Actions з `Proposed` рядком стану + StateUpdates + Stats) за таблицею F1 + вікно перенесення й автоочищення F3 (`too_old` на вході; файли → tombstone, порожні папки → forget) |
 | `Execution/` | ✅ `SyncExecutor`: mkdir, copy/update через tmp-файл + rename зі збереженням mtime з листингу, `copied_*` читаються з цілі після запису; recycle file / empty dir; `--dry-run` лише логує. `RecycleBin`: SHFileOperationW |
 | `Logging/` | ✅ `FileSyncLog` (щоденний файл + sink для консолі/GUI), `MemorySyncLog` (тести) |
 | `SyncRunner` | ✅ оркестратор проходу: стан → скан джерела (недоступне = skip) → скан цілі → plan → execute → upsert; `PassResult` |
@@ -83,7 +83,7 @@ USN-журнал по SMB недоступний, локально — лише 
 
 ### 2026-09-14 — Ключ стану = логічний шлях крізь лінки
 
-Щоб правила 1–3 і ретенція не залежали від того, чи папка «справжня» чи прилінкована (F4).
+Щоб правила 1–3, вікно перенесення й автоочищення не залежали від того, чи папка «справжня» чи прилінкована (F4).
 
 ## Обмеження середовища розробки
 

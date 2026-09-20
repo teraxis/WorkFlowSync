@@ -9,6 +9,15 @@ $out = Join-Path $root "publish\portable"
 
 Copy-Item -LiteralPath (Join-Path $root "portable\README.txt") -Destination $out -Force
 
+# Anything a previous run of the published exe left here is somebody's live data, not part of the
+# product: starting WorkFlowSync.exe once writes config.json, state.db and logs\ next to itself.
+# Shipping those would hand the recipient our folder pairs and hide that config.example.json is
+# meant to be copied. Removed before packing, never packed and cleaned up afterwards.
+foreach ($leftover in "config.json", "state.db", "logs") {
+    $path = Join-Path $out $leftover
+    if (Test-Path $path) { Remove-Item $path -Recurse -Force }
+}
+
 $version = (Get-Item (Join-Path $out "WorkFlowSync.exe")).VersionInfo.ProductVersion
 if ($version -match '^(\d+\.\d+\.\d+)') { $version = $Matches[1] } else { $version = "0.0.0" }
 

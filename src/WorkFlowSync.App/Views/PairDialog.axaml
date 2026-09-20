@@ -4,10 +4,11 @@
         xmlns:app="using:WorkFlowSync.App"
         xmlns:cfg="using:WorkFlowSync.Core.Config"
         xmlns:ctl="using:WorkFlowSync.App.Views.Controls"
+        xmlns:loc="using:WorkFlowSync.App.Localization"
         x:Class="WorkFlowSync.App.Views.PairDialog"
         x:DataType="vm:PairViewModel"
-        Title="Пара папок"
-        Width="760" Height="720" MinWidth="620" MinHeight="560"
+        Title="Завдання тек"
+        Width="780" Height="740" MinWidth="640" MinHeight="560"
         Background="{DynamicResource SurfaceCanvas}"
         WindowStartupLocation="CenterOwner">
 
@@ -15,7 +16,7 @@
 
         <Border DockPanel.Dock="Top" Padding="24,20,24,14">
             <StackPanel Spacing="3">
-                <TextBlock x:Name="HeaderText" Classes="display" Text="Нова пара" />
+                <TextBlock x:Name="HeaderText" Classes="display" Text="Нове завдання" />
             </StackPanel>
         </Border>
 
@@ -24,76 +25,150 @@
             <Grid ColumnDefinitions="*,Auto">
                 <TextBlock Grid.Column="0" x:Name="ErrorText" Classes="danger" VerticalAlignment="Center" Margin="0,0,16,0" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <Button Content="Скасувати" Click="OnCancel" IsCancel="True" MinWidth="110" />
-                    <Button Content="Зберегти пару" Click="OnOk" IsDefault="True" Classes="primary" MinWidth="140" />
+                    <Button Content="{loc:Loc common.cancel}" Click="OnCancel" IsCancel="True" MinWidth="110" />
+                    <Button Content="{loc:Loc pair.save_button}" Click="OnOk" IsDefault="True" Classes="primary" MinWidth="140" />
                 </StackPanel>
             </Grid>
         </Border>
 
         <ScrollViewer Margin="24,0,12,8" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
             <!-- width pinned to the viewport so no card can grow past the others (see MainWindow settings) -->
-            <Border Padding="0,0,16,0" Width="{Binding $parent[ScrollViewer].Viewport.Width}">
+            <Border Padding="0,8,16,8" Width="{Binding $parent[ScrollViewer].Viewport.Width}">
             <StackPanel Spacing="12">
 
                 <Border Classes="card">
                     <StackPanel Spacing="12">
-                        <TextBlock Classes="section" Text="ЩО І КУДИ" />
+                        <TextBlock Classes="section" Text="{loc:Loc pair.section_what_where}" />
 
                         <Grid ColumnDefinitions="160,*,Auto" RowDefinitions="Auto,10,Auto,10,Auto">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Назва пари" VerticalAlignment="Center" />
-                            <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Name}" Watermark="наприклад: Засідання ВРП" />
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.name_label}" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Name}" Watermark="{loc:Loc pair.name_watermark}" />
 
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding SourceLabel}" VerticalAlignment="Center" />
-                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Source}" Classes="mono" Watermark="\\server\share\папка" />
-                            <Button Grid.Row="2" Grid.Column="2" Content="Огляд…" Margin="8,0,0,0" Click="OnBrowseSource" />
+                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Source}" Classes="mono" Watermark="\\server\share\тека" />
+                            <Button Grid.Row="2" Grid.Column="2" Content="{loc:Loc common.browse}" Margin="8,0,0,0" Click="OnBrowseSource" />
 
                             <TextBlock Grid.Row="4" Grid.Column="0" Text="{Binding TargetLabel}" VerticalAlignment="Center" />
                             <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Target}" Classes="mono" Watermark="D:\OneDrive\…" />
-                            <Button Grid.Row="4" Grid.Column="2" Content="Огляд…" Margin="8,0,0,0" Click="OnBrowseTarget" />
+                            <Button Grid.Row="4" Grid.Column="2" Content="{loc:Loc common.browse}" Margin="8,0,0,0" Click="OnBrowseTarget" />
                         </Grid>
                     </StackPanel>
                 </Border>
 
                 <Border Classes="card">
                     <StackPanel Spacing="12">
-                        <TextBlock Classes="section" Text="ПРАВИЛА" />
+                        <TextBlock Classes="section" Text="{loc:Loc pair.section_rules}" />
 
                         <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Тип синхронізації" VerticalAlignment="Center" />
-                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.Modes}" SelectedItem="{Binding Mode}" Width="300" HorizontalAlignment="Left">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.sync_type}" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.Modes}" SelectedItem="{Binding Mode}" Width="320" HorizontalAlignment="Left">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate x:DataType="cfg:SyncMode">
                                         <TextBlock Text="{Binding Converter={x:Static app:Converters.ModeName}}" />
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
-                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" Text="{Binding ModeHint}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" Text="{Binding ModeHint}"
+                                       IsVisible="{Binding ModeHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*">
+                            <TextBlock Grid.Column="0" Text="{loc:Loc pair.check_interval}" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                                <ctl:Stepper Value="{Binding IntervalMinutes}" Minimum="1" Maximum="10080" Increment="5" Width="130" />
+                                <TextBlock Text="{loc:Loc common.minutes}" VerticalAlignment="Center" Classes="secondary" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*">
+                            <TextBlock Grid.Column="0" Text="{loc:Loc pair.watch_changes}" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.WatchModes}" SelectedItem="{Binding Watch}" Width="320" HorizontalAlignment="Left">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="cfg:WatchMode">
+                                        <TextBlock Text="{Binding Converter={x:Static app:Converters.WatchName}}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*">
+                            <TextBlock Grid.Column="0" Text="{loc:Loc pair.source_links}" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.LinkModes}" SelectedItem="{Binding Links}" Width="320" HorizontalAlignment="Left">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="cfg:LinkMode">
+                                        <TextBlock Text="{Binding Converter={x:Static app:Converters.LinkName}}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*">
+                            <TextBlock Grid.Column="0" Text="{loc:Loc pair.cloud_files}" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" IsEnabled="{Binding CloudFilesApplies}" ItemsSource="{x:Static vm:PairViewModel.CloudFileModes}" SelectedItem="{Binding CloudFiles}" Width="320" HorizontalAlignment="Left">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="cfg:CloudFileMode">
+                                        <TextBlock Text="{Binding Converter={x:Static app:Converters.CloudFilesName}}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- The hint sits in the same column as every other one, and stays readable even when
+                             the controls are off: a disabled row is when the explanation matters most. -->
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.transfer_window}" VerticalAlignment="Center" />
+                            <WrapPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" IsEnabled="{Binding IsMirror}">
+                                <CheckBox IsChecked="{Binding HasMaxAge}" Content="{loc:Loc pair.transfer_checkbox}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <ctl:Stepper Value="{Binding MaxAgeDays}" Minimum="1" Maximum="36500" Increment="30" Width="110" IsEnabled="{Binding HasMaxAge}" />
+                                    <TextBlock Text="{loc:Loc common.days}" VerticalAlignment="Center" Classes="secondary" />
+                                </StackPanel>
+                            </WrapPanel>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap" Text="{Binding MaxAgeHint}" />
                         </Grid>
 
                         <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Лінки в джерелі" VerticalAlignment="Center" />
-                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.LinkModes}" SelectedItem="{Binding Links}" Width="200" HorizontalAlignment="Left" />
-                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption"
-                                       Text="Follow — копіювати вміст як звичайну папку (потрібно для OneDrive); Skip — не заходити в лінки." />
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.autoclean}" VerticalAlignment="Center" />
+                            <WrapPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" IsEnabled="{Binding IsMirror}">
+                                <CheckBox IsChecked="{Binding HasAutoClean}" Content="{loc:Loc pair.autoclean_checkbox}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <ctl:Stepper Value="{Binding AutoCleanDays}" Minimum="1" Maximum="36500" Increment="30" Width="110" IsEnabled="{Binding HasAutoClean}" />
+                                    <TextBlock Text="{loc:Loc common.days}" VerticalAlignment="Center" Classes="secondary" />
+                                </StackPanel>
+                            </WrapPanel>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap" Text="{Binding AutoCleanHint}" />
                         </Grid>
 
-                        <Grid ColumnDefinitions="160,*" IsEnabled="{Binding IsMirror}">
-                            <TextBlock Grid.Column="0" Text="Зберігати" VerticalAlignment="Center" />
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
-                                <CheckBox IsChecked="{Binding HasRetention}" Content="лише те, що з'явилося за останні" VerticalAlignment="Center" />
-                                <ctl:Stepper Value="{Binding RetentionDays}" Minimum="1" Maximum="36500" Increment="30" Width="130" IsEnabled="{Binding HasRetention}" />
-                                <TextBlock Text="днів" VerticalAlignment="Center" Classes="secondary" />
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.approval}" VerticalAlignment="Center" />
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="10" IsEnabled="{Binding !IsMirror}">
+                                <CheckBox IsChecked="{Binding RequireApproval}" Content="{loc:Loc pair.approval_checkbox}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
+                                       Text="{loc:Loc pair.approval_hint}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*">
+                            <TextBlock Grid.Column="0" Text="{loc:Loc pair.versioning}" VerticalAlignment="Top" Margin="0,4,0,0" />
+                            <StackPanel Grid.Column="1" Spacing="6">
+                                <CheckBox IsChecked="{Binding Versioning}" Content="{loc:Loc pair.versioning_checkbox}" VerticalAlignment="Center" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" IsEnabled="{Binding Versioning}" Margin="0,2,0,0">
+                                    <TextBlock Text="{loc:Loc pair.versioning_keep_label}" VerticalAlignment="Center" Classes="secondary" />
+                                    <ctl:Stepper Value="{Binding VersionsKeepDays}" Minimum="1" Maximum="3650" Increment="5" Width="100" />
+                                    <TextBlock Text="{loc:Loc pair.versioning_max_label}" VerticalAlignment="Center" Classes="secondary" />
+                                    <ctl:Stepper Value="{Binding VersionsMaxGb}" Minimum="1" Maximum="1000" Increment="1" Width="100" />
+                                    <TextBlock Text="{loc:Loc common.gb}" VerticalAlignment="Center" Classes="secondary" />
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
-                        <TextBlock Classes="caption" Text="{Binding RetentionHint}" />
                     </StackPanel>
                 </Border>
 
                 <Border Classes="card">
                     <StackPanel Spacing="10">
-                        <TextBlock Classes="section" Text="ВИКЛЮЧЕННЯ" />
+                        <TextBlock Classes="section" Text="{loc:Loc pair.section_excludes}" />
                         <TextBlock Classes="caption" TextWrapping="Wrap"
-                                   Text="По одному шаблону в рядку, відносно першої папки. Приклади: \Тимчасове · *.tmp · \Палата\*Робочий.docx" />
+                                   Text="{loc:Loc pair.excludes_hint}" />
                         <Border Classes="sunken" Padding="2">
                             <TextBox Text="{Binding ExcludeText}" AcceptsReturn="True" TextWrapping="NoWrap" Classes="mono" ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                      BorderThickness="0" Background="Transparent" MinHeight="130" VerticalContentAlignment="Top" />

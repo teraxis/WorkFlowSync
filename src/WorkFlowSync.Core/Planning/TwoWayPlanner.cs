@@ -18,11 +18,22 @@ public sealed class TwoWayPlanner
 {
     private readonly string _pair;
     private readonly DateTimeOffset _now;
+    private readonly PlanScope? _scope;
+    private readonly FrozenPaths? _frozenPaths;
 
-    public TwoWayPlanner(string pair, DateTimeOffset now)
+    /// <param name="scope">
+    /// Limits the pass to one directory. Deletions do not travel in a scoped pass: they are inferred from
+    /// absence, and on a root without a Recycle Bin they cannot be undone (docs/plan-etap5.md §4.2, §4.5).
+    /// </param>
+    /// <param name="frozenPaths">
+    /// Paths and directory subtrees frozen from automatic sync because they are awaiting human approval (docs/plan-etap6.md §5.2).
+    /// </param>
+    public TwoWayPlanner(string pair, DateTimeOffset now, PlanScope? scope = null, FrozenPaths? frozenPaths = null)
     {
         _pair = pair;
         _now = now;
+        _scope = scope;
+        _frozenPaths = frozenPaths;
     }
 
     public SyncPlan Plan(IReadOnlyDictionary<string, ScanEntry> a, IReadOnlyDictionary<string, ScanEntry> b,
@@ -35,17 +46,30 @@ public sealed class TwoWayPlanner
         all.UnionWith(a.Keys);
         all.UnionWith(b.Keys);
         all.UnionWith(state.Keys);
+        if (_scope is { } scope) all.RemoveWhere(p => !scope.Contains(p));
 
         // Parents before children, so a folder exists before its content is copied into it.
         foreach (var path in all.OrderBy(Depth).ThenBy(p => p, StringComparer.OrdinalIgnoreCase))
         {
+            if (_frozenPaths is not null && _frozenPaths.IsFrozen(path))
+            {
+                plan.Stats.AwaitingApproval++;
+                continue;
+            }
+
             a.TryGetValue(path, out var sa);
             b.TryGetValue(path, out var sb);
             state.TryGetValue(path, out var db);
 
             if (sa is null && sb is null)
             {
-                if (db is not null) plan.Forget.Add(path);   // gone on both sides: nothing left to remember
+                // Gone on both sides: nothing left to remember. A scoped pass keeps the row — forgetting it
+                // would let the item come back as brand new if the scope was wrong about what it saw.
+                if (db is not null)
+                {
+                    if (_scope is null) plan.Forget.Add(path);
+                    else plan.Stats.DeferredToFullPass++;
+                }
                 continue;
             }
 
@@ -75,7 +99,15 @@ public sealed class TwoWayPlanner
                 continue;
             }
 
-            // A clean deletion: remove the surviving copy too.
+            // A clean deletion: remove the surviving copy too — but only when the whole pair was looked at.
+            // On a network root the delete is permanent (docs/plan-etap5.md §4.5), so a partial view of the
+            // tree is never enough to justify it.
+            if (_scope is not null)
+            {
+                plan.Stats.DeferredToFullPass++;
+                continue;
+            }
+
             var side = sa is null ? SyncSide.Target : SyncSide.Source;   // where the surviving copy lives
             deletions.Add(new SyncAction(present.Kind == EntryKind.Directory ? SyncActionKind.DeleteDirectory : SyncActionKind.DeleteFile,
                 path, db, side));

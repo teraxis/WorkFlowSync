@@ -26,6 +26,7 @@ public sealed class RunViewModelTests : IDisposable
 
         var main = new MainViewModel(configPath);
         main.Pairs[0].Enabled = true;
+        main.Background.Stop();
         var run = main.Run;
         Assert.Contains("Проходів ще не було", run.Summary);
 

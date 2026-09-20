@@ -1,4 +1,6 @@
 using Avalonia;
+using WorkFlowSync.Core;
+using WorkFlowSync.Core.Config;
 
 namespace WorkFlowSync.App;
 
@@ -15,6 +17,14 @@ internal static class Program
             LogCrash(e.Exception, "TaskScheduler.UnobservedTaskException");
             e.SetObserved();
         };
+
+        // Before Avalonia starts, so a second launch costs nothing and flashes nothing on screen.
+        using var instance = SingleInstance.TryAcquire(ConfigFile.FromArgs(args));
+        if (!instance.IsFirst)
+        {
+            SingleInstance.SignalExisting(ConfigFile.FromArgs(args));
+            return;
+        }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }

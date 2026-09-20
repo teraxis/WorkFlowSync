@@ -173,6 +173,32 @@
         <Setter Property="TextBlock.Foreground" Value="{DynamicResource TextOnAccent}" />
     </Style>
 
+    <!--
+        Labels. A button's Foreground is only INHERITED by its content, and an explicit <TextBlock> inside
+        the button is hit directly by the global `Selector="TextBlock"` rule above — a setter on the element
+        itself beats anything inherited. That is why the icon of a primary button was white while its label
+        stayed near-black. These rules colour the label the same way the icon rules colour the glyph.
+        Order matters in Avalonia: the last matching style wins, so :disabled comes last.
+    -->
+    <Style Selector="Button.primary TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccent}" />
+    </Style>
+    <Style Selector="Button.accentsoft TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+    </Style>
+    <Style Selector="Button.accentsoft:pointerover TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccent}" />
+    </Style>
+    <Style Selector="Button.ghost TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+    </Style>
+    <Style Selector="Button.danger TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Danger}" />
+    </Style>
+    <Style Selector="Button:disabled TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+    </Style>
+
     <!-- icons: outline ones are stroked, solid ones are filled; colour follows the button class -->
     <Style Selector="Path.ico">
         <Setter Property="Width" Value="16" />
@@ -391,6 +417,8 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="ComboBox /template/ Border#Background">
         <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
@@ -398,15 +426,49 @@
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
     </Style>
     <Style Selector="ComboBox:pointerover /template/ Border#Background">
-        <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
+        <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Neutral}" />
     </Style>
     <Style Selector="ComboBox:focus /template/ Border#Background">
         <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
     </Style>
+    <Style Selector="ComboBox /template/ Popup#PART_Popup > Border">
+        <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+        <Setter Property="Padding" Value="4" />
+    </Style>
+    <Style Selector="ComboBox /template/ Popup#PART_Popup Border#PopupBorder">
+        <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+        <Setter Property="Padding" Value="4" />
+    </Style>
     <Style Selector="ComboBoxItem">
         <Setter Property="Padding" Value="10,7" />
+        <Setter Property="Margin" Value="0,1" />
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontBody}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource AccentText}" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+        <Setter Property="TextBlock.Foreground" Value="{DynamicResource AccentText}" />
     </Style>
 
     <Style Selector="CheckBox, RadioButton">

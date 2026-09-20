@@ -18,11 +18,34 @@ public sealed class SyncConfig
     /// <summary>Daily log files older than this many days are deleted (rotation).</summary>
     public int LogKeepDays { get; set; } = 30;
 
-    /// <summary>Interval between passes in resident (loop) mode.</summary>
+    /// <summary>
+    /// Default interval between passes in resident (loop) mode. A pair may set its own
+    /// (<see cref="FolderPair.Interval"/>); this is what the rest fall back to.
+    /// </summary>
     public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>How often this pair should be checked: its own setting, or the shared default.</summary>
+    public TimeSpan IntervalFor(FolderPair pair) => pair.Interval ?? Interval;
 
     /// <summary>Window appearance: follow Windows, or force light/dark.</summary>
     public AppTheme Theme { get; set; } = AppTheme.System;
+
+    /// <summary>Interface language: "uk", "en", or "system". Default is "uk".</summary>
+    public string Language { get; set; } = "uk";
+
+    /// <summary>Whether a finished pass may show a message: everything, only problems, or nothing.</summary>
+    public NotifyMode Notifications { get; set; } = NotifyMode.All;
+
+    /// <summary>How many files the «Останні зміни» window lists. Capped so a million-row pair cannot reach it.</summary>
+    public int RecentLimit { get; set; } = 40;
+
+    /// <summary>
+    /// Hour (0–23) from which routine messages are held back, and the hour they resume. Equal values mean
+    /// no quiet period. The range may cross midnight (22 → 8 is the obvious one). Problems are always shown:
+    /// a quiet evening is a reason not to be told about twelve new files, not a reason to hide a failure.
+    /// </summary>
+    public int QuietHoursFrom { get; set; }
+    public int QuietHoursTo { get; set; }
 
 
     /// <summary>Directory listing buffer for the scanner; large values cut SMB round-trips.</summary>
@@ -63,13 +86,31 @@ public sealed class SyncConfig
             else if (!names.Add(pair.Name)) problems.Add($"Duplicate pair name '{pair.Name}'.");
             if (string.IsNullOrWhiteSpace(pair.Source)) problems.Add($"Pair '{pair.Name}': source is empty.");
             if (string.IsNullOrWhiteSpace(pair.Target)) problems.Add($"Pair '{pair.Name}': target is empty.");
-            if (pair.Retention is { } r && r <= TimeSpan.Zero) problems.Add($"Pair '{pair.Name}': retention must be positive.");
+            if (pair.MaxAge is { } ma && ma <= TimeSpan.Zero) problems.Add($"Pair '{pair.Name}': maxAge must be positive.");
+            if (pair.AutoClean is { } ac && ac <= TimeSpan.Zero) problems.Add($"Pair '{pair.Name}': autoClean must be positive.");
+            if (pair.AutoClean is not null && pair.Mode == SyncMode.TwoWay)
+                problems.Add($"Pair '{pair.Name}': autoClean is a mirror-only setting; a two-way pair propagates real deletions instead.");
+            if (pair.RequireApproval && pair.Mode == SyncMode.Mirror)
+                problems.Add($"Pair '{pair.Name}': requireApproval is a twoWay-only setting; mirror source is read-only.");
+            if (pair.VersionsKeepDays is < 1 or > 3650)
+                problems.Add($"Pair '{pair.Name}': versionsKeepDays must be between 1 and 3650.");
+            if (pair.VersionsMaxGb is < 1 or > 1000)
+                problems.Add($"Pair '{pair.Name}': versionsMaxGb must be between 1 and 1000.");
+            if (pair.Interval is { } pi && pi < TimeSpan.FromMinutes(1)) problems.Add($"Pair '{pair.Name}': interval must be at least 1 minute.");
             if (Nesting(pair.Source, pair.Target) is { } nest) problems.Add($"Pair '{pair.Name}': {nest}");
         }
         if (Interval < TimeSpan.FromMinutes(1)) problems.Add("Interval must be at least 1 minute.");
         if (ScanParallelism is < 1 or > 64) problems.Add("ScanParallelism must be within 1..64.");
         if (ScanBufferSize < 4096) problems.Add("ScanBufferSize must be at least 4096.");
         if (LogKeepDays is < 1 or > 3650) problems.Add("LogKeepDays must be within 1..3650.");
+        if (RecentLimit is < 5 or > 500) problems.Add("RecentLimit must be within 5..500.");
+        if (!string.IsNullOrWhiteSpace(Language) &&
+            !Language.Equals("uk", StringComparison.OrdinalIgnoreCase) &&
+            !Language.Equals("en", StringComparison.OrdinalIgnoreCase) &&
+            !Language.Equals("system", StringComparison.OrdinalIgnoreCase))
+        {
+            problems.Add($"Language '{Language}' is unsupported; choose 'uk', 'en', or 'system'.");
+        }
         return problems;
     }
 
@@ -117,9 +158,66 @@ public sealed class FolderPair
 
     public LinkMode Links { get; set; } = LinkMode.Follow;
 
-    /// <summary>Keep only items first seen within this window; null = keep forever.</summary>
-    public TimeSpan? Retention { get; set; }
+    /// <summary>
+    /// How often this pair is checked. Null = use <see cref="SyncConfig.Interval"/>, which is what every
+    /// pair did before 2026-09-16 and what a config written then still means. Pairs differ in how fast
+    /// they change and how expensive they are to scan, so a single number for all of them was wrong.
+    /// </summary>
+    public TimeSpan? Interval { get; set; }
+
+    /// <summary>
+    /// React to changes as they happen, or only on the interval. Absent in older configs, which read
+    /// as <see cref="WatchMode.Auto"/>. The periodic pass runs either way — watching only shortens the wait.
+    /// </summary>
+    public WatchMode Watch { get; set; } = WatchMode.Auto;
+
+    /// <summary>
+    /// Cloud-only files (OneDrive Files On-Demand) when this pair has to copy one out: leave it alone
+    /// (default) or download it. Only relevant in two-way mode — a mirror never reads its target.
+    /// </summary>
+    public CloudFileMode CloudFiles { get; set; } = CloudFileMode.Skip;
+
+    /// <summary>
+    /// Intake filter: copy only items whose appearance date (<c>first_seen</c>) falls within this window;
+    /// null = copy whatever the source has. Older files stay in the source untouched — they are simply
+    /// never copied and never updated here. Nothing is ever removed from the target because of this.
+    /// Mirror mode only.
+    /// </summary>
+    public TimeSpan? MaxAge { get; set; }
+
+    /// <summary>
+    /// Auto-clean: our own copies whose appearance date is older than this window go to the Recycle Bin;
+    /// null = keep them forever. Age is measured by the date WE recorded, not by ctime/mtime. The source
+    /// is never touched. Mirror mode only — a two-way pair propagates real deletions instead.
+    /// </summary>
+    public TimeSpan? AutoClean { get; set; }
+
+    /// <summary>
+    /// Configs written before 2026-09-17 carried one <c>retention</c> window whose label promised an intake
+    /// filter. It is read as <see cref="MaxAge"/> and never written back, so an old config keeps the meaning
+    /// its checkbox showed. Auto-clean is opt-in and starts off. Write-only on purpose: a property with no
+    /// getter is read by the serializer and never written back, so the legacy name dies on the first save.
+    /// </summary>
+    public TimeSpan? Retention { set => MaxAge ??= value; }
 
     /// <summary>Path patterns (relative to source root) that are never mirrored.</summary>
     public List<string> Exclude { get; set; } = new();
+
+    /// <summary>Approval mode: changes in target folder B require explicit human confirmation (docs/plan-etap6.md §7).</summary>
+    public bool RequireApproval { get; set; }
+
+    /// <summary>Which side is moderated. Defaults to "target" (the local folder).</summary>
+    public string ApprovalSide { get; set; } = "target";
+
+    /// <summary>Whether to preserve version snapshots in .wfsversions before revert/deletion.</summary>
+    public bool Versioning { get; set; }
+
+    /// <summary>Subfolder for versions inside target root. Defaults to ".wfsversions".</summary>
+    public string VersionsPath { get; set; } = ".wfsversions";
+
+    /// <summary>How many days to keep version snapshots (1..3650, default 30).</summary>
+    public int VersionsKeepDays { get; set; } = 30;
+
+    /// <summary>Maximum size in GB for .wfsversions folder before oldest snapshots are pruned (1..1000, default 5).</summary>
+    public int VersionsMaxGb { get; set; } = 5;
 }

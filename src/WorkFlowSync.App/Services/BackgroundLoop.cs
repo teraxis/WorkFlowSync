@@ -1,4 +1,5 @@
 using WorkFlowSync.Core;
+using WorkFlowSync.Core.I18n;
 using WorkFlowSync.Core.Logging;
 
 namespace WorkFlowSync.App.Services;
@@ -16,12 +17,27 @@ public sealed class BackgroundLoop : IDisposable
     private readonly Func<int> _logKeepDays;
     private CancellationTokenSource? _cts;
     private Task? _task;
+    private WorkFlowSync.Core.LoopRunner? _loop;
 
     public LoopState State { get; private set; } = LoopState.Stopped;
     public DateTimeOffset? LastPassUtc { get; private set; }
-    public string LastResult { get; private set; } = "";
+    public int LastPassErrors { get; private set; }
+    public int LastPassCopied { get; private set; }
+    public bool HasHadPass { get; private set; }
+
+    public string LastResult => !HasHadPass
+        ? ""
+        : (LastPassErrors > 0
+            ? I18n.T("loop.errors", LastPassErrors)
+            : I18n.T("loop.copied_updated", LastPassCopied.ToString("N0", I18n.Instance.Culture)));
 
     public event Action? Changed;
+
+    /// <summary>
+    /// Raised after every pass, scheduled or partial, with what it did — the tray uses it to decide
+    /// whether the user is worth interrupting. Fires on the loop's own thread.
+    /// </summary>
+    public event Action<WorkFlowSync.Core.PassResult>? PassCompleted;
 
     /// <summary>Every log line of a background pass, so the window can show it live.</summary>
     public event Action<string>? LogLine;
@@ -31,6 +47,8 @@ public sealed class BackgroundLoop : IDisposable
         _configPath = configPath;
         _logDir = logDir;
         _logKeepDays = logKeepDays ?? (() => FileSyncLog.KeepDays);
+
+        I18n.Instance.LanguageChanged += () => Changed?.Invoke();
     }
 
     public bool IsActive => State is LoopState.Idle or LoopState.Running;
@@ -46,13 +64,16 @@ public sealed class BackgroundLoop : IDisposable
         {
             using var log = new FileSyncLog(_logDir(), (_, line) => LogLine?.Invoke(line), keepDays: _logKeepDays());
             var loop = new LoopRunner(_configPath, log);
+            _loop = loop;   // only to read its watching state; the loop itself is driven by the task below
             loop.PassStarting += () => Set(LoopState.Running);
             loop.PassCompleted += r =>
             {
                 LastPassUtc = DateTimeOffset.UtcNow;
-                var copied = r.Pairs.Sum(p => (p.Execution?.FilesCopied ?? 0) + (p.Execution?.FilesUpdated ?? 0));
-                LastResult = r.Errors > 0 ? $"помилок: {r.Errors}" : $"скопійовано/оновлено: {copied:N0}";
+                LastPassCopied = r.Pairs.Sum(p => (p.Execution?.FilesCopied ?? 0) + (p.Execution?.FilesUpdated ?? 0));
+                LastPassErrors = r.Errors;
+                HasHadPass = true;
                 Set(LoopState.Idle);
+                PassCompleted?.Invoke(r);
             };
             try
             {
@@ -121,14 +142,22 @@ public sealed class BackgroundLoop : IDisposable
         Start();
     }
 
+    /// <summary>
+    /// How many folders are being watched for changes right now, so the window can say whether the pair
+    /// reacts in seconds or waits for the interval. 0 also means "not watching", which is worth showing.
+    /// </summary>
+    public int WatchedRoots => _loop?.ActiveWatchers ?? 0;
+
+    private string WatchSuffix => WatchedRoots > 0 ? I18n.T("loop.watching_suffix", WatchedRoots) : "";
+
     public string StatusText => State switch
     {
         LoopState.Idle => LastPassUtc is { } t
-            ? $"Очікування · останній прохід {t.ToLocalTime():HH:mm} · {LastResult}"
-            : "Очікування першого проходу",
-        LoopState.Running => "Виконується прохід…",
-        LoopState.Paused => "На паузі",
-        _ => "Вимкнено",
+            ? I18n.T("loop.status_idle_last", t.ToLocalTime().ToString("HH:mm", I18n.Instance.Culture), LastResult, WatchSuffix)
+            : I18n.T("loop.status_idle_first"),
+        LoopState.Running => I18n.T("loop.status_running"),
+        LoopState.Paused => I18n.T("loop.status_paused"),
+        _ => I18n.T("loop.status_stopped"),
     };
 
     private void Set(LoopState state)

@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using WorkFlowSync.App.ViewModels;
@@ -44,8 +45,8 @@ public partial class MainWindow : Window
     {
         if (PairOf(sender) is not { } pair) return;
         var ok = await ConfirmDialog.ShowAsync(this,
-            "Видалити пару?",
-            $"Пара «{pair.Name}» зникне зі списку. Уже скопійовані файли залишаться на місці, мережева папка не змінюється.",
+            "Видалити завдання?",
+            $"Завдання «{pair.Name}» зникне зі списку. Уже скопійовані файли залишаться на місці, теки не змінюються.",
             "Видалити");
         if (ok) Vm.RemovePair(pair);
     }
@@ -62,6 +63,14 @@ public partial class MainWindow : Window
         await Vm.TogglePairAsync(pair);
     }
 
+    private void OnOpenApproval(object? sender, RoutedEventArgs e)
+    {
+        if (Application.Current is App app)
+        {
+            app.ShowApprovalWindow();
+        }
+    }
+
     private void OnOpenAppFolder(object? sender, RoutedEventArgs e)
     {
         try
@@ -70,7 +79,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Vm.StatusText = $"Не вдалося відкрити папку: {ex.Message}";
+            Vm.StatusText = $"Не вдалося відкрити теку: {ex.Message}";
             Vm.StatusIsError = true;
         }
     }

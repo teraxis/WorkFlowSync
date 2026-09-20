@@ -24,10 +24,27 @@
     <StreamGeometry x:Key="IconTrash">M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M10 11v6 M14 11v6</StreamGeometry>
 
     <StreamGeometry x:Key="IconArrowRight">M5 12h14 M12 5l7 7-7 7</StreamGeometry>
+    <StreamGeometry x:Key="IconArrowLeft">M19 12H5 M12 19l-7-7 7-7</StreamGeometry>
 
     <StreamGeometry x:Key="IconArrowsBoth">M3 8h14 M14 5l3 3-3 3 M21 16H7 M10 13l-3 3 3 3</StreamGeometry>
 
     <StreamGeometry x:Key="IconCheck">M20 6L9 17l-5-5</StreamGeometry>
+
+    <StreamGeometry x:Key="IconShield">M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z</StreamGeometry>
+
+    <StreamGeometry x:Key="IconUndo">M3 7v6h6 M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13</StreamGeometry>
+
+    <StreamGeometry x:Key="IconRotateCcw">M1 4v6h6 M3.51 15a9 9 0 1 0 2.13-9.36L1 10</StreamGeometry>
+
+    <StreamGeometry x:Key="IconX">M18 6L6 18 M6 6l12 12</StreamGeometry>
+
+    <StreamGeometry x:Key="IconDismiss">M18.36 5.64A9 9 0 1 1 5.64 18.36 9 9 0 0 1 18.36 5.64z M4.93 4.93l14.14 14.14</StreamGeometry>
+
+    <StreamGeometry x:Key="IconFilePlus">M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M12 18v-6 M9 15h6</StreamGeometry>
+
+    <StreamGeometry x:Key="IconFileMinus">M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 15h6</StreamGeometry>
+
+    <StreamGeometry x:Key="IconFileEdit">M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M10.4 12.6l4.2 4.2 M10.4 16.8l4.2-4.2</StreamGeometry>
 
     <!-- ── solid ── -->
     <StreamGeometry x:Key="IconPlayFill">M6.5 4.2a1 1 0 0 1 1.53-.85l12 7.8a1 1 0 0 1 0 1.7l-12 7.8A1 1 0 0 1 6.5 19.8z</StreamGeometry>

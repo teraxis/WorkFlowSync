@@ -1,0 +1,658 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WorkFlowSync.App.ViewModels"
+        xmlns:loc="using:WorkFlowSync.App.Localization"
+        x:Class="WorkFlowSync.App.Views.ApprovalWindow"
+        x:DataType="vm:ApprovalViewModel"
+        Title="{loc:Loc approval.title}"
+        Width="1040" Height="680"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    <Window.Styles>
+        <!-- Card Border: selection strictly inside and on the border -->
+        <Style Selector="Border.item-card">
+            <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="Margin" Value="0,3" />
+        </Style>
+        <Style Selector="Border.item-card:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+        </Style>
+        <Style Selector="Border.item-card.is-selected">
+            <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+        </Style>
+
+        <!-- Delta and mtime highlight styling -->
+        <Style Selector="Border.delta-pos">
+            <Setter Property="Background" Value="{DynamicResource SuccessSoft}" />
+        </Style>
+        <Style Selector="Border.delta-neg">
+            <Setter Property="Background" Value="{DynamicResource DangerSoft}" />
+        </Style>
+        <Style Selector="TextBlock.mtime-changed">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Warning}" />
+        </Style>
+
+        <!-- Absent file styling -->
+        <Style Selector="TextBlock.absent">
+            <Setter Property="FontStyle" Value="Italic" />
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+            <Setter Property="FontWeight" Value="Normal" />
+        </Style>
+
+        <!-- FreeFileSync-style change badges -->
+        <Style Selector="Border.badge-added">
+            <Setter Property="Background" Value="{DynamicResource SuccessSoft}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Success}" />
+        </Style>
+        <Style Selector="Border.badge-deleted">
+            <Setter Property="Background" Value="{DynamicResource DangerSoft}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Danger}" />
+        </Style>
+        <Style Selector="Border.badge-modified">
+            <Setter Property="Background" Value="{DynamicResource WarningSoft}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Warning}" />
+        </Style>
+        <Style Selector="Border.badge-renamed">
+            <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+        </Style>
+        <Style Selector="Border.badge-conflict">
+            <Setter Property="Background" Value="{DynamicResource DangerSoft}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Danger}" />
+        </Style>
+
+        <!-- Top Batch Action Buttons -->
+        <Style Selector="Button.top-btn">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.top-btn-revert">
+            <Setter Property="Background" Value="{DynamicResource DangerSoft}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Danger}" />
+            <Setter Property="Foreground" Value="{DynamicResource Danger}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Button.top-btn-revert Path.ico">
+            <Setter Property="Stroke" Value="{DynamicResource Danger}" />
+        </Style>
+        <Style Selector="Button.top-btn-revert TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Danger}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Button.top-btn-revert:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Danger}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Danger}" />
+        </Style>
+        <Style Selector="Button.top-btn-revert:pointerover Path.ico">
+            <Setter Property="Stroke" Value="#FFFFFF" />
+        </Style>
+        <Style Selector="Button.top-btn-revert:pointerover TextBlock">
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+
+        <!-- Action Direction Arrow (matching badge color, no circle) -->
+        <Style Selector="Path.action-arrow">
+            <Setter Property="StrokeThickness" Value="2.2" />
+            <Setter Property="StrokeLineCap" Value="Round" />
+            <Setter Property="StrokeJoin" Value="Round" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Path.action-arrow.added">
+            <Setter Property="Stroke" Value="{DynamicResource Success}" />
+        </Style>
+        <Style Selector="Path.action-arrow.deleted">
+            <Setter Property="Stroke" Value="{DynamicResource Danger}" />
+        </Style>
+        <Style Selector="Path.action-arrow.modified">
+            <Setter Property="Stroke" Value="{DynamicResource Warning}" />
+        </Style>
+        <Style Selector="Path.action-arrow.renamed">
+            <Setter Property="Stroke" Value="{DynamicResource Accent}" />
+        </Style>
+        <Style Selector="Path.action-arrow.conflict">
+            <Setter Property="Stroke" Value="{DynamicResource Danger}" />
+        </Style>
+
+        <!-- Row Action Buttons: perfectly centered, circular, color-coded -->
+        <Style Selector="Button.row-btn">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinWidth" Value="32" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="MaxWidth" Value="32" />
+            <Setter Property="MaxHeight" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.row-btn /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.row-btn Viewbox">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.row-btn Path">
+            <Setter Property="StrokeLineCap" Value="Round" />
+            <Setter Property="StrokeJoin" Value="Round" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- 1. Approve (Green) -->
+        <Style Selector="Button.row-btn-approve">
+            <Setter Property="Background" Value="{DynamicResource SuccessSoft}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Success}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Button.row-btn-approve Path">
+            <Setter Property="Stroke" Value="{DynamicResource Success}" />
+            <Setter Property="StrokeThickness" Value="2.2" />
+        </Style>
+        <Style Selector="Button.row-btn-approve:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Success}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Success}" />
+        </Style>
+        <Style Selector="Button.row-btn-approve:pointerover Path">
+            <Setter Property="Stroke" Value="#FFFFFF" />
+        </Style>
+
+        <!-- 2. Dismiss (Neutral / Slate) -->
+        <Style Selector="Button.row-btn-dismiss">
+            <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Button.row-btn-dismiss Path">
+            <Setter Property="Stroke" Value="{DynamicResource TextSecondary}" />
+            <Setter Property="StrokeThickness" Value="2.0" />
+        </Style>
+        <Style Selector="Button.row-btn-dismiss:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource TextPrimary}" />
+        </Style>
+        <Style Selector="Button.row-btn-dismiss:pointerover Path">
+            <Setter Property="Stroke" Value="{DynamicResource TextPrimary}" />
+        </Style>
+
+        <!-- 3. Revert (Red) -->
+        <Style Selector="Button.row-btn-revert">
+            <Setter Property="Background" Value="{DynamicResource DangerSoft}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Danger}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Button.row-btn-revert Path">
+            <Setter Property="Stroke" Value="{DynamicResource Danger}" />
+            <Setter Property="StrokeThickness" Value="2.0" />
+        </Style>
+        <Style Selector="Button.row-btn-revert:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Danger}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Danger}" />
+        </Style>
+        <Style Selector="Button.row-btn-revert:pointerover Path">
+            <Setter Property="Stroke" Value="#FFFFFF" />
+        </Style>
+
+        <!-- Dropdown select button with popup flyout -->
+        <Style Selector="ToggleButton.select-dropdown">
+            <Setter Property="Background" Value="{DynamicResource SurfaceInput}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="10,4,8,4" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="ToggleButton.select-dropdown:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
+        </Style>
+        <Style Selector="ToggleButton.select-dropdown:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Top Header & Filter Bar -->
+        <Border Grid.Row="0" Background="{DynamicResource SurfaceCard}"
+                BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
+                Padding="16,12">
+            <Grid RowDefinitions="Auto,Auto" RowSpacing="12">
+                <!-- Title & Batch Actions -->
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Path Classes="ico" Data="{StaticResource IconShield}" Width="24" Height="24" Fill="{DynamicResource Primary}" />
+                        <TextBlock Text="{loc:Loc approval.title}" Classes="title" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Classes="primary top-btn" Click="OnApproveAllClicked"
+                                ToolTip.Tip="{loc:Loc approval.approve_all_tip}">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Path Classes="ico" Data="{StaticResource IconCheck}" Width="14" Height="14"
+                                      StrokeThickness="2.2" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Loc approval.approve_all}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="top-btn" Click="OnDismissAllClicked"
+                                ToolTip.Tip="{loc:Loc approval.dismiss_all_tip}">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Path Classes="ico" Data="{StaticResource IconX}" Width="13" Height="13"
+                                      StrokeThickness="2.0" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Loc approval.dismiss_all}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="top-btn top-btn-revert" Click="OnRevertAllClicked"
+                                ToolTip.Tip="{loc:Loc approval.revert_all_tip}">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Path Classes="ico" Data="{StaticResource IconRotateCcw}" Width="13" Height="13"
+                                      StrokeThickness="2.0" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Loc approval.revert_all}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Filters Toolbar: Tasks Select, Types Select, Search, Refresh -->
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="10" VerticalAlignment="Center">
+                    <!-- Task (Pair) Multi-select Dropdown -->
+                    <Grid Grid.Column="0">
+                        <ToggleButton x:Name="PairFilterBtn" Classes="select-dropdown" Width="180"
+                                      ToolTip.Tip="{loc:Loc approval.all_pairs}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Path Classes="ico" Data="{StaticResource IconFolders}" Width="14" Height="14"
+                                          Stroke="{DynamicResource TextSecondary}" StrokeThickness="1.8" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding SelectedPairsSummary}" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" FontSize="12.5" />
+                                </StackPanel>
+                                <Path Grid.Column="1" Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource TextMuted}"
+                                      StrokeThickness="1.5" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </Grid>
+                        </ToggleButton>
+                        <Popup IsOpen="{Binding IsChecked, ElementName=PairFilterBtn, Mode=TwoWay}"
+                               PlacementTarget="{Binding #PairFilterBtn}"
+                               Placement="BottomEdgeAlignedLeft"
+                               IsLightDismissEnabled="True">
+                            <Border Background="{DynamicResource SurfaceCard}"
+                                    BorderBrush="{DynamicResource BorderStrong}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="10,8"
+                                    MinWidth="200"
+                                    BoxShadow="0 4 16 #40000000">
+                                <StackPanel Spacing="6">
+                                    <CheckBox IsChecked="{Binding IsAllPairsSelected}" IsThreeState="True" Margin="4,2">
+                                        <TextBlock Text="{loc:Loc approval.all_pairs}" FontWeight="SemiBold" />
+                                    </CheckBox>
+                                    <Rectangle Height="1" Fill="{DynamicResource BorderSubtle}" Margin="0,2" />
+                                    <ScrollViewer MaxHeight="220">
+                                        <ItemsControl ItemsSource="{Binding PairFilters}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox IsChecked="{Binding IsSelected}" Margin="4,2">
+                                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                    </CheckBox>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
+
+                    <!-- Change Types Multi-select Dropdown -->
+                    <Grid Grid.Column="1">
+                        <ToggleButton x:Name="TypeFilterBtn" Classes="select-dropdown" Width="200"
+                                      ToolTip.Tip="{loc:Loc approval.all_types}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Path Classes="ico" Data="{StaticResource IconPencil}" Width="13" Height="13"
+                                          Stroke="{DynamicResource TextSecondary}" StrokeThickness="1.8" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding SelectedTypesSummary}" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" FontSize="12.5" />
+                                </StackPanel>
+                                <Path Grid.Column="1" Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource TextMuted}"
+                                      StrokeThickness="1.5" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </Grid>
+                        </ToggleButton>
+                        <Popup IsOpen="{Binding IsChecked, ElementName=TypeFilterBtn, Mode=TwoWay}"
+                               PlacementTarget="{Binding #TypeFilterBtn}"
+                               Placement="BottomEdgeAlignedLeft"
+                               IsLightDismissEnabled="True">
+                            <Border Background="{DynamicResource SurfaceCard}"
+                                    BorderBrush="{DynamicResource BorderStrong}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="10,8"
+                                    MinWidth="210"
+                                    BoxShadow="0 4 16 #40000000">
+                                <StackPanel Spacing="6">
+                                    <CheckBox IsChecked="{Binding IsAllTypesSelected}" IsThreeState="True" Margin="4,2">
+                                        <TextBlock Text="{loc:Loc approval.all_types}" FontWeight="SemiBold" />
+                                    </CheckBox>
+                                    <Rectangle Height="1" Fill="{DynamicResource BorderSubtle}" Margin="0,2" />
+
+                                    <CheckBox IsChecked="{Binding FilterAdded}" Margin="4,2">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Path Data="{StaticResource IconPlus}" Classes="ico" Stroke="{DynamicResource Success}"
+                                                  StrokeThickness="2.5" Width="12" Height="12" />
+                                            <TextBlock Text="{Binding AddedFilterTitle}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </CheckBox>
+
+                                    <CheckBox IsChecked="{Binding FilterModified}" Margin="4,2">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Path Data="{StaticResource IconPencil}" Classes="ico" Stroke="{DynamicResource Warning}"
+                                                  StrokeThickness="2.0" Width="12" Height="12" />
+                                            <TextBlock Text="{Binding ModifiedFilterTitle}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </CheckBox>
+
+                                    <CheckBox IsChecked="{Binding FilterDeleted}" Margin="4,2">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Path Data="{StaticResource IconTrash}" Classes="ico" Stroke="{DynamicResource Danger}"
+                                                  StrokeThickness="2.0" Width="12" Height="12" />
+                                            <TextBlock Text="{Binding DeletedFilterTitle}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </CheckBox>
+
+                                    <CheckBox IsChecked="{Binding FilterRenamed}" Margin="4,2">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Path Data="{StaticResource IconArrowRight}" Classes="ico" Stroke="{DynamicResource Accent}"
+                                                  StrokeThickness="2.2" Width="12" Height="12" />
+                                            <TextBlock Text="{Binding RenamedFilterTitle}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </CheckBox>
+
+                                    <CheckBox IsChecked="{Binding FilterConflict}" IsVisible="{Binding HasConflicts}" Margin="4,2">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Path Data="{StaticResource IconShield}" Classes="ico" Fill="{DynamicResource Danger}"
+                                                  Width="12" Height="12" />
+                                            <TextBlock Text="{loc:Loc approval.type_conflict}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
+
+                    <!-- Search Box -->
+                    <TextBox Grid.Column="2" Text="{Binding SearchText}" Watermark="{loc:Loc approval.search_watermark}"
+                             Height="32" VerticalAlignment="Center" />
+
+                    <!-- Refresh Button -->
+                    <Button Grid.Column="3" Classes="ghost" Click="OnRefreshClicked"
+                            ToolTip.Tip="{loc:Loc common.refresh}" Height="32" Padding="8,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="14" Height="14"
+                                  StrokeThickness="1.8" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Loc common.refresh}" VerticalAlignment="Center" FontSize="12.5" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Warning Ceiling Banner (§5.8) -->
+        <Border Grid.Row="1" IsVisible="{Binding IsCeilingExceeded}" Background="{DynamicResource DangerSoft}"
+                BorderBrush="{DynamicResource Danger}" BorderThickness="1"
+                CornerRadius="6" Margin="16,10,16,0" Padding="12,8">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Path Classes="ico" Data="{StaticResource IconShield}" Width="20" Height="20" Fill="{DynamicResource Danger}" VerticalAlignment="Center" />
+                <TextBlock Text="{loc:Loc approval.ceiling_warning}"
+                           Foreground="{DynamicResource Danger}" TextWrapping="Wrap" VerticalAlignment="Center" FontWeight="SemiBold" />
+            </StackPanel>
+        </Border>
+
+        <!-- Main Scrollable List of Groups and Changes -->
+        <ScrollViewer Grid.Row="2" Margin="16,6,16,10">
+            <ItemsControl ItemsSource="{Binding FilteredGroups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ApprovalGroupViewModel">
+                        <StackPanel Spacing="6" Margin="0,0,0,16">                            <!-- Group Divider Block: Full-width single block with both folder paths -->
+                            <Border Background="{DynamicResource SurfaceCard}"
+                                    BorderBrush="{DynamicResource BorderSubtle}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="14,10"
+                                    Margin="0,4,0,8">
+                                <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="12" VerticalAlignment="Center">
+                                    <!-- Group CheckBox -->
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsAllSelected}" IsThreeState="True"
+                                              VerticalAlignment="Center" Margin="0"
+                                              ToolTip.Tip="{loc:Loc approval.all_pairs}" />
+
+                                    <!-- Pair Name + Count Badge -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <Path Classes="ico" Data="{StaticResource IconFolders}" Width="16" Height="16"
+                                              Stroke="{DynamicResource Accent}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding PairName}" FontWeight="Bold" FontSize="13"
+                                                   Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
+                                        <Border Background="{DynamicResource AccentSoft}" CornerRadius="10" Padding="6,2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding CountSummary}" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AccentText}" />
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- Both folder paths across the block: Path 1 → Path 2 -->
+                                    <Grid Grid.Column="2" ColumnDefinitions="*,Auto,*" ColumnSpacing="10" VerticalAlignment="Center" Margin="12,0">
+                                        <TextBlock Grid.Column="0" Text="{Binding SourceRootDisplay}"
+                                                   TextTrimming="CharacterEllipsis" FontSize="11.5"
+                                                   Foreground="{DynamicResource TextSecondary}"
+                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   ToolTip.Tip="{Binding SourceRootDisplay}" />
+
+                                        <Path Grid.Column="1" Classes="ico" Data="{StaticResource IconArrowRight}" Width="12" Height="12"
+                                              Stroke="{DynamicResource TextMuted}" VerticalAlignment="Center" />
+
+                                        <TextBlock Grid.Column="2" Text="{Binding TargetRootDisplay}"
+                                                   TextTrimming="CharacterEllipsis" FontSize="11.5"
+                                                   Foreground="{DynamicResource TextSecondary}"
+                                                   HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                   ToolTip.Tip="{Binding TargetRootDisplay}" />
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <!-- Cards of this group -->
+                            <ItemsControl ItemsSource="{Binding Items}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ApprovalItemViewModel">
+                                        <Border Classes="item-card" Classes.is-selected="{Binding IsSelected}">
+                                            <Grid ColumnDefinitions="32,*,80,*,112" ColumnSpacing="16">
+
+                                                <!-- Checkbox for item selection -->
+                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0" />
+
+                                                <!-- Left: Source File / Folder (A) -->
+                                                <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding WasPath}" Classes="oneline" FontWeight="SemiBold"
+                                                               Classes.absent="{Binding IsWasAbsent}" ToolTip.Tip="{Binding WasPath}" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding !IsWasAbsent}">
+                                                        <TextBlock Text="{Binding WasSize}" Classes="caption" FontWeight="Medium"
+                                                                   IsVisible="{Binding WasSize, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                                        <TextBlock Text="{Binding WasMtime}" Classes="caption"
+                                                                   IsVisible="{Binding WasMtime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- Middle: Action Direction Arrow + Change Icon Badge -->
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                    <!-- Direction Arrow: pointing left into Folder A without circle, matching change color -->
+                                                    <Viewbox Width="16" Height="16" Stretch="Uniform"
+                                                             HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                             ToolTip.Tip="{Binding ActionDirectionTooltip}">
+                                                        <Canvas Width="24" Height="24">
+                                                            <Path Data="{StaticResource IconArrowLeft}"
+                                                                  Classes="action-arrow"
+                                                                  Classes.added="{Binding IsAdded}"
+                                                                  Classes.deleted="{Binding IsDeleted}"
+                                                                  Classes.modified="{Binding IsModified}"
+                                                                  Classes.renamed="{Binding IsRenamed}"
+                                                                  Classes.conflict="{Binding IsConflict}" />
+                                                        </Canvas>
+                                                    </Viewbox>
+
+                                                    <!-- Circular Change Badge -->
+                                                    <Border Width="30" Height="30" CornerRadius="15" BorderThickness="1"
+                                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                            Classes.badge-added="{Binding IsAdded}"
+                                                            Classes.badge-deleted="{Binding IsDeleted}"
+                                                            Classes.badge-modified="{Binding IsModified}"
+                                                            Classes.badge-renamed="{Binding IsRenamed}"
+                                                            Classes.badge-conflict="{Binding IsConflict}"
+                                                            ToolTip.Tip="{Binding ChangeTitle}">
+
+                                                        <Panel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <!-- Added: Plus -->
+                                                            <Viewbox IsVisible="{Binding IsAdded}" Width="15" Height="15" Stretch="Uniform">
+                                                                <Canvas Width="24" Height="24">
+                                                                    <Path Data="{StaticResource IconPlus}" Stroke="{DynamicResource Success}"
+                                                                          StrokeThickness="2.4" StrokeLineCap="Round" StrokeJoin="Round" />
+                                                                </Canvas>
+                                                            </Viewbox>
+
+                                                            <!-- Deleted: Trash -->
+                                                            <Viewbox IsVisible="{Binding IsDeleted}" Width="15" Height="15" Stretch="Uniform">
+                                                                <Canvas Width="24" Height="24">
+                                                                    <Path Data="{StaticResource IconTrash}" Stroke="{DynamicResource Danger}"
+                                                                          StrokeThickness="2.0" StrokeLineCap="Round" StrokeJoin="Round" />
+                                                                </Canvas>
+                                                            </Viewbox>
+
+                                                            <!-- Modified: Pencil -->
+                                                            <Viewbox IsVisible="{Binding IsModified}" Width="15" Height="15" Stretch="Uniform">
+                                                                <Canvas Width="24" Height="24">
+                                                                    <Path Data="{StaticResource IconPencil}" Stroke="{DynamicResource Warning}"
+                                                                          StrokeThickness="2.0" StrokeLineCap="Round" StrokeJoin="Round" />
+                                                                </Canvas>
+                                                            </Viewbox>
+
+                                                            <!-- Renamed / Moved: Arrow -->
+                                                            <Viewbox IsVisible="{Binding IsRenamed}" Width="15" Height="15" Stretch="Uniform">
+                                                                <Canvas Width="24" Height="24">
+                                                                    <Path Data="{StaticResource IconArrowRight}" Stroke="{DynamicResource Accent}"
+                                                                          StrokeThickness="2.2" StrokeLineCap="Round" StrokeJoin="Round" />
+                                                                </Canvas>
+                                                            </Viewbox>
+
+                                                            <!-- Conflict: Shield -->
+                                                            <Viewbox IsVisible="{Binding IsConflict}" Width="15" Height="15" Stretch="Uniform">
+                                                                <Canvas Width="24" Height="24">
+                                                                    <Path Data="{StaticResource IconShield}" Stroke="{DynamicResource Danger}"
+                                                                          StrokeThickness="2.0" StrokeLineCap="Round" StrokeJoin="Round" />
+                                                                </Canvas>
+                                                            </Viewbox>
+                                                        </Panel>
+                                                    </Border>
+                                                </StackPanel>
+
+                                                <!-- Right: Target File / Folder (B) -->
+                                                <StackPanel Grid.Column="3" Spacing="4" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding BecamePath}" Classes="oneline" FontWeight="SemiBold"
+                                                               Classes.absent="{Binding IsBecameAbsent}" ToolTip.Tip="{Binding BecamePath}" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding !IsBecameAbsent}">
+                                                        <!-- File size -->
+                                                        <TextBlock Text="{Binding BecameSize}" Classes="caption" FontWeight="Medium" VerticalAlignment="Center"
+                                                                   IsVisible="{Binding BecameSize, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                                                        <!-- Size delta badge under/next to the file that changed size -->
+                                                        <Border IsVisible="{Binding HasSizeDelta}" CornerRadius="3" Padding="4,1" VerticalAlignment="Center"
+                                                                Classes.delta-pos="{Binding IsSizePositive}" Classes.delta-neg="{Binding IsSizeNegative}">
+                                                            <Panel>
+                                                                <TextBlock Text="{Binding SizeDeltaText}" FontSize="11" FontWeight="Bold"
+                                                                            Foreground="{DynamicResource Success}" IsVisible="{Binding IsSizePositive}" />
+                                                                <TextBlock Text="{Binding SizeDeltaText}" FontSize="11" FontWeight="Bold"
+                                                                            Foreground="{DynamicResource Danger}" IsVisible="{Binding IsSizeNegative}" />
+                                                            </Panel>
+                                                        </Border>
+
+                                                        <!-- Modification time (highlighted text if changed, no border badge) -->
+                                                        <TextBlock Text="{Binding BecameMtime}" Classes="caption" VerticalAlignment="Center"
+                                                                   Classes.mtime-changed="{Binding IsMtimeChanged}"
+                                                                   ToolTip.Tip="{Binding DetectedTimeText}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- Row Action Buttons (32x32 circles, color-coded, centered) -->
+                                                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                    <Button Classes="row-btn row-btn-approve" Click="OnRowApproveClicked" Tag="{Binding}"
+                                                            ToolTip.Tip="{loc:Loc approval.approve_item_tip}">
+                                                        <Viewbox Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Data="{StaticResource IconCheck}" />
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Button>
+                                                    <Button Classes="row-btn row-btn-dismiss" Click="OnRowDismissClicked" Tag="{Binding}"
+                                                            ToolTip.Tip="{loc:Loc approval.dismiss_item_tip}">
+                                                        <Viewbox Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Data="{StaticResource IconX}" />
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Button>
+                                                    <Button Classes="row-btn row-btn-revert" Click="OnRowRevertClicked" Tag="{Binding}"
+                                                            ToolTip.Tip="{loc:Loc approval.revert_item_tip}">
+                                                        <Viewbox Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                            <Canvas Width="24" Height="24">
+                                                                <Path Data="{StaticResource IconRotateCcw}" />
+                                                            </Canvas>
+                                                        </Viewbox>
+                                                    </Button>
+                                                </StackPanel>
+
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Bottom Summary & Action Status Bar (Vertically centered to CheckBox) -->
+        <Border Grid.Row="3" Background="{DynamicResource SurfaceCard}"
+                BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
+                Padding="28,10,28,10" MinHeight="48">
+            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                <CheckBox Grid.Column="0" Content="{loc:Loc approval.select_all}" Click="OnSelectAllToggled"
+                          VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0" />
+                <TextBlock Grid.Column="1" Text="{Binding SummaryText}" VerticalAlignment="Center"
+                           Margin="20,0,0,0" Foreground="{DynamicResource TextSecondary}" FontSize="13" />
+                <TextBlock Grid.Column="2" Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Danger}" FontSize="13" FontWeight="SemiBold" />
+            </Grid>
+        </Border>
+
+    </Grid>
+</Window>

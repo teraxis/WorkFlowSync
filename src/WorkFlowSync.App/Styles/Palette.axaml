@@ -23,13 +23,17 @@
             <!-- text -->
             <SolidColorBrush x:Key="TextPrimary" Color="#111827" />
             <SolidColorBrush x:Key="TextSecondary" Color="#4B5565" />
-            <SolidColorBrush x:Key="TextMuted" Color="#7A8496" />
+            <!-- Muted carries the paths and the facts line, i.e. most of what the folders page actually says.
+                 Was #7A8496: 3.77:1 on a card, 3.48:1 on the canvas — under the 4.5:1 minimum, and at caption
+                 size that is exactly what "the text is not readable" looks like. Now 4.7-5.3:1 on every
+                 surface, while staying a clear step lighter than TextSecondary. -->
+            <SolidColorBrush x:Key="TextMuted" Color="#636C7B" />
             <SolidColorBrush x:Key="TextOnAccent" Color="#FFFFFF" />
 
-            <!-- accent -->
-            <SolidColorBrush x:Key="Accent" Color="#2C62E8" />
-            <SolidColorBrush x:Key="AccentHover" Color="#2554CC" />
-            <SolidColorBrush x:Key="AccentPressed" Color="#1E46AC" />
+            <!-- accent: deep enough that white on it clears 7:1 (was #2C62E8 = 5.4:1) -->
+            <SolidColorBrush x:Key="Accent" Color="#1A47CC" />
+            <SolidColorBrush x:Key="AccentHover" Color="#163CAF" />
+            <SolidColorBrush x:Key="AccentPressed" Color="#123296" />
             <SolidColorBrush x:Key="AccentSoft" Color="#DEE8FF" />
             <SolidColorBrush x:Key="AccentText" Color="#1E46AC" />
 
@@ -58,11 +62,13 @@
             <SolidColorBrush x:Key="TextPrimary" Color="#E9EDF3" />
             <SolidColorBrush x:Key="TextSecondary" Color="#AEB8C7" />
             <SolidColorBrush x:Key="TextMuted" Color="#7E8899" />
-            <SolidColorBrush x:Key="TextOnAccent" Color="#FFFFFF" />
+            <!-- On a dark canvas the accent has to stay bright to read as an accent, so the label goes dark
+                 instead: white on #4C82F7 is only 3.5:1, which fails the 4.5:1 minimum. -->
+            <SolidColorBrush x:Key="TextOnAccent" Color="#0B1220" />
 
             <SolidColorBrush x:Key="Accent" Color="#4C82F7" />
             <SolidColorBrush x:Key="AccentHover" Color="#6394FF" />
-            <SolidColorBrush x:Key="AccentPressed" Color="#3A6FE0" />
+            <SolidColorBrush x:Key="AccentPressed" Color="#4477EC" />
             <SolidColorBrush x:Key="AccentSoft" Color="#1C2A45" />
             <SolidColorBrush x:Key="AccentText" Color="#8FB3FF" />
 

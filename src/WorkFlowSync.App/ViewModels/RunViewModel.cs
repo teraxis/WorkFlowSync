@@ -68,10 +68,10 @@ public sealed partial class RunViewModel : ObservableObject
     {
         var text = _background.State switch
         {
-            LoopState.Stopped when _activePairs == 0 => "Усі пари на паузі — нічого не перевіряється",
+            LoopState.Stopped when _activePairs == 0 => "Усі завдання на паузі — нічого не перевіряється",
             LoopState.Stopped => "Зупинено",
             LoopState.Paused => "Призупинено зі значка в області сповіщень",
-            _ => $"{_background.StatusText} · пар: {_activePairs}",
+            _ => $"{_background.StatusText} · завдань: {_activePairs}",
         };
         Set(text);
     }
@@ -114,7 +114,7 @@ public sealed partial class RunViewModel : ObservableObject
             {
                 var c = store.CountByStatus(pair.Name);
                 int Get(EntryStatus s) => c.TryGetValue(s, out var n) ? n : 0;
-                sb.AppendLine($"[{pair.Name}]  дзеркалюється: {Get(EntryStatus.Active):N0}   видалено локально (не повертати): {Get(EntryStatus.Tombstone):N0}   змінено локально: {Get(EntryStatus.LocalModified):N0}");
+                sb.AppendLine($"[{pair.Name}]  дзеркалюється: {Get(EntryStatus.Active):N0}   видалено локально (не повертати): {Get(EntryStatus.Tombstone):N0}   змінено локально: {Get(EntryStatus.LocalModified):N0}   не переноситься за віком: {Get(EntryStatus.TooOld):N0}");
             }
             Summary = sb.ToString().TrimEnd();
         }
@@ -148,13 +148,13 @@ public sealed partial class RunViewModel : ObservableObject
         }
 
         var configPath = _configPathProvider();
-        var logDir = Path.IsPathRooted(cfg.LogPath) ? cfg.LogPath : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath))!, cfg.LogPath);
+        var logDir = ResolveLogDir(cfg, configPath);
 
         _cts = new CancellationTokenSource();
         IsRunning = true;
         lock (_logLines) _logLines.Clear();
         LogText = "";
-        LastResult = dryRun ? "Розрахунок плану…" : (onlyPair is null ? "Виконується…" : $"Виконується пара «{onlyPair}»…");
+        LastResult = dryRun ? "Розрахунок плану…" : (onlyPair is null ? "Виконується…" : $"Виконується завдання «{onlyPair}»…");
 
         try
         {
@@ -174,8 +174,8 @@ public sealed partial class RunViewModel : ObservableObject
             var planned = result.Pairs.Sum(p => (p.Plan?.New ?? 0) + (p.Plan?.Updated ?? 0));
             var skipped = result.Pairs.Count(p => p.Skipped);
             LastResult = dryRun
-                ? $"План готовий: {planned:N0} файлів/папок до копіювання, пропущено пар: {skipped}. Нічого не змінено."
-                : $"Готово за {result.Elapsed.TotalSeconds:0.0} с: скопійовано/оновлено {copied:N0}, помилок {result.Errors}, пропущено пар: {skipped}.";
+                ? $"План готовий: {planned:N0} файлів/тек до копіювання, пропущено завдань: {skipped}. Нічого не змінено."
+                : $"Готово за {result.Elapsed.TotalSeconds:0.0} с: скопійовано/оновлено {copied:N0}, помилок {result.Errors}, пропущено завдань: {skipped}.";
         }
         catch (OperationCanceledException)
         {
@@ -199,7 +199,7 @@ public sealed partial class RunViewModel : ObservableObject
     private DateTime _lastFlushUtc = DateTime.MinValue;
 
     /// <summary>Bursts of thousands of lines are coalesced; at most one redraw per <see cref="LogRedrawInterval"/>.</summary>
-    private void AppendLog(string line)
+    public void AppendLog(string line)
     {
         lock (_logLines)
         {
@@ -230,6 +230,41 @@ public sealed partial class RunViewModel : ObservableObject
         }
         _lastFlushUtc = DateTime.UtcNow;
         LogText = text;
+    }
+
+    private static string ResolveLogDir(SyncConfig cfg, string configPath) =>
+        Path.IsPathRooted(cfg.LogPath) ? cfg.LogPath : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath))!, cfg.LogPath);
+
+    /// <summary>
+    /// Empties the log shown here and deletes the daily log files on disk. Kept apart from rotation
+    /// (which drops files older than the configured window): this is the user saying «I have read it».
+    /// The file the current pass is writing to stays — pulling it away would lose the line being written.
+    /// </summary>
+    [RelayCommand]
+    private void ClearLog()
+    {
+        lock (_logLines) _logLines.Clear();
+        LogText = "";
+
+        var deleted = 0;
+        try
+        {
+            var dir = ResolveLogDir(_configProvider(), _configPathProvider());
+            if (Directory.Exists(dir))
+            {
+                var today = Path.Combine(dir, $"wfs-{DateTime.Now:yyyy-MM-dd}.log");
+                foreach (var file in Directory.EnumerateFiles(dir, "wfs-*.log"))
+                {
+                    if (string.Equals(file, today, StringComparison.OrdinalIgnoreCase)) continue;
+                    try { File.Delete(file); deleted++; } catch (IOException) { /* held open: rotation will get it */ }
+                }
+            }
+            LastResult = deleted > 0 ? $"Журнал очищено, видалено файлів: {deleted}" : "Журнал очищено";
+        }
+        catch (Exception ex)
+        {
+            LastResult = $"Не вдалося видалити файли журналу: {ex.Message}";
+        }
     }
 
     partial void OnIsRunningChanged(bool value)

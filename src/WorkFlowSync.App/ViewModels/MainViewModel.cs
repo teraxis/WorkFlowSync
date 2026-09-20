@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using WorkFlowSync.App.Services;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
+using WorkFlowSync.Core.I18n;
 
 namespace WorkFlowSync.App.ViewModels;
 
@@ -15,7 +16,7 @@ public sealed partial class MainViewModel : ObservableObject
 {
     public string ConfigPath { get; }
     public string Title => $"{WorkFlowSyncInfo.Name} {WorkFlowSyncInfo.Version}";
-    public string Version => $"версія {WorkFlowSyncInfo.Version}";
+    public string Version => I18n.T("app.version_format", WorkFlowSyncInfo.Version);
 
     public ObservableCollection<PairViewModel> Pairs { get; } = new();
 
@@ -30,17 +31,21 @@ public sealed partial class MainViewModel : ObservableObject
 
     public string PageTitle => SelectedPage switch
     {
-        0 => "Папки",
-        1 => "Синхронізація",
-        _ => "Налаштування",
+        0 => I18n.T("nav.tasks"),
+        1 => I18n.T("nav.events"),
+        _ => I18n.T("nav.settings"),
     };
 
     public IReadOnlyList<CpuLoad> CpuLoads { get; } = new[] { CpuLoad.Balanced, CpuLoad.Full, CpuLoad.Low };
 
     public IReadOnlyList<AppTheme> Themes { get; } = new[] { AppTheme.System, AppTheme.Light, AppTheme.Dark };
 
+    public IReadOnlyList<string> Languages { get; } = new[] { "uk", "en", "system" };
+
     /// <summary>Applied immediately and remembered in the config.</summary>
     [ObservableProperty] private AppTheme _theme = AppTheme.System;
+
+    [ObservableProperty] private string _language = "uk";
 
     // Settings tab
     [ObservableProperty] private int _intervalMinutes = 30;
@@ -52,6 +57,30 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private CpuLoad _cpuLoad = CpuLoad.Balanced;
     [ObservableProperty] private int _scanBufferKb = 256;
     [ObservableProperty] private int _logKeepDays = 30;
+
+    /// <summary>Whether a finished pass may say something (docs/product/features/tray.md).</summary>
+    [ObservableProperty] private NotifyMode _notifications = NotifyMode.All;
+
+    /// <summary>How many files the «Останні зміни» window lists.</summary>
+    [ObservableProperty] private int _recentLimit = 40;
+
+    /// <summary>Hours when routine messages are held back. Equal values = no quiet period.</summary>
+    [ObservableProperty] private int _quietHoursFrom;
+    [ObservableProperty] private int _quietHoursTo;
+
+    public static IReadOnlyList<NotifyMode> NotifyModes { get; } = Enum.GetValues<NotifyMode>();
+
+    /// <summary>Spells out what the current choice means, quiet hours included.</summary>
+    public string NotificationsHint => Notifications switch
+    {
+        NotifyMode.Off => I18n.T("hint.notify.off"),
+        NotifyMode.ErrorsOnly => I18n.T("hint.notify.errors") + QuietSuffix,
+        _ => I18n.T("hint.notify.all") + QuietSuffix,
+    };
+
+    private string QuietSuffix => QuietHoursFrom == QuietHoursTo
+        ? ""
+        : I18n.T("hint.notify.quiet", QuietHoursFrom, QuietHoursTo);
 
     [ObservableProperty] private string _statusText = "";
     [ObservableProperty] private bool _statusIsError;
@@ -69,6 +98,17 @@ public sealed partial class MainViewModel : ObservableObject
     {
         ConfigPath = configPath;
         Pairs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasPairs));
+        I18n.Instance.LanguageChanged += () =>
+        {
+            OnPropertyChanged(nameof(PageTitle));
+            OnPropertyChanged(nameof(Version));
+            OnPropertyChanged(nameof(NotificationsHint));
+            OnPropertyChanged(nameof(CpuLoadHint));
+            OnPropertyChanged(nameof(Languages));
+            OnPropertyChanged(nameof(Themes));
+            OnPropertyChanged(nameof(CpuLoads));
+            OnPropertyChanged(nameof(NotifyModes));
+        };
         Background = new BackgroundLoop(ConfigPath, ResolveLogDir, () => LogKeepDays);
         Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => false);
         Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
@@ -110,7 +150,7 @@ public sealed partial class MainViewModel : ObservableObject
             var cfg = ConfigFile.LoadOrDefault(ConfigPath);
             Apply(cfg);
             // No "loaded X" chatter: the status line is for things the user has to notice.
-            SetStatus(created ? $"Створено config.json у папці програми: {AppFolder}" : "", error: false);
+            SetStatus(created ? $"Створено config.json у теці програми: {AppFolder}" : "", error: false);
             RaiseFolderPaths();
         }
         catch (Exception ex)
@@ -125,7 +165,15 @@ public sealed partial class MainViewModel : ObservableObject
     {
         _loading = true;
         Pairs.Clear();
-        foreach (var p in cfg.Pairs) Pairs.Add(PairViewModel.FromModel(p));
+        foreach (var p in cfg.Pairs)
+        {
+            var vm = PairViewModel.FromModel(p);
+            // A config written before schedules moved onto the pairs has none of its own: carry the old
+            // shared value over, so nothing silently starts checking at a different rate.
+            if (p.Interval is null) vm.IntervalMinutes = Math.Max(1, (int)Math.Round(cfg.Interval.TotalMinutes));
+            vm.PropertyChanged += (_, _) => MarkDirty();
+            Pairs.Add(vm);
+        }
         IntervalMinutes = Math.Max(1, (int)Math.Round(cfg.Interval.TotalMinutes));
         StatePath = cfg.StatePath;
         LogPath = cfg.LogPath;
@@ -134,6 +182,12 @@ public sealed partial class MainViewModel : ObservableObject
         ScanBufferKb = Math.Max(4, cfg.ScanBufferSize / 1024);
         LogKeepDays = cfg.LogKeepDays;
         Theme = cfg.Theme;
+        Language = string.IsNullOrWhiteSpace(cfg.Language) ? "uk" : cfg.Language;
+        I18n.Instance.SetLanguage(Language);
+        Notifications = cfg.Notifications;
+        RecentLimit = cfg.RecentLimit;
+        QuietHoursFrom = cfg.QuietHoursFrom;
+        QuietHoursTo = cfg.QuietHoursTo;
         _loading = false;
         FollowPairStates();
     }
@@ -153,7 +207,9 @@ public sealed partial class MainViewModel : ObservableObject
     public SyncConfig ToConfig() => new()
     {
         Pairs = Pairs.Select(p => p.ToModel()).ToList(),
-        Interval = TimeSpan.FromMinutes(IntervalMinutes),
+        // Kept as the fallback for hand-edited configs and as the Task Scheduler period: the shortest
+        // pair interval is the only value that makes sense for a single scheduled task.
+        Interval = TimeSpan.FromMinutes(Pairs.Count > 0 ? Pairs.Min(p => p.IntervalMinutes) : IntervalMinutes),
         StatePath = StatePath.Trim(),
         LogPath = LogPath.Trim(),
         ScanParallelism = ScanParallelism,
@@ -161,6 +217,11 @@ public sealed partial class MainViewModel : ObservableObject
         ScanBufferSize = ScanBufferKb * 1024,
         LogKeepDays = LogKeepDays,
         Theme = Theme,
+        Language = Language,
+        Notifications = Notifications,
+        RecentLimit = RecentLimit,
+        QuietHoursFrom = QuietHoursFrom,
+        QuietHoursTo = QuietHoursTo,
     };
 
     /// <summary>Returns validation problems (empty = OK).</summary>
@@ -197,6 +258,7 @@ public sealed partial class MainViewModel : ObservableObject
     public void AddPair(PairViewModel pair)
     {
         pair.RaiseSummaries();
+        pair.PropertyChanged += (_, _) => MarkDirty();
         Pairs.Add(pair);
         SelectedPair = pair;
         SaveNow();
@@ -214,7 +276,7 @@ public sealed partial class MainViewModel : ObservableObject
         Pairs.Remove(pair);
         if (ReferenceEquals(SelectedPair, pair)) SelectedPair = null;
         SaveNow();
-        SetStatus($"Пару «{pair.Name}» видалено зі списку.", error: false);
+        SetStatus($"Завдання «{pair.Name}» видалено зі списку.", error: false);
     }
 
     public string SuggestPairName(string source)
@@ -222,7 +284,7 @@ public sealed partial class MainViewModel : ObservableObject
         // Last path segment; Path.GetFileName returns "" for a share root like \\srv\share, so split by hand.
         var baseName = source.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
         baseName = baseName.TrimEnd(':');
-        if (string.IsNullOrWhiteSpace(baseName)) baseName = "pair";
+        if (string.IsNullOrWhiteSpace(baseName)) baseName = "task";
         var name = baseName;
         var i = 2;
         while (Pairs.Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)))
@@ -241,12 +303,12 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (pair.Enabled)
         {
-            SetStatus($"«{pair.Name}» — виконується: перевіряю зараз, далі кожні {IntervalMinutes} хв.", error: false);
+            SetStatus($"«{pair.Name}» — активне: перевіряю зараз, далі кожні {IntervalMinutes} хв.", error: false);
             await RunPairAsync(pair);
         }
         else
         {
-            SetStatus($"«{pair.Name}» — на паузі: автоматичні перевірки цієї пари зупинено.", error: false);
+            SetStatus($"«{pair.Name}» — на паузі: автоматичні перевірки цього завдання зупинено.", error: false);
         }
     }
 
@@ -295,6 +357,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     partial void OnSelectedPairChanged(PairViewModel? value) => OnPropertyChanged(nameof(HasSelection));
     partial void OnIntervalMinutesChanged(int value) => MarkDirty();
+
+    partial void OnNotificationsChanged(NotifyMode value) { MarkDirty(); OnPropertyChanged(nameof(NotificationsHint)); }
+    partial void OnRecentLimitChanged(int value) => MarkDirty();
+    partial void OnQuietHoursFromChanged(int value) { MarkDirty(); OnPropertyChanged(nameof(NotificationsHint)); }
+    partial void OnQuietHoursToChanged(int value) { MarkDirty(); OnPropertyChanged(nameof(NotificationsHint)); }
     partial void OnStatePathChanged(string value) { MarkDirty(); RaiseFolderPaths(); }
     partial void OnLogPathChanged(string value) { MarkDirty(); RaiseFolderPaths(); }
     partial void OnScanParallelismChanged(int value) => MarkDirty();
@@ -305,12 +372,26 @@ public sealed partial class MainViewModel : ObservableObject
         MarkDirty();
     }
 
+    partial void OnLanguageChanged(string value)
+    {
+        I18n.Instance.SetLanguage(value);
+        OnPropertyChanged(nameof(PageTitle));
+        OnPropertyChanged(nameof(Version));
+        OnPropertyChanged(nameof(NotificationsHint));
+        OnPropertyChanged(nameof(CpuLoadHint));
+        OnPropertyChanged(nameof(Languages));
+        OnPropertyChanged(nameof(Themes));
+        OnPropertyChanged(nameof(CpuLoads));
+        OnPropertyChanged(nameof(NotifyModes));
+        MarkDirty();
+    }
+
     /// <summary>What the chosen load actually does, in the user's words.</summary>
     public string CpuLoadHint => CpuLoad switch
     {
-        CpuLoad.Full => "Стільки паралельних листингів, скільки задано нижче, зі звичайним пріоритетом. Найшвидше, але на слабкому ПК заважає роботі.",
-        CpuLoad.Low => "Два листинги з найнижчим пріоритетом: прохід триває довше, зате комп'ютер лишається чуйним.",
-        _ => "Не більше половини ядер, знижений пріоритет потоків. Прохід майже такий самий швидкий, а система лишається чуйною.",
+        CpuLoad.Full => I18n.T("hint.cpuload.full"),
+        CpuLoad.Low => I18n.T("hint.cpuload.low"),
+        _ => I18n.T("hint.cpuload.balanced"),
     };
     partial void OnScanBufferKbChanged(int value) => MarkDirty();
     partial void OnLogKeepDaysChanged(int value) => MarkDirty();

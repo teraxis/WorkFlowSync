@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 
 namespace WorkFlowSync.Core.Execution;
 
+// RootProbe lives one namespace up; the Recycle Bin question is really a question about the root.
+
 /// <summary>Moves files/directories to the Windows Recycle Bin (works as a normal user; no confirmation UI).</summary>
 public static class RecycleBin
 {
@@ -28,6 +30,15 @@ public static class RecycleBin
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int SHFileOperationW(ref SHFILEOPSTRUCT lpFileOp);
+
+    /// <summary>
+    /// Whether this location actually has a Recycle Bin. Network shares do not: there
+    /// <see cref="Send"/> deletes permanently and still reports success, so the caller has to warn instead
+    /// of assuming the deletion can be undone (docs/plan-etap5.md §4.5). Anything we cannot classify is
+    /// treated as "no bin" — an unnecessary warning is cheaper than a silent permanent delete.
+    /// </summary>
+    public static bool IsAvailableFor(string path) =>
+        RootProbe.QuickKind(path) is RootKind.Local or RootKind.Removable;
 
     /// <summary>Sends one path to the Recycle Bin. Throws on failure (caller logs and continues).</summary>
     public static void Send(string fullPath)

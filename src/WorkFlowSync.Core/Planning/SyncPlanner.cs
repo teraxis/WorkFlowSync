@@ -15,17 +15,33 @@ public sealed class SyncPlanner
     private readonly string _pair;
     private readonly DateTimeOffset _now;
     private readonly bool _backfillFirstSeen;
-    private readonly TimeSpan? _retention;
+    private readonly TimeSpan? _maxAge;
+    private readonly TimeSpan? _autoClean;
+    private readonly PlanScope? _scope;
 
     /// <param name="backfillFirstSeen">First pass: use min(ctime, mtime) of the source item as first_seen (docs F3).</param>
-    /// <param name="retention">Keep only files first seen within this window; null = forever (docs F3).</param>
-    public SyncPlanner(string pair, DateTimeOffset now, bool backfillFirstSeen, TimeSpan? retention = null)
+    /// <param name="maxAge">
+    /// Intake window: only files that appeared within it are copied and kept up to date; null = copy everything.
+    /// Purely a filter — it never removes anything from the target, and the source is read-only either way (docs F3).
+    /// </param>
+    /// <param name="autoClean">Move our own copies older than this window to the Recycle Bin; null = keep forever (docs F3).</param>
+    /// <param name="scope">
+    /// Limits the pass to one directory. A scoped pass only adds and updates: every destructive decision is
+    /// inferred from absence, and absence inside a slice of the tree proves nothing (docs/plan-etap5.md §4.2).
+    /// </param>
+    public SyncPlanner(string pair, DateTimeOffset now, bool backfillFirstSeen, TimeSpan? maxAge = null,
+        TimeSpan? autoClean = null, PlanScope? scope = null)
     {
         _pair = pair;
         _now = now;
         _backfillFirstSeen = backfillFirstSeen;
-        _retention = retention;
+        _maxAge = maxAge;
+        _autoClean = autoClean;
+        _scope = scope;
     }
+
+    /// <summary>True while planning only part of the tree; destructive rules are off.</summary>
+    private bool Scoped => _scope is not null;
 
     public SyncPlan Plan(IReadOnlyDictionary<string, ScanEntry> source, IReadOnlyDictionary<string, ScanEntry> target,
         IReadOnlyDictionary<string, StateEntry> state)
@@ -41,6 +57,9 @@ public sealed class SyncPlanner
         all.UnionWith(source.Keys);
         all.UnionWith(target.Keys);
         all.UnionWith(state.Keys);
+        // Belt and braces: callers already hand a scoped pass nothing but its own subtree, but a stray path
+        // slipping through must never be acted on — that is the whole safety property of a partial pass.
+        if (_scope is { } scope) all.RemoveWhere(p => !scope.Contains(p));
         var ordered = all.OrderBy(Depth).ThenBy(p => p, StringComparer.OrdinalIgnoreCase);
 
         var expiredFiles = new List<StateEntry>();
@@ -77,6 +96,28 @@ public sealed class SyncPlanner
                     if (l is null) Tombstone(plan, db, tombstoneDirs, "local copy removed");
                     break;
 
+                case EntryStatus.TooOld:
+                    // Held back by the intake window, with the date we first saw it. Re-checked every pass, so
+                    // widening the window (or switching it off) lets the file in on the very next one.
+                    if (s is null) { if (!Scoped) plan.Forget.Add(path); break; }
+                    if (OutsideIntakeWindow(db.FirstSeenUtc)) { plan.Stats.TooOld++; break; }
+                    if (l is null)
+                    {
+                        var admitted = db with
+                        {
+                            Status = EntryStatus.Active, StatusChangedUtc = _now, LastSeenUtc = _now,
+                            SourceSize = s.Size, SourceMtimeUtc = s.MtimeUtc, ViaLink = s.ViaLink,
+                        };
+                        plan.Actions.Add(new SyncAction(SyncActionKind.CopyFile, path, admitted));
+                        plan.Stats.New++;
+                        plan.Stats.BytesToCopy += s.Size;
+                        break;
+                    }
+                    // A file of the same name turned up locally while we were holding back: it is not ours
+                    // to overwrite, so adopt it the way any other unknown local copy is adopted.
+                    Adopt(plan, s, l);
+                    break;
+
                 case EntryStatus.Active:
                     if (l is null)
                     {
@@ -86,7 +127,7 @@ public sealed class SyncPlanner
                     }
                     if (s is null)
                     {
-                        // rule 1: deleted in source → keep (unless retention says otherwise)
+                        // rule 1: deleted in source → keep (unless auto-clean says otherwise)
                         if (db.Kind == EntryKind.File && LocalIntact(l, db) && IsExpired(db)) expiredFiles.Add(db);
                         else plan.Stats.Unchanged++;
                         break;
@@ -106,12 +147,15 @@ public sealed class SyncPlanner
                     }
                     if (IsExpired(db))
                     {
-                        // Retention beats update: an expired file is recycled even if the source changed it.
+                        // Auto-clean beats update: an expired file is recycled even if the source changed it.
                         expiredFiles.Add(db);
                         break;
                     }
                     if (!Same(s, db.SourceSize, db.SourceMtimeUtc))
                     {
+                        // Outside the intake window the pair stops following this file: the copy already here
+                        // stays exactly as it is (auto-clean, not the filter, is what removes things).
+                        if (OutsideIntakeWindow(db.FirstSeenUtc)) { plan.Stats.TooOld++; break; }
                         var proposed = db with { SourceSize = s.Size, SourceMtimeUtc = s.MtimeUtc, LastSeenUtc = _now, ViaLink = s.ViaLink };
                         plan.Actions.Add(new SyncAction(SyncActionKind.UpdateFile, path, proposed));
                         plan.Stats.Updated++;
@@ -123,8 +167,34 @@ public sealed class SyncPlanner
             }
         }
 
+        PruneEmptyNewDirectories(plan, target);
         ApplyRetention(plan, expiredFiles, target, state);
         return plan;
+    }
+
+    /// <summary>
+    /// A folder whose whole content the intake window left behind would otherwise arrive as an empty folder.
+    /// Drops such <see cref="SyncActionKind.CreateDirectory"/> actions, deepest first so a chain of empty
+    /// parents collapses in one go. Only folders this pass invented are candidates — one that already exists
+    /// locally is never touched here.
+    /// </summary>
+    private void PruneEmptyNewDirectories(SyncPlan plan, IReadOnlyDictionary<string, ScanEntry> target)
+    {
+        if (_maxAge is null) return;
+
+        var dirs = plan.Actions
+            .Where(a => a.Kind == SyncActionKind.CreateDirectory)
+            .OrderByDescending(a => Depth(a.RelativePath))
+            .ToList();
+        foreach (var dir in dirs)
+        {
+            var prefix = dir.RelativePath + "\\";
+            var willHold = plan.Actions.Any(a => a != dir && a.RelativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                           || target.Keys.Any(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            if (willHold) continue;
+            plan.Actions.Remove(dir);
+            plan.Stats.New--;
+        }
     }
 
     /// <summary>
@@ -166,12 +236,33 @@ public sealed class SyncPlanner
         }
     }
 
+    /// <summary>
+    /// Auto-clean deletes files by age. It is a whole-pair decision — an empty folder is only empty once the
+    /// whole pair has been looked at — so a scoped pass never expires anything (docs/plan-etap5.md §4.2).
+    /// </summary>
     private bool IsExpired(StateEntry db) =>
-        _retention is { } r && db.Kind == EntryKind.File && db.FirstSeenUtc < _now - r;
+        !Scoped && _autoClean is { } r && db.Kind == EntryKind.File && db.FirstSeenUtc < _now - r;
+
+    /// <summary>
+    /// The intake filter: this item appeared too long ago to be worth copying. Unlike auto-clean this is a
+    /// per-item decision that needs nothing but the item itself, so a scoped pass applies it too.
+    /// </summary>
+    private bool OutsideIntakeWindow(DateTimeOffset firstSeen) => _maxAge is { } m && firstSeen < _now - m;
 
     private void AddNew(SyncPlan plan, ScanEntry s)
     {
         var entry = NewEntry(s);
+        // The intake window is decided here, before a single byte moves: a file that appeared outside it is
+        // left in the source and never copied. Directories are not judged by age — a new report dropped into
+        // a folder from 2019 must still arrive — so an empty one is pruned afterwards instead.
+        if (s.Kind == EntryKind.File && OutsideIntakeWindow(entry.FirstSeenUtc))
+        {
+            // Remember the date, not the file. Skipping silently would let the next pass meet the same file
+            // with no record of it, call it new, and copy exactly what this one refused.
+            plan.StateUpdates.Add(entry with { Status = EntryStatus.TooOld, StatusChangedUtc = _now });
+            plan.Stats.TooOld++;
+            return;
+        }
         plan.Actions.Add(new SyncAction(s.Kind == EntryKind.Directory ? SyncActionKind.CreateDirectory : SyncActionKind.CopyFile, s.RelativePath, entry));
         plan.Stats.New++;
         plan.Stats.BytesToCopy += s.Size;
@@ -181,6 +272,18 @@ public sealed class SyncPlanner
     private void Adopt(SyncPlan plan, ScanEntry s, ScanEntry l)
     {
         var entry = NewEntry(s) with { CopiedSize = l.Kind == EntryKind.File ? l.Size : null, CopiedMtimeUtc = l.Kind == EntryKind.File ? l.MtimeUtc : null };
+
+        // Adopting means "ours from now on, keep it in sync" — which is exactly what the intake window says
+        // NOT to do for an old file. This is the delete-the-pair-and-add-it-again case: the target still holds
+        // the earlier mirror, so every old file arrives here rather than through AddNew, and adopting them all
+        // made the window look broken. The file is left on disk untouched; we only record that we saw it.
+        if (s.Kind == EntryKind.File && OutsideIntakeWindow(entry.FirstSeenUtc))
+        {
+            plan.StateUpdates.Add(entry with { Status = EntryStatus.TooOld, StatusChangedUtc = _now });
+            plan.Stats.TooOld++;
+            return;
+        }
+
         if (s.Kind == EntryKind.File && l.Kind == EntryKind.File && !Same(s, l.Size, l.MtimeUtc))
         {
             entry = entry with { Status = EntryStatus.LocalModified, StatusChangedUtc = _now };
@@ -195,6 +298,13 @@ public sealed class SyncPlanner
 
     private void Tombstone(SyncPlan plan, StateEntry db, HashSet<string> tombstoneDirs, string reason)
     {
+        // A scoped pass never marks anything as gone: it is looking at one folder, not the pair.
+        // The next full pass reaches the same conclusion with the whole tree in view.
+        if (Scoped)
+        {
+            plan.Stats.DeferredToFullPass++;
+            return;
+        }
         plan.StateUpdates.Add(db with { Status = EntryStatus.Tombstone, StatusChangedUtc = _now });
         plan.Stats.Tombstoned++;
         if (db.Kind == EntryKind.Directory) tombstoneDirs.Add(db.RelativePath);

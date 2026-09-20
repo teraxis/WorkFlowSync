@@ -53,7 +53,13 @@ comments and log messages are English.
 These come from the customer's three rules (`docs/product/features/mirror-rules.md`):
 
 1. The source is opened read-only. No code path may write to, rename in, or delete from a source root.
-2. Local deletions are always Recycle Bin, never permanent.
+2. Local deletions are always Recycle Bin, never permanent — **on a root that has one**. Network shares do
+   not: `SHFileOperation` with `FOF_ALLOWUNDO` deletes permanently there and still reports success. The
+   customer decided on 2026-09-15 to keep that behaviour rather than add a `.wfs-trash` folder, so this is
+   a documented exception, not a bug to fix. What it obliges the code to do instead (docs/plan-etap5.md §4.5):
+   every such removal is logged as `WARN` with the full path, a removal is only carried out after the path
+   itself is re-checked, and a pass that wants to remove a suspicious share of the pair is held back
+   (`DeletionGuard`). None of those three may be "simplified" later.
 3. A `tombstone` entry is never re-copied from the source, whatever the source contains.
 4. A `local_modified` entry is never overwritten from the source.
 5. `first_seen` is written once and never updated.

@@ -7,6 +7,19 @@ public static class ConfigFile
 
     public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, DefaultFileName);
 
+    /// <summary>
+    /// The config a command line points at: <c>--config &lt;path&gt;</c>, otherwise the one next to the
+    /// executable. Shared so the entry point and the application itself can never disagree about which
+    /// config this process belongs to — that would split the single-instance lock in two.
+    /// </summary>
+    public static string FromArgs(IReadOnlyList<string>? args)
+    {
+        if (args is null) return DefaultPath;
+        for (var i = 0; i + 1 < args.Count; i++)
+            if (args[i] == "--config") return args[i + 1];
+        return DefaultPath;
+    }
+
     /// <summary>Loads the config or returns an empty default when the file does not exist yet.</summary>
     public static SyncConfig LoadOrDefault(string path) =>
         File.Exists(path) ? SyncConfig.Load(path) : new SyncConfig();

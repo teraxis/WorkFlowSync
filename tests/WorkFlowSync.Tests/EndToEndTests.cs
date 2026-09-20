@@ -178,16 +178,17 @@ public sealed class EndToEndTests : IDisposable
     }
 
     [Fact]
-    public void Retention_recycles_expired_files_and_empty_folders_and_never_brings_them_back()
+    public void Auto_clean_recycles_expired_files_and_empty_folders_and_never_brings_them_back()
     {
         var old = new DateTime(2024, 1, 15, 0, 0, 0, DateTimeKind.Utc);
         WriteSrc(@"2024\old.txt", "old", old);
         File.SetCreationTimeUtc(Path.Combine(_src, @"2024\old.txt"), old);
         WriteSrc(@"2026\new.txt", "new");
-        _config.Pairs[0].Retention = TimeSpan.FromDays(365);
+        _config.Pairs[0].AutoClean = TimeSpan.FromDays(365);
 
-        // First pass: backfill makes old.txt "first seen" in 2024 → already expired, but it must be mirrored first?
-        // No: it is copied on this pass (new to us) and recycled on the next one, once it is an active row.
+        // Auto-clean on its own is exactly that — a cleaner. It works on what we already hold, so old.txt is
+        // copied on this pass (new to us) and recycled on the next, once it is an active row. Not wanting it
+        // copied in the first place is the intake window's job, and it is deliberately not set here.
         Pass();
         Assert.Equal("old", ReadDst(@"2024\old.txt"));
         Assert.True(State(@"2024\old.txt").FirstSeenUtc <= new DateTimeOffset(old));
@@ -208,6 +209,42 @@ public sealed class EndToEndTests : IDisposable
         Assert.False(DstExists(@"2024\old.txt"));
         Assert.Equal("late", ReadDst(@"2024\addendum.txt"));
         Assert.Equal(0, p3.Pairs[0].Execution!.FilesRecycled);
+    }
+
+    /// <summary>
+    /// The intake window on a real tree: an old archive is never fetched over the network, the source keeps
+    /// every byte of it, and the local folder is only ever added to. This is the case that used to copy the
+    /// whole archive and bin it one pass later.
+    /// </summary>
+    [Fact]
+    public void Intake_window_never_copies_an_old_archive_and_removes_nothing()
+    {
+        var old = new DateTime(2019, 3, 4, 0, 0, 0, DateTimeKind.Utc);
+        WriteSrc(@"Архів 2019\звіт.txt", "old", old);
+        File.SetCreationTimeUtc(Path.Combine(_src, @"Архів 2019\звіт.txt"), old);
+        WriteSrc("свіже.txt", "new");
+        _config.Pairs[0].MaxAge = TimeSpan.FromDays(30);
+
+        var p1 = Pass();
+
+        Assert.Equal("new", ReadDst("свіже.txt"));
+        Assert.False(DstExists(@"Архів 2019\звіт.txt"));
+        Assert.False(DstExists("Архів 2019"));                        // not even an empty folder for it
+        Assert.Equal(0, p1.Pairs[0].Execution!.FilesRecycled);        // a filter removes nothing, ever
+        Assert.Equal(1, p1.Pairs[0].Plan!.TooOld);
+        Assert.Equal("old", File.ReadAllText(Path.Combine(_src, @"Архів 2019\звіт.txt")));   // source untouched
+
+        // It stays out on every later pass, and editing it in the source changes nothing here.
+        WriteSrc(@"Архів 2019\звіт.txt", "edited", old);
+        var p2 = Pass();
+        Assert.False(DstExists(@"Архів 2019\звіт.txt"));
+        Assert.Equal(0, p2.Pairs[0].Execution!.FilesCopied);
+
+        // A file put there TODAY is new to us, however old the folder around it is — and it arrives.
+        WriteSrc(@"Архів 2019\доповнення.txt", "late");
+        Pass();
+        Assert.Equal("late", ReadDst(@"Архів 2019\доповнення.txt"));
+        Assert.False(DstExists(@"Архів 2019\звіт.txt"));
     }
 
     [Fact]

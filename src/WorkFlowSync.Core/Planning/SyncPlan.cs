@@ -10,9 +10,9 @@ public enum SyncActionKind
     CopyFile,
     /// <summary>Overwrite an unchanged local copy with a newer source version.</summary>
     UpdateFile,
-    /// <summary>Retention: move an expired, untouched local file to the Recycle Bin; its row becomes a tombstone.</summary>
+    /// <summary>Auto-clean: move an expired, untouched local file to the Recycle Bin; its row becomes a tombstone.</summary>
     RecycleFile,
-    /// <summary>Retention: move a directory left empty by expired files to the Recycle Bin; its row is forgotten.</summary>
+    /// <summary>Auto-clean: move a directory left empty by expired files to the Recycle Bin; its row is forgotten.</summary>
     RecycleEmptyDirectory,
     /// <summary>Two-way: the item is gone on the other side — move this copy to the Recycle Bin and forget the row.</summary>
     DeleteFile,
@@ -43,14 +43,27 @@ public sealed class PlanStats
     public int EmptyDirs { get; set; }
     public long BytesToCopy { get; set; }
 
+    /// <summary>Source files the intake window (maxAge) left behind: too old to copy, or to keep updating.</summary>
+    public int TooOld { get; set; }
+
     /// <summary>Two-way: items removed on one side and therefore removed on the other.</summary>
     public int Deleted { get; set; }
 
     /// <summary>Two-way: items changed on both sides since the last pass; the newer one won.</summary>
     public int Conflicts { get; set; }
 
+    /// <summary>Two-way: items frozen awaiting human approval in the pending queue.</summary>
+    public int AwaitingApproval { get; set; }
+
+    /// <summary>
+    /// Destructive decisions a scoped pass declined to make (tombstone, delete, expire). They are not lost:
+    /// the next full pass sees the same situation with the whole tree in front of it.
+    /// </summary>
+    public int DeferredToFullPass { get; set; }
+
     public override string ToString() =>
-        $"new={New} update={Updated} adopt={Adopted} tombstone={Tombstoned} local_modified={LocalModified} unchanged={Unchanged} local_only={IgnoredLocalOnly} expired={Expired} empty_dirs={EmptyDirs}{(Deleted > 0 || Conflicts > 0 ? $" deleted={Deleted} conflicts={Conflicts}" : "")} bytes={BytesToCopy}";
+        $"new={New} update={Updated} adopt={Adopted} tombstone={Tombstoned} local_modified={LocalModified} unchanged={Unchanged} local_only={IgnoredLocalOnly} expired={Expired} empty_dirs={EmptyDirs}{(TooOld > 0 ? $" too_old={TooOld}" : "")}{(Deleted > 0 || Conflicts > 0 ? $" deleted={Deleted} conflicts={Conflicts}" : "")}{(AwaitingApproval > 0 ? $" awaiting_approval={AwaitingApproval}" : "")}{(DeferredToFullPass > 0 ? $" deferred={DeferredToFullPass}" : "")} bytes={BytesToCopy}";
+
 }
 
 public sealed class SyncPlan

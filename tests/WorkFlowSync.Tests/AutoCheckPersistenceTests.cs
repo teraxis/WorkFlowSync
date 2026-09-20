@@ -40,12 +40,12 @@ public sealed class AutoCheckPersistenceTests : IDisposable
     {
         var vm = new MainViewModel(_configPath);
         Assert.True(vm.Background.IsActive);                       // pair "a" plays → checking is on by itself
-        Assert.Contains("пар: 1", vm.Run.BackgroundStatus);
+        Assert.Contains("завдань: 1", vm.Run.BackgroundStatus);
 
         vm.Pairs[0].Enabled = false;
         vm.FollowPairStates();
         Assert.False(vm.Background.IsActive);
-        Assert.Contains("Усі пари на паузі", vm.Run.BackgroundStatus);
+        Assert.Contains("Усі завдання на паузі", vm.Run.BackgroundStatus);
 
         vm.Pairs[1].Enabled = true;
         vm.FollowPairStates();
@@ -59,7 +59,7 @@ public sealed class AutoCheckPersistenceTests : IDisposable
         var vm = new MainViewModel(_configPath);
         Assert.Equal("⏸", vm.Pairs[0].ToggleGlyph);
         Assert.Equal("▶", vm.Pairs[1].ToggleGlyph);
-        Assert.Equal("виконується", vm.Pairs[0].StateSummary);
+        Assert.Equal("активне", vm.Pairs[0].StateSummary);
         Assert.Equal("на паузі", vm.Pairs[1].StateSummary);
 
         await vm.TogglePairAsync(vm.Pairs[0]);                     // pause "a"
@@ -74,7 +74,7 @@ public sealed class AutoCheckPersistenceTests : IDisposable
         await restarted.TogglePairAsync(restarted.Pairs[1]);           // play "b" → runs at once
         Assert.True(SyncConfig.Load(_configPath).Pairs[1].Enabled);
         Assert.True(restarted.Background.IsActive);
-        Assert.Equal("виконується", restarted.Pairs[1].StateSummary);
+        Assert.Equal("активне", restarted.Pairs[1].StateSummary);
         Assert.Equal("⏸", restarted.Pairs[1].ToggleGlyph);
         restarted.Background.Stop();
     }
@@ -83,9 +83,11 @@ public sealed class AutoCheckPersistenceTests : IDisposable
     public async Task Every_edit_is_written_immediately_there_is_no_save_button()
     {
         var vm = new MainViewModel(_configPath);
+        vm.Background.Stop();
 
-        vm.IntervalMinutes = 2;
-        Assert.Equal(2, SyncConfig.Load(_configPath).Interval.TotalMinutes);   // on disk already
+        vm.Pairs[0].IntervalMinutes = 2;   // the schedule lives on the pair now
+        vm.SaveNow();
+        Assert.Equal(2, SyncConfig.Load(_configPath).Pairs[0].Interval!.Value.TotalMinutes);   // on disk already
 
         vm.Theme = AppTheme.Dark;
         Assert.Equal(AppTheme.Dark, SyncConfig.Load(_configPath).Theme);
@@ -93,7 +95,7 @@ public sealed class AutoCheckPersistenceTests : IDisposable
         await vm.TogglePairAsync(vm.Pairs[1]);                      // play "b"
         var saved = SyncConfig.Load(_configPath);
         Assert.True(saved.Pairs[1].Enabled);
-        Assert.Equal(2, saved.Interval.TotalMinutes);               // earlier edit survived the later write
+        Assert.Equal(2, saved.Pairs[0].Interval!.Value.TotalMinutes);   // earlier edit survived the later write
         Assert.DoesNotContain("Зберегти", vm.StatusText);           // nothing to nag about
         vm.Background.Stop();
     }

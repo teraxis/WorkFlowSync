@@ -46,6 +46,8 @@
 | [gui.md](features/gui.md) | Графічний інтерфейс: пари папок з вибором джерела/дзеркала, налаштування, стан |
 | [tray.md](features/tray.md) | Значок в області сповіщень, фоновий цикл у вікні, меню та пауза |
 | [design-system.md](features/design-system.md) | Токени кольорів, світла й темна теми, типографіка, іконки, структура вікна |
+| [approval-and-versioning.md](features/approval-and-versioning.md) | Погодження змін у двобічних парах, черга pending, відкат та версіонування у .wfsversions |
+| [localization.md](features/localization.md) | Двомовність (українська та англійська), конфіги JSON, миттєве перемикання мови інтерфейсу |
 
 ## Документаційний контракт
 

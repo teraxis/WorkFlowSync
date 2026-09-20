@@ -28,7 +28,7 @@ public class RetentionTests
     [Fact]
     public void Expired_untouched_file_is_recycled_and_tombstoned_even_if_source_still_has_it()
     {
-        var plan = new SyncPlanner("p", Now, false, Year).Plan(Scan(File("a.txt")), Scan(File("a.txt")), State(Row("a.txt", Old)));
+        var plan = new SyncPlanner("p", Now, false, autoClean: Year).Plan(Scan(File("a.txt")), Scan(File("a.txt")), State(Row("a.txt", Old)));
         var a = Assert.Single(plan.Actions);
         Assert.Equal(SyncActionKind.RecycleFile, a.Kind);
         Assert.Equal(EntryStatus.Tombstone, a.Proposed.Status);
@@ -38,16 +38,16 @@ public class RetentionTests
     [Fact]
     public void Expired_file_already_deleted_in_source_is_recycled_too()
     {
-        var plan = new SyncPlanner("p", Now, false, Year).Plan(Scan(), Scan(File("a.txt")), State(Row("a.txt", Old)));
+        var plan = new SyncPlanner("p", Now, false, autoClean: Year).Plan(Scan(), Scan(File("a.txt")), State(Row("a.txt", Old)));
         Assert.Equal(SyncActionKind.RecycleFile, Assert.Single(plan.Actions).Kind);
     }
 
     [Fact]
     public void Fresh_file_and_no_retention_are_left_alone()
     {
-        var fresh = new SyncPlanner("p", Now, false, Year).Plan(Scan(File("a.txt")), Scan(File("a.txt")), State(Row("a.txt", Fresh)));
+        var fresh = new SyncPlanner("p", Now, false, autoClean: Year).Plan(Scan(File("a.txt")), Scan(File("a.txt")), State(Row("a.txt", Fresh)));
         Assert.Empty(fresh.Actions);
-        var forever = new SyncPlanner("p", Now, false, null).Plan(Scan(File("a.txt")), Scan(File("a.txt")), State(Row("a.txt", Old)));
+        var forever = new SyncPlanner("p", Now, false, autoClean: null).Plan(Scan(File("a.txt")), Scan(File("a.txt")), State(Row("a.txt", Old)));
         Assert.Empty(forever.Actions);
     }
 
@@ -55,13 +55,13 @@ public class RetentionTests
     public void Locally_modified_files_never_expire()
     {
         var modified = Row("a.txt", Old, status: EntryStatus.LocalModified);
-        var plan = new SyncPlanner("p", Now, false, Year).Plan(Scan(File("a.txt")), Scan(File("a.txt")), State(modified));
+        var plan = new SyncPlanner("p", Now, false, autoClean: Year).Plan(Scan(File("a.txt")), Scan(File("a.txt")), State(modified));
         Assert.Empty(plan.Actions);
         Assert.Empty(plan.StateUpdates);
 
         // Active but edited locally right now: becomes local_modified, not recycled.
         var edited = new ScanEntry { RelativePath = "b.txt", Kind = EntryKind.File, Size = 99, MtimeUtc = Now, CtimeUtc = Old };
-        var plan2 = new SyncPlanner("p", Now, false, Year).Plan(Scan(File("b.txt")), Scan(edited), State(Row("b.txt", Old)));
+        var plan2 = new SyncPlanner("p", Now, false, autoClean: Year).Plan(Scan(File("b.txt")), Scan(edited), State(Row("b.txt", Old)));
         Assert.Empty(plan2.Actions);
         Assert.Equal(EntryStatus.LocalModified, Assert.Single(plan2.StateUpdates).Status);
     }
@@ -75,7 +75,7 @@ public class RetentionTests
             Row("old", Old, EntryKind.Directory), Row(@"old\a.txt", Old),
             Row("mixed", Old, EntryKind.Directory), Row(@"mixed\a.txt", Old), Row(@"mixed\new.txt", Fresh));
 
-        var plan = new SyncPlanner("p", Now, false, Year).Plan(source, target, state);
+        var plan = new SyncPlanner("p", Now, false, autoClean: Year).Plan(source, target, state);
 
         var kinds = plan.Actions.Select(a => (a.Kind, a.RelativePath)).ToList();
         Assert.Contains((SyncActionKind.RecycleFile, @"old\a.txt"), kinds);
@@ -93,7 +93,7 @@ public class RetentionTests
         var source = Scan(Dir("d"), File(@"d\a.txt"));
         var target = Scan(Dir("d"), File(@"d\a.txt"), File(@"d\mine.txt"));   // mine.txt is not ours
         var state = State(Row("d", Old, EntryKind.Directory), Row(@"d\a.txt", Old));
-        var plan = new SyncPlanner("p", Now, false, Year).Plan(source, target, state);
+        var plan = new SyncPlanner("p", Now, false, autoClean: Year).Plan(source, target, state);
         Assert.Single(plan.Actions);
         Assert.Equal(SyncActionKind.RecycleFile, plan.Actions[0].Kind);
     }
@@ -104,7 +104,7 @@ public class RetentionTests
         var source = Scan(Dir("a"), Dir(@"a\b"), File(@"a\b\x.txt"));
         var target = Scan(Dir("a"), Dir(@"a\b"), File(@"a\b\x.txt"));
         var state = State(Row("a", Old, EntryKind.Directory), Row(@"a\b", Old, EntryKind.Directory), Row(@"a\b\x.txt", Old));
-        var plan = new SyncPlanner("p", Now, false, Year).Plan(source, target, state);
+        var plan = new SyncPlanner("p", Now, false, autoClean: Year).Plan(source, target, state);
         Assert.Equal(new[] { @"a\b\x.txt", @"a\b", "a" }, plan.Actions.Select(x => x.RelativePath).ToArray());
     }
 }

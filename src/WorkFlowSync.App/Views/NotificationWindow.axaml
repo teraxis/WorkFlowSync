@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="WorkFlowSync.App.Views.NotificationWindow"
+        Title="WorkFlowSync"
+        Width="360" Height="92"
+        SystemDecorations="None" CanResize="False"
+        ShowInTaskbar="False" Topmost="True" ShowActivated="False"
+        Background="Transparent">
+
+    <Border Background="{DynamicResource SurfaceCard}"
+            BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1" CornerRadius="10"
+            PointerPressed="OnClicked">
+        <Grid ColumnDefinitions="4,*">
+            <!-- A stripe rather than a coloured panel: it reads at a glance without shouting. -->
+            <Border x:Name="Accent" Grid.Column="0" Background="{DynamicResource Accent}"
+                    CornerRadius="10,0,0,10" />
+            <StackPanel Grid.Column="1" Margin="14,12" Spacing="3" VerticalAlignment="Center">
+                <TextBlock x:Name="TitleText" Text="WorkFlowSync" Classes="oneline" FontWeight="SemiBold" />
+                <TextBlock x:Name="BodyText" Classes="caption" TextWrapping="Wrap" MaxLines="2" />
+                <TextBlock Text="Клацніть, щоб переглянути" Classes="caption" Opacity="0.75" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

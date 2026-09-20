@@ -1,0 +1,121 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WorkFlowSync.App.ViewModels"
+        xmlns:app="using:WorkFlowSync.App"
+        xmlns:loc="using:WorkFlowSync.App.Localization"
+        x:Class="WorkFlowSync.App.Views.RecentChangesWindow"
+        x:DataType="vm:RecentChangesViewModel"
+        Title="{loc:Loc recent.title}"
+        Width="400" Height="440"
+        SystemDecorations="None" CanResize="False"
+        ShowInTaskbar="False" Topmost="True"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+    <Window.Styles>
+        <!-- Rounded rows, so selection and hover match the cards on the folders page. -->
+        <Style Selector="ListBoxItem">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Margin" Value="0,1" />
+        </Style>
+        <Style Selector="Button.banner-pending">
+            <Setter Property="Background" Value="{DynamicResource WarningSoft}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Warning}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.banner-pending:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#2D2208" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Warning}" />
+        </Style>
+        <Style Selector="Button.banner-pending:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#382B0A" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Warning}" />
+        </Style>
+    </Window.Styles>
+
+    <!-- The window itself is transparent; this border is the visible surface, so its corners are the
+         window's corners. Painting the window and rounding the border would leave square edges behind it. -->
+    <Border Background="{DynamicResource SurfaceCard}"
+            BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1"
+            CornerRadius="12" ClipToBounds="True">
+        <Grid RowDefinitions="Auto,Auto,*">
+
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,14,10,10">
+                <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock Text="{loc:Loc recent.title}" Classes="title" />
+                    <TextBlock Text="{Binding Summary}" Classes="caption" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="ghost icon" VerticalAlignment="Top"
+                        Click="OnOpenMainWindow" ToolTip.Tip="{loc:Loc recent.settings_tip}">
+                    <Path Classes="ico" Data="{StaticResource IconSettings}" />
+                </Button>
+            </Grid>
+
+            <Button Grid.Row="1" Classes="banner-pending" IsVisible="{Binding HasPending}"
+                    Click="OnOpenApprovalClicked" Margin="12,0,12,8">
+                <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                    <TextBlock Grid.Column="0" Text="{Binding PendingBannerText}"
+                               VerticalAlignment="Center" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Warning}" />
+                    <Border Grid.Column="1" Background="{DynamicResource Warning}"
+                            CornerRadius="10" Padding="8,2" Margin="8,0,0,0"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="{Binding PendingCount}" FontWeight="Bold" FontSize="12"
+                                   Foreground="#0F141C" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </Grid>
+            </Button>
+
+            <ListBox Grid.Row="2" ItemsSource="{Binding Items}" Margin="8,0,8,10"
+                     Background="Transparent" BorderThickness="0"
+                     SelectionMode="Single" Tapped="OnItemActivated">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:RecentItemViewModel">
+                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,5">
+                            <!-- The system icon for the file type, exactly as Explorer shows it. The coloured
+                                 mark is the fallback for types the shell has no icon for. -->
+                            <Panel Grid.Column="0" Width="34" Height="34" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}"
+                                       Width="24" Height="24" Stretch="Uniform"
+                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                                <Border IsVisible="{Binding ShowBadge}" CornerRadius="8"
+                                        Background="{Binding Kind, Converter={x:Static app:Converters.FileKindPlate}}">
+                                    <TextBlock Text="{Binding Badge}" FontSize="10" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{Binding Kind, Converter={x:Static app:Converters.FileKindInk}}" />
+                                </Border>
+                            </Panel>
+                            <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" Classes="oneline" />
+                                <TextBlock Text="{Binding Where}" Classes="caption oneline" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <StackPanel Spacing="1" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding When}" Classes="caption" TextAlignment="Right" />
+                                    <TextBlock Text="{Binding SizeText}" Classes="caption" TextAlignment="Right" />
+                                </StackPanel>
+                                <!-- One click instead of remembering that a double click does it. -->
+                                <Button Classes="ghost icon" Click="OnRevealClicked" Tag="{Binding FullPath}"
+                                        IsVisible="{Binding CanOpen}" Width="30" Height="30"
+                                        ToolTip.Tip="{loc:Loc recent.reveal_tip}">
+                                    <Path Classes="ico" Data="{StaticResource IconFolders}" Width="15" Height="15" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <TextBlock Grid.Row="2" IsVisible="{Binding IsEmpty}" Margin="28"
+                       Classes="secondary" TextAlignment="Center" TextWrapping="Wrap"
+                       VerticalAlignment="Center"
+                       Text="{loc:Loc recent.empty}" />
+        </Grid>
+    </Border>
+</Window>
