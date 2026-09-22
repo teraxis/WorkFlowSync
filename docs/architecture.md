@@ -17,9 +17,9 @@ WorkFlowSync.sln
 | `Config/` | `SyncConfig`, `FolderPair`, `LinkMode` — реалізовано |
 | `Model/` | `StateEntry`, `EntryStatus`, `EntryKind` — реалізовано |
 | `Scanning/` | ✅ `TreeScanner` (черга папок + N воркерів через `Channel`, `FileSystemEnumerable`, буфер з конфігу, reparse points з ланцюжковою перевіркою циклів), `ExcludeMatcher` (FFS-шаблони → regex), `ScanEntry`/`ScanResult` |
-| `State/` | ✅ `StateStore` (SQLite, WAL, `Load(pair)` → `Dictionary`, `Upsert` однією транзакцією, `meta`) |
+| `State/` | ✅ `StateStore` (SQLite schema v4, WAL, `Load(pair)` → `Dictionary`, `Upsert` транзакціями, `meta`; `copied_at` для безпечного віку ротації) |
 | `Planning/` | ✅ `SyncPlanner`: чиста функція (source, target, state, now, backfill, maxAge, autoClean) → `SyncPlan` (Actions з `Proposed` рядком стану + StateUpdates + Stats) за таблицею F1 + вікно перенесення й автоочищення F3 (`too_old` на вході; файли → tombstone, порожні папки → forget) |
-| `Execution/` | ✅ `SyncExecutor`: mkdir, copy/update через tmp-файл + rename зі збереженням mtime з листингу, `copied_*` читаються з цілі після запису; recycle file / empty dir; `--dry-run` лише логує. `RecycleBin`: SHFileOperationW |
+| `Execution/` | ✅ `SyncExecutor`: mkdir, copy/update через tmp-файл + rename, незалежний захист квоти перед записом, опційний Files On-Demand intent; `DiskQuotaRotator`: перед плануванням остаточно видаляє найстаріші незмінені власні копії в будь-якій цілі та негайно ставить tombstone; звичайні видалення — через `RecycleBin` |
 | `Logging/` | ✅ `FileSyncLog` (щоденний файл + sink для консолі/GUI), `MemorySyncLog` (тести) |
 | `SyncRunner` | ✅ оркестратор проходу: стан → скан джерела (недоступне = skip) → скан цілі → plan → execute → upsert; `PassResult` |
 | `LoopRunner` | ✅ резидент: перечитати конфіг → `PassLock` → прохід → `Task.Delay(interval)`; помилки логуються, цикл живе |
@@ -43,7 +43,11 @@ GUI-шар: `App/ViewModels` (без типів Avalonia; мапінг у `SyncC
 - `state.db` — SQLite (F2), єдине змінюване сховище.
 - `logs\wfs-YYYY-MM-DD.log` (F8).
 
-Зовнішні сервіси: немає. Мережа: лише SMB до джерел.
+Зовнішні API та власна хмарна авторизація відсутні. Мережа WorkFlowSync: лише SMB до джерел;
+OneDrive працює своїм уже авторизованим клієнтом. Для F22 програма локально перевіряє реєстрацію
+sync root через Windows Cloud Files API й задає документовані атрибути Files On-Demand. Ротація
+не залежить від результату цієї перевірки й доступна для будь-якої цілі, але в хмарній теці
+постачальник може синхронізувати остаточне видалення з хмарою.
 
 ## Рішення
 

@@ -5,7 +5,7 @@ file is the "how to work here" companion.
 
 ## What the product is
 
-One-way mirror with memory: network share(s) → local folder(s) inside OneDrive. Three customer rules
+One-way mirror with memory: network share(s) → local destination folder(s), commonly inside OneDrive. Three customer rules
 (source deletions ignored; source additions copied; local deletions/changes final and never re-pulled),
 plus `first_seen` timestamps, an intake window (maxAge) and auto-clean. Replaces FreeFileSync + a 22,569-line exclude list.
 
@@ -127,11 +127,19 @@ WorkFlowSync is fully bilingual (Ukrainian and English) with dynamic runtime lan
 - Cycle detection in TreeScanner must be per-path (target is ancestor of current physical dir or of any dir a link was
   followed from), NOT a global visited set — the global set was order-dependent under parallel scanning and dropped real folders.
 - OneDrive placeholders carry ReparsePoint + RecallOnDataAccess; only reparse points WITHOUT recall/offline flags are treated as links.
+- F22 has three separate target-only settings: `DiskQuotaEnabled` protects `MinFreeSpaceGb` on any
+  destination whose filesystem reports capacity; `FreeUpSpaceAfterCopy` verifies the target with `CfGetSyncRootInfoByPath`
+  and then sets Unpinned/clears Pinned; `RotateOnLowSpace` is the sole local permanent-delete exception.
+  Rotation is allowed on every destination storage kind, including cloud roots, only for active ordinary
+  files or confirmed cloud placeholders with non-null `copied_at` whose size+mtime still match, WARN-logs the full path, persists a tombstone
+  at once, and sorts by copied_at → mtime → ctime. It never touches the source; on a cloud root its permanent
+  deletion may be synchronised to the cloud. No OAuth/Graph token is involved.
 - Dry-run over a huge tree spends most time printing the plan (226k lines ≈ 6 s); the scan itself is ~1-2 s.
 - `SHFILEOPSTRUCT`: no `Pack=1` on x64 (AccessViolation). `RecycleBin.Send` throws if the item still exists afterwards.
 - `StateStore` uses `Pooling=false` so `state.db` is released on Dispose (tests delete the file; GUI/CLI alternate).
-- State schema is v2 (integer Unix-ms times, STRICT, `remote_id`/`remote_version` reserved). v1 databases migrate on open:
-  `VACUUM INTO` backup → streaming row copy → `VACUUM`. A newer-than-known schema throws instead of being rewritten.
+- State schema is v4 (integer Unix-ms times, STRICT, `remote_id`/`remote_version` reserved, nullable
+  `copied_at` for F22 rotation). Older databases migrate on open with a `VACUUM INTO` backup; v1 uses
+  streaming row copy + `VACUUM`. A newer-than-known schema throws instead of being rewritten.
 - SQLite: an `OR` over the primary key drops the index and full-scans the table — `LoadScope` needs TWO range queries
   joined by `UNION ALL` (measured 394 ms → 4.1 ms on a million rows). And `DROP TABLE` only frees pages inside the file:
   without a final `VACUUM` the migrated database came out BIGGER than the one it replaced (409 MB vs 279 MB).

@@ -49,6 +49,7 @@
 | [approval-and-versioning.md](features/approval-and-versioning.md) | Погодження змін у двобічних парах, черга pending, відкат та версіонування у .wfsversions |
 | [localization.md](features/localization.md) | Двомовність (українська та англійська), конфіги JSON, миттєве перемикання мови інтерфейсу |
 | [auto-update.md](features/auto-update.md) | Автоматичне оновлення через GitHub Releases: тиха перевірка, повідомлення, завантаження з прогресом |
+| [storage-space.md](features/storage-space.md) | Незалежна дискова квота, Files On-Demand вивантаження та безпечна ротація копій |
 
 ## Документаційний контракт
 

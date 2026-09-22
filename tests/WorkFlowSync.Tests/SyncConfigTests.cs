@@ -115,6 +115,45 @@ public class SyncConfigTests
     }
 
     [Fact]
+    public void Disk_quota_cloud_offload_and_rotation_default_off_and_round_trip()
+    {
+        var defaults = new FolderPair();
+        Assert.False(defaults.FreeUpSpaceAfterCopy);
+        Assert.False(defaults.DiskQuotaEnabled);
+        Assert.False(defaults.RotateOnLowSpace);
+        Assert.Equal(5, defaults.MinFreeSpaceGb);
+
+        var cfg = new SyncConfig
+        {
+            Pairs = { new FolderPair { Name = "p", Source = @"D:\src", Target = @"D:\dst", FreeUpSpaceAfterCopy = true, DiskQuotaEnabled = true, RotateOnLowSpace = true, MinFreeSpaceGb = 0 } },
+        };
+        Assert.Contains(cfg.Validate(), p => p.Contains("minFreeSpaceGb", StringComparison.Ordinal));
+
+        cfg.Pairs[0].MinFreeSpaceGb = 8;
+        Assert.Empty(cfg.Validate());
+        var roundTrip = SyncConfig.Parse(cfg.ToJson()).Pairs[0];
+        Assert.True(roundTrip.FreeUpSpaceAfterCopy);
+        Assert.True(roundTrip.DiskQuotaEnabled);
+        Assert.True(roundTrip.RotateOnLowSpace);
+        Assert.Equal(8, roundTrip.MinFreeSpaceGb);
+    }
+
+    [Fact]
+    public void Rotation_requires_disk_quota()
+    {
+        var cfg = new SyncConfig
+        {
+            Pairs = { new FolderPair { Name = "p", Source = @"D:\src", Target = @"D:\dst", RotateOnLowSpace = true } },
+        };
+
+        Assert.Contains(cfg.Validate(), p => p.Contains("diskQuotaEnabled", StringComparison.Ordinal));
+
+        cfg.Pairs[0].DiskQuotaEnabled = true;
+        cfg.Pairs[0].Mode = SyncMode.TwoWay;
+        Assert.Empty(cfg.Validate());
+    }
+
+    [Fact]
     public void Approval_and_versioning_config_validation()
     {
         var mirrorApproval = new SyncConfig

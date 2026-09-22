@@ -25,6 +25,8 @@ public sealed class PairRunResult
 
     /// <summary>Removals the safety net held back this pass; 0 when nothing looked suspicious.</summary>
     public int HeldBackRemovals { get; set; }
+    public int RotatedFiles { get; set; }
+    public long RotatedBytes { get; set; }
     public TimeSpan Elapsed { get; set; }
 }
 
@@ -56,12 +58,14 @@ public sealed class SyncRunner
     private readonly SyncConfig _config;
     private readonly string _configDir;
     private readonly ISyncLog _log;
+    private readonly ICloudFilePlatform _cloudPlatform;
 
-    public SyncRunner(SyncConfig config, string configPath, ISyncLog log)
+    public SyncRunner(SyncConfig config, string configPath, ISyncLog log, ICloudFilePlatform? cloudPlatform = null)
     {
         _config = config;
         _configDir = Path.GetDirectoryName(Path.GetFullPath(configPath)) ?? AppContext.BaseDirectory;
         _log = log;
+        _cloudPlatform = cloudPlatform ?? new WindowsCloudFilePlatform();
     }
 
     public string StatePath => Path.IsPathRooted(_config.StatePath) ? _config.StatePath : Path.Combine(_configDir, _config.StatePath);
@@ -172,6 +176,43 @@ public sealed class SyncRunner
         foreach (var w in source.Warnings) _log.Warn($"{tag} source: {w}");
         _log.Info($"{tag} scan source  dirs={source.DirectoryCount} files={source.FileCount} links={source.LinkCount} warnings={source.Warnings.Count} took={source.Elapsed.TotalSeconds:0.0}s");
 
+        // Disk quota is independent of cloud offloading. When a full pass starts below the reserve, an
+        // explicitly enabled rotation may permanently remove oldest verified copies from any target
+        // storage kind. Otherwise the pass stops before adding more bytes.
+        if (!dryRun && pair.DiskQuotaEnabled)
+        {
+            Directory.CreateDirectory(pair.Target);
+            var reserve = checked((long)pair.MinFreeSpaceGb * 1024 * 1024 * 1024);
+            var disk = _cloudPlatform.GetDiskSpace(pair.Target);
+            if (disk.AvailableBytes < reserve)
+            {
+                DiskRotationResult? rotation = null;
+                if (pair.RotateOnLowSpace && scope is null)
+                {
+                    rotation = new DiskQuotaRotator(_cloudPlatform, _log) { SelfWrites = SelfWrites }
+                        .Rotate(pair.Name, pair.Target, reserve, state, store, ct);
+                    result.RotatedFiles = rotation.DeletedFiles;
+                    result.RotatedBytes = rotation.FreedBytes;
+                }
+
+                if (rotation?.ReserveSatisfied != true)
+                {
+                    var suffix = pair.FreeUpSpaceAfterCopy && _cloudPlatform.IsSyncRoot(pair.Target)
+                        ? "; waiting for the cloud provider to release space"
+                        : "; no further target files will be written";
+                    _log.Warn($"{tag} pass skipped: free space {SyncExecutor.FormatSize(disk.AvailableBytes)} is below " +
+                              $"the configured reserve {SyncExecutor.FormatSize(reserve)}{suffix}");
+                    result.Skipped = true;
+                    result.SkipReason = "target free-space reserve";
+                    result.Elapsed = sw.Elapsed;
+                    return result;
+                }
+
+                _log.Info($"{tag} rotation restored the disk reserve: deleted={rotation.DeletedFiles} " +
+                          $"freed={SyncExecutor.FormatSize(rotation.FreedBytes)}");
+            }
+        }
+
         // 3. Target (local; attributes only). Missing target root = create it (first run) unless dry-run.
         ScanResult target;
         if (!Directory.Exists(pair.Target))
@@ -234,7 +275,8 @@ public sealed class SyncRunner
 
         // 5. Execute (target only). Checkpoints persist copied rows as we go, so an interrupted first pass
         //    over a huge tree keeps what it already did — and first_seen stays the real date (F3).
-        var exec = new SyncExecutor(pair.Source, pair.Target, _log, dryRun, pair.CloudFiles) { SelfWrites = SelfWrites }
+        var exec = new SyncExecutor(pair.Source, pair.Target, _log, dryRun, pair.CloudFiles,
+            pair.DiskQuotaEnabled, pair.FreeUpSpaceAfterCopy, pair.MinFreeSpaceGb, _cloudPlatform) { SelfWrites = SelfWrites }
             .Execute(plan, tag, ct, dryRun ? null : rows => store.Upsert(rows));
         result.Execution = exec;
 
@@ -259,7 +301,7 @@ public sealed class SyncRunner
         }
 
         result.Elapsed = sw.Elapsed;
-        _log.Info($"{tag} done  copied={exec.FilesCopied} updated={exec.FilesUpdated} mkdir={exec.DirectoriesCreated} recycled={exec.FilesRecycled}+{exec.DirectoriesRecycled}dirs{(exec.Skipped > 0 ? $" skipped={exec.Skipped}" : "")}{(result.HeldBackRemovals > 0 ? $" held_back={result.HeldBackRemovals}" : "")} bytes={SyncExecutor.FormatSize(exec.BytesCopied)} errors={exec.Errors} took={result.Elapsed.TotalSeconds:0.0}s");
+        _log.Info($"{tag} done  copied={exec.FilesCopied} updated={exec.FilesUpdated} mkdir={exec.DirectoriesCreated} recycled={exec.FilesRecycled}+{exec.DirectoriesRecycled}dirs{(result.RotatedFiles > 0 ? $" rotated={result.RotatedFiles}" : "")}{(exec.OnlineOnlyRequested > 0 ? $" online_only={exec.OnlineOnlyRequested}" : "")}{(exec.CloudSpaceWaits > 0 ? $" cloud_waits={exec.CloudSpaceWaits}" : "")}{(exec.DiskQuotaStops > 0 ? $" quota_stops={exec.DiskQuotaStops}" : "")}{(exec.Skipped > 0 ? $" skipped={exec.Skipped}" : "")}{(result.HeldBackRemovals > 0 ? $" held_back={result.HeldBackRemovals}" : "")} bytes={SyncExecutor.FormatSize(exec.BytesCopied)} errors={exec.Errors} took={result.Elapsed.TotalSeconds:0.0}s");
         return result;
     }
 }

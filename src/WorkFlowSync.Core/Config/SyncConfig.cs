@@ -103,6 +103,10 @@ public sealed class SyncConfig
             if (pair.VersionsMaxGb is < 1 or > 1000)
                 problems.Add($"Pair '{pair.Name}': versionsMaxGb must be between 1 and 1000.");
             if (pair.Interval is { } pi && pi < TimeSpan.FromMinutes(1)) problems.Add($"Pair '{pair.Name}': interval must be at least 1 minute.");
+            if (pair.MinFreeSpaceGb is < 1 or > 1000)
+                problems.Add($"Pair '{pair.Name}': minFreeSpaceGb must be between 1 and 1000.");
+            if (pair.RotateOnLowSpace && !pair.DiskQuotaEnabled)
+                problems.Add($"Pair '{pair.Name}': rotateOnLowSpace requires diskQuotaEnabled.");
             if (Nesting(pair.Source, pair.Target) is { } nest) problems.Add($"Pair '{pair.Name}': {nest}");
         }
         if (Interval < TimeSpan.FromMinutes(1)) problems.Add("Interval must be at least 1 minute.");
@@ -156,7 +160,7 @@ public sealed class FolderPair
     /// <summary>Network (or any) source root. Read-only for us.</summary>
     public string Source { get; set; } = "";
 
-    /// <summary>Local mirror root (inside OneDrive).</summary>
+    /// <summary>Destination root: a local, removable, network, or Windows Files On-Demand folder.</summary>
     public string Target { get; set; } = "";
 
     /// <summary>One-way mirror with memory (default) or full two-way synchronisation.</summary>
@@ -182,6 +186,27 @@ public sealed class FolderPair
     /// (default) or download it. Only relevant in two-way mode — a mirror never reads its target.
     /// </summary>
     public CloudFileMode CloudFiles { get; set; } = CloudFileMode.Skip;
+
+    /// <summary>
+    /// After writing a file to the target, request the Windows Files On-Demand «online-only» state.
+    /// The target must be inside a registered cloud sync root (normally OneDrive). False preserves the
+    /// historical behaviour and keeps copied bytes locally available.
+    /// </summary>
+    public bool FreeUpSpaceAfterCopy { get; set; }
+
+    /// <summary>
+    /// Protect the configured free-space reserve on the target volume independently of cloud storage.
+    /// </summary>
+    public bool DiskQuotaEnabled { get; set; }
+
+    /// <summary>Free disk space kept ahead of the next target write while <see cref="DiskQuotaEnabled"/> is on.</summary>
+    public int MinFreeSpaceGb { get; set; } = 5;
+
+    /// <summary>
+    /// When the reserve is exhausted on any target, permanently delete the oldest intact copies owned by
+    /// this pair. Never applies to the source side. A cloud provider may propagate the deletion.
+    /// </summary>
+    public bool RotateOnLowSpace { get; set; }
 
     /// <summary>
     /// Intake filter: copy only items whose appearance date (<c>first_seen</c>) falls within this window;

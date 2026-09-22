@@ -8,13 +8,13 @@ namespace WorkFlowSync.Core.State;
 /// SQLite-backed memory of the mirror (docs/product/features/state-and-tombstones.md).
 /// Loaded into a dictionary per pair at the start of a pass; changes are written in transactions.
 ///
-/// Schema v2 (docs/plan-etap5.md §4.4): times are INTEGER Unix milliseconds, not ISO text. On a million
+/// Schema v4 (docs/plan-etap5.md §4.4): times are INTEGER Unix milliseconds, not ISO text. On a million
 /// rows the old TEXT columns cost ~135 bytes each and five DateTimeOffset.Parse calls per row on every
 /// load. Millisecond precision is far below the 2 s tolerance the planner compares mtimes with.
 /// </summary>
 public sealed class StateStore : IDisposable
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
 
     /// <summary>Rows per transaction when writing in batches; also the checkpoint size during a pass.</summary>
     public const int BatchRows = 2000;
@@ -56,7 +56,7 @@ public sealed class StateStore : IDisposable
         CREATE TABLE IF NOT EXISTS {0} (
           pair TEXT NOT NULL, path TEXT NOT NULL, kind INTEGER NOT NULL, status INTEGER NOT NULL,
           first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
-          src_size INTEGER, src_mtime INTEGER, copied_size INTEGER, copied_mtime INTEGER,
+          src_size INTEGER, src_mtime INTEGER, copied_size INTEGER, copied_mtime INTEGER, copied_at INTEGER,
           via_link INTEGER NOT NULL DEFAULT 0, status_changed INTEGER,
           remote_id TEXT, remote_version TEXT,
           PRIMARY KEY (pair, path)) STRICT, WITHOUT ROWID;
@@ -95,10 +95,16 @@ public sealed class StateStore : IDisposable
             case 1:
                 MigrateV1ToV2();
                 MigrateV2ToV3(backupRequired: false);
+                MigrateV3ToV4(backupRequired: false);
                 break;
 
             case 2:
                 MigrateV2ToV3(backupRequired: true);
+                MigrateV3ToV4(backupRequired: false);
+                break;
+
+            case 3:
+                MigrateV3ToV4(backupRequired: true);
                 break;
 
             case SchemaVersion:
@@ -214,7 +220,36 @@ public sealed class StateStore : IDisposable
         using var tx = _conn.BeginTransaction();
         Exec(CreatePendingV3, tx);
         tx.Commit();
+        SetMeta("schema_version", "3");
+    }
+
+    /// <summary>Adds the target-copy timestamp used as the primary ordering key for disk rotation.</summary>
+    private void MigrateV3ToV4(bool backupRequired)
+    {
+        if (backupRequired)
+        {
+            var backup = Path + ".v3-backup";
+            if (File.Exists(backup)) File.Delete(backup);
+            using var vacuum = _conn.CreateCommand();
+            vacuum.CommandText = "VACUUM INTO $dest";
+            vacuum.Parameters.AddWithValue("$dest", backup);
+            vacuum.ExecuteNonQuery();
+            MigratedFromBackup = backup;
+        }
+
+        if (!ColumnExists("entries", "copied_at"))
+            Exec("ALTER TABLE entries ADD COLUMN copied_at INTEGER;");
         SetMeta("schema_version", SchemaVersion.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private bool ColumnExists(string table, string column)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = $"PRAGMA table_info({table})";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            if (reader.GetString(1).Equals(column, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
     }
 
     // ------------------------------------------------------------------ reading
@@ -238,7 +273,7 @@ public sealed class StateStore : IDisposable
 
     private Dictionary<string, StateEntry> Read(string pair, string? scopeDir)
     {
-        const string Columns = "path, kind, status, first_seen, last_seen, src_size, src_mtime, copied_size, copied_mtime, via_link, status_changed";
+        const string Columns = "path, kind, status, first_seen, last_seen, src_size, src_mtime, copied_size, copied_mtime, copied_at, via_link, status_changed";
         var dict = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = scopeDir is null
@@ -272,8 +307,9 @@ public sealed class StateStore : IDisposable
                 SourceMtimeUtc = r.IsDBNull(6) ? null : FromUnixMs(r.GetInt64(6)),
                 CopiedSize = r.IsDBNull(7) ? null : r.GetInt64(7),
                 CopiedMtimeUtc = r.IsDBNull(8) ? null : FromUnixMs(r.GetInt64(8)),
-                ViaLink = r.GetInt32(9) != 0,
-                StatusChangedUtc = r.IsDBNull(10) ? null : FromUnixMs(r.GetInt64(10)),
+                CopiedAtUtc = r.IsDBNull(9) ? null : FromUnixMs(r.GetInt64(9)),
+                ViaLink = r.GetInt32(10) != 0,
+                StatusChangedUtc = r.IsDBNull(11) ? null : FromUnixMs(r.GetInt64(11)),
             };
             dict[e.RelativePath] = e;
         }
@@ -357,13 +393,14 @@ public sealed class StateStore : IDisposable
             cmd.Transaction = tx;
             cmd.CommandText = """
                 INSERT INTO entries (pair, path, kind, status, first_seen, last_seen, src_size, src_mtime,
-                                     copied_size, copied_mtime, via_link, status_changed)
+                                     copied_size, copied_mtime, copied_at, via_link, status_changed)
                 VALUES ($pair, $path, $kind, $status, $first_seen, $last_seen, $src_size, $src_mtime,
-                        $copied_size, $copied_mtime, $via_link, $status_changed)
+                        $copied_size, $copied_mtime, $copied_at, $via_link, $status_changed)
                 ON CONFLICT(pair, path) DO UPDATE SET
                   kind = excluded.kind, status = excluded.status, first_seen = excluded.first_seen, last_seen = excluded.last_seen,
                   src_size = excluded.src_size, src_mtime = excluded.src_mtime, copied_size = excluded.copied_size,
-                  copied_mtime = excluded.copied_mtime, via_link = excluded.via_link, status_changed = excluded.status_changed
+                  copied_mtime = excluded.copied_mtime, copied_at = excluded.copied_at,
+                  via_link = excluded.via_link, status_changed = excluded.status_changed
                 """;
             var p = AddEntryParameters(cmd);
 
@@ -380,6 +417,7 @@ public sealed class StateStore : IDisposable
                 p.SrcMtime.Value = e.SourceMtimeUtc is { } sm ? ToUnixMs(sm) : DBNull.Value;
                 p.CopiedSize.Value = (object?)e.CopiedSize ?? DBNull.Value;
                 p.CopiedMtime.Value = e.CopiedMtimeUtc is { } cm ? ToUnixMs(cm) : DBNull.Value;
+                p.CopiedAt.Value = e.CopiedAtUtc is { } ca ? ToUnixMs(ca) : DBNull.Value;
                 p.ViaLink.Value = e.ViaLink ? 1 : 0;
                 p.StatusChanged.Value = e.StatusChangedUtc is { } sc ? ToUnixMs(sc) : DBNull.Value;
                 cmd.ExecuteNonQuery();
@@ -452,7 +490,8 @@ public sealed class StateStore : IDisposable
     private readonly record struct EntryParameters(
         SqliteParameter Pair, SqliteParameter PathValue, SqliteParameter Kind, SqliteParameter Status,
         SqliteParameter First, SqliteParameter Last, SqliteParameter SrcSize, SqliteParameter SrcMtime,
-        SqliteParameter CopiedSize, SqliteParameter CopiedMtime, SqliteParameter ViaLink, SqliteParameter StatusChanged);
+        SqliteParameter CopiedSize, SqliteParameter CopiedMtime, SqliteParameter CopiedAt,
+        SqliteParameter ViaLink, SqliteParameter StatusChanged);
 
     private static EntryParameters AddEntryParameters(SqliteCommand cmd) => new(
         cmd.Parameters.Add("$pair", SqliteType.Text),
@@ -465,6 +504,7 @@ public sealed class StateStore : IDisposable
         cmd.Parameters.Add("$src_mtime", SqliteType.Integer),
         cmd.Parameters.Add("$copied_size", SqliteType.Integer),
         cmd.Parameters.Add("$copied_mtime", SqliteType.Integer),
+        cmd.Parameters.Add("$copied_at", SqliteType.Integer),
         cmd.Parameters.Add("$via_link", SqliteType.Integer),
         cmd.Parameters.Add("$status_changed", SqliteType.Integer));
 

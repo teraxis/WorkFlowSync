@@ -53,7 +53,13 @@ comments and log messages are English.
 These come from the customer's three rules (`docs/product/features/mirror-rules.md`):
 
 1. The source is opened read-only. No code path may write to, rename in, or delete from a source root.
-2. Local deletions are always Recycle Bin, never permanent — **on a root that has one**. Network shares do
+2. Local deletions are always Recycle Bin, never permanent — **on a root that has one**. The only explicit
+   rotation exception is the user's F22 emergency option: it may call `File.Delete` solely for an
+   `active` target file carrying a non-null `copied_at`, after size+mtime are re-checked; every such deletion
+   is WARN-logged with its full path and immediately persisted as a tombstone. Rotation is available for
+   every target storage kind, including cloud roots; locally modified files, directories, unrelated reparse
+   points and the pair's first/source folder are never rotation candidates. Confirmed cloud placeholders are
+   eligible inside their sync root. Network shares do
    not: `SHFileOperation` with `FOF_ALLOWUNDO` deletes permanently there and still reports success. The
    customer decided on 2026-09-15 to keep that behaviour rather than add a `.wfs-trash` folder, so this is
    a documented exception, not a bug to fix. What it obliges the code to do instead (docs/plan-etap5.md §4.5):

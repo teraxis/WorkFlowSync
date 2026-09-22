@@ -151,6 +151,21 @@ If a command cannot run, record the exact reason and the next step needed.
   eye — ask the owner to open «Папки → ⋯ → Редагувати…» and look; do not automate clicks or
   screenshots on their desktop (see WorkFlowSync_SKILL.md).
 
+## Current Status (2026-09-22, F22 — disk quota, cloud offloading, rotation)
+
+- `scripts\build.ps1`: OK; only NU1900 warnings because NuGet vulnerability metadata was unavailable.
+- `scripts\test.ps1`: **443 passed, 0 failed** (50 s on the final full run).
+- `DiskQuotaRotatorTests` cover permanent deletion of the oldest verified copy, copied-at/mtime/ctime
+  ordering, availability on cloud and indeterminate roots, preservation of a locally modified file, and the
+  end-to-end `twoWay` runner rule that immediately tombstones a rotated target copy, never pulls it
+  from the first folder again, and never propagates the deletion back to that first folder.
+- `CloudSpaceTests` cover independent quota/offloading switches, Windows capacity queries by folder,
+  actual Windows non-cloud detection,
+  Files On-Demand intent, provider back-pressure, non-cloud quota protection and pre-pass quota protection.
+- `StateSchemaTests` cover v1/v2/v3 migration to schema v4 and `copied_at` round-trips.
+- GUI smoke: process stayed alive for 6 s with a fresh temporary config and wrote no crash log; no
+  screenshots or synthetic input were used.
+
 ## Current Status (2026-09-15, Stage 5.1 — state schema v2)
 
 - `scripts\build.ps1`: OK, 0 warnings. `scripts\test.ps1`: **129 passed, 0 failed** (12 s).

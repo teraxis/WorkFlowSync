@@ -8,8 +8,8 @@ using WorkFlowSync.Core.State;
 namespace WorkFlowSync.Tests;
 
 /// <summary>
-/// Schema v2 (docs/plan-etap5.md §4.4): integer times, migration from the text-based v1, scoped reads,
-/// batched writes and checkpoints. The migration is the one operation here that could lose the whole
+/// Current schema: integer times, migration from the text-based v1 through v4, scoped reads,
+/// batched writes, copy timestamps and checkpoints. Migration is the one operation here that could lose the whole
 /// history, so it is covered from a hand-built v1 database rather than from anything this build wrote.
 /// </summary>
 public class StateSchemaTests : IDisposable
@@ -83,13 +83,13 @@ public class StateSchemaTests : IDisposable
         Assert.Equal(1234, file.SourceSize);
         Assert.Null(docs[@"Документи"].SourceSize);
 
-        Assert.Equal("3", store.GetMeta("schema_version"));
+        Assert.Equal("4", store.GetMeta("schema_version"));
         Assert.NotNull(store.MigratedFromBackup);
         Assert.True(File.Exists(store.MigratedFromBackup!), "the v1 database must be backed up before it is rewritten");
     }
 
     [Fact]
-    public void V2_database_is_migrated_to_v3_with_v2_backup_and_pending_table()
+    public void V2_database_is_migrated_to_current_schema_with_v2_backup_and_pending_table()
     {
         var seen = new DateTimeOffset(2026, 3, 7, 14, 21, 9, TimeSpan.Zero);
         WriteV2Database(
@@ -98,7 +98,7 @@ public class StateSchemaTests : IDisposable
 
         using var store = new StateStore(DbPath);
 
-        Assert.Equal("3", store.GetMeta("schema_version"));
+        Assert.Equal("4", store.GetMeta("schema_version"));
         Assert.NotNull(store.MigratedFromBackup);
         Assert.EndsWith(".v2-backup", store.MigratedFromBackup, StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(store.MigratedFromBackup), "v2 database must be backed up before v3 migration");
@@ -120,6 +120,20 @@ public class StateSchemaTests : IDisposable
             DetectedUtc = DateTimeOffset.UtcNow,
         });
         Assert.Equal(1, store.Pending.CountOpen("vrp"));
+    }
+
+    [Fact]
+    public void V3_database_adds_copy_time_with_a_v3_backup()
+    {
+        var seen = new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
+        WriteV3Database(("docs", "a.txt", seen, 7));
+
+        using var store = new StateStore(DbPath);
+
+        Assert.Equal("4", store.GetMeta("schema_version"));
+        Assert.EndsWith(".v3-backup", store.MigratedFromBackup, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(store.MigratedFromBackup));
+        Assert.Null(store.Load("docs")["a.txt"].CopiedAtUtc);
     }
 
     private void WriteV2Database(params (string Pair, string RelPath, DateTimeOffset FirstSeen, long? Size)[] rows)
@@ -159,6 +173,26 @@ public class StateSchemaTests : IDisposable
         }
     }
 
+    private void WriteV3Database(params (string Pair, string RelPath, DateTimeOffset FirstSeen, long? Size)[] rows)
+    {
+        WriteV2Database(rows);
+        using var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+            { DataSource = DbPath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            CREATE TABLE pending (
+              id INTEGER PRIMARY KEY, pair TEXT NOT NULL, path TEXT NOT NULL, from_path TEXT,
+              change INTEGER NOT NULL, kind INTEGER NOT NULL, src_size INTEGER, src_mtime INTEGER,
+              dst_size INTEGER, dst_mtime INTEGER, detected INTEGER NOT NULL, status INTEGER NOT NULL,
+              resolved INTEGER, version_path TEXT) STRICT;
+            CREATE INDEX pending_open ON pending (pair, status, detected);
+            CREATE UNIQUE INDEX pending_one_per_path ON pending (pair, path) WHERE status = 0;
+            UPDATE meta SET value = '3' WHERE key = 'schema_version';
+            """;
+        cmd.ExecuteNonQuery();
+    }
+
     [Fact]
     public void Migration_runs_once_and_a_reopened_database_is_left_alone()
     {
@@ -193,6 +227,7 @@ public class StateSchemaTests : IDisposable
                 PairName = "p", RelativePath = "a.txt", Kind = EntryKind.File, Status = EntryStatus.Active,
                 FirstSeenUtc = t, LastSeenUtc = t.AddHours(1), SourceMtimeUtc = t.AddMinutes(2),
                 CopiedMtimeUtc = t.AddMinutes(3), StatusChangedUtc = t.AddMinutes(4), SourceSize = 10, CopiedSize = 10,
+                CopiedAtUtc = t.AddMinutes(5),
             },
         });
 
@@ -203,6 +238,7 @@ public class StateSchemaTests : IDisposable
         Assert.Equal(t.AddMinutes(2), row.SourceMtimeUtc);
         Assert.Equal(t.AddMinutes(3), row.CopiedMtimeUtc);
         Assert.Equal(t.AddMinutes(4), row.StatusChangedUtc);
+        Assert.Equal(t.AddMinutes(5), row.CopiedAtUtc);
     }
 
     [Fact]

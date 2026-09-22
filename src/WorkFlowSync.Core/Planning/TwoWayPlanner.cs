@@ -61,6 +61,10 @@ public sealed class TwoWayPlanner
             b.TryGetValue(path, out var sb);
             state.TryGetValue(path, out var db);
 
+            // Rotation is target-only even in two-way mode. Its tombstone is a final suppression marker:
+            // do not restore the target from A and, crucially, do not propagate the target removal to A.
+            if (db?.Status == EntryStatus.Tombstone) continue;
+
             if (sa is null && sb is null)
             {
                 // Gone on both sides: nothing left to remember. A scoped pass keeps the row — forgetting it

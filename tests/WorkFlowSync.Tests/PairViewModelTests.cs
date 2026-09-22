@@ -1,4 +1,5 @@
 using WorkFlowSync.App.ViewModels;
+using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
 using WorkFlowSync.Core.I18n;
 
@@ -22,6 +23,10 @@ public class PairViewModelTests
             Links = LinkMode.Skip,
             MaxAge = TimeSpan.FromDays(400),
             AutoClean = TimeSpan.FromDays(700),
+            FreeUpSpaceAfterCopy = true,
+            DiskQuotaEnabled = true,
+            MinFreeSpaceGb = 12,
+            RotateOnLowSpace = true,
             Exclude = { @"\Тимчасове", "*.tmp" },
         };
 
@@ -30,6 +35,10 @@ public class PairViewModelTests
         Assert.Equal(400, vm.MaxAgeDays);
         Assert.True(vm.HasAutoClean);
         Assert.Equal(700, vm.AutoCleanDays);
+        Assert.True(vm.FreeUpSpaceAfterCopy);
+        Assert.True(vm.DiskQuotaEnabled);
+        Assert.Equal(12, vm.MinFreeSpaceGb);
+        Assert.True(vm.RotateOnLowSpace);
         Assert.Equal(2, vm.ExcludeCount);
 
         var back = vm.ToModel();
@@ -39,6 +48,10 @@ public class PairViewModelTests
         Assert.Equal(LinkMode.Skip, back.Links);
         Assert.Equal(TimeSpan.FromDays(400), back.MaxAge);
         Assert.Equal(TimeSpan.FromDays(700), back.AutoClean);
+        Assert.True(back.FreeUpSpaceAfterCopy);
+        Assert.True(back.DiskQuotaEnabled);
+        Assert.Equal(12, back.MinFreeSpaceGb);
+        Assert.True(back.RotateOnLowSpace);
         Assert.Equal(model.Exclude, back.Exclude);
     }
 
@@ -50,6 +63,36 @@ public class PairViewModelTests
         Assert.Null(m.MaxAge);
         Assert.Null(m.AutoClean);
         Assert.Equal(new[] { "*.bak" }, m.Exclude);
+    }
+
+    [Fact]
+    public void Free_space_controls_require_a_registered_local_cloud_sync_root()
+    {
+        var local = Path.GetTempPath();
+
+        Assert.True(new PairViewModel(new FixedCloudPlatform(true)) { Target = local }.FreeUpSpaceApplies);
+        Assert.False(new PairViewModel(new FixedCloudPlatform(false)) { Target = local }.FreeUpSpaceApplies);
+        Assert.False(new PairViewModel(new FixedCloudPlatform(true)) { Target = @"\\server\share" }.FreeUpSpaceApplies);
+    }
+
+    [Fact]
+    public void Rotation_requires_quota_and_accepts_any_target_storage_kind()
+    {
+        var local = Path.GetTempPath();
+        var ordinary = new PairViewModel(new FixedCloudPlatform(false)) { Target = local };
+
+        Assert.True(ordinary.DiskQuotaApplies);
+        Assert.False(ordinary.RotationApplies);
+        ordinary.DiskQuotaEnabled = true;
+        Assert.True(ordinary.RotationApplies);
+
+        var cloud = new PairViewModel(new FixedCloudPlatform(true)) { Target = local, DiskQuotaEnabled = true };
+        Assert.True(cloud.RotationApplies);
+
+        var network = new PairViewModel(new FixedCloudPlatform(false))
+            { Target = @"\\server\share", DiskQuotaEnabled = true };
+        Assert.True(network.DiskQuotaApplies);
+        Assert.True(network.RotationApplies);
     }
 
     [Fact]
@@ -82,5 +125,12 @@ public class PairViewModelTests
         {
             try { Directory.Delete(dir, recursive: true); } catch { }
         }
+    }
+
+    private sealed class FixedCloudPlatform(bool isSyncRoot) : ICloudFilePlatform
+    {
+        public bool IsSyncRoot(string path) => isSyncRoot;
+        public CloudDiskSpace GetDiskSpace(string path) => new(10, 20);
+        public void RequestOnlineOnly(string path) { }
     }
 }

@@ -10,8 +10,13 @@ namespace WorkFlowSync.App.ViewModels;
 /// <summary>Editable projection of <see cref="FolderPair"/> for the pair list and the pair dialog.</summary>
 public sealed partial class PairViewModel : ObservableObject
 {
-    public PairViewModel()
+    private readonly ICloudFilePlatform _cloudPlatform;
+
+    public PairViewModel() : this(new WindowsCloudFilePlatform()) { }
+
+    public PairViewModel(ICloudFilePlatform cloudPlatform)
     {
+        _cloudPlatform = cloudPlatform;
         I18n.Instance.LanguageChanged += () =>
         {
             OnPropertyChanged(nameof(StateSummary));
@@ -26,6 +31,9 @@ public sealed partial class PairViewModel : ObservableObject
             OnPropertyChanged(nameof(AutoCleanHint));
             OnPropertyChanged(nameof(WatchHint));
             OnPropertyChanged(nameof(CloudFilesHint));
+            OnPropertyChanged(nameof(FreeUpSpaceHint));
+            OnPropertyChanged(nameof(DiskQuotaHint));
+            OnPropertyChanged(nameof(RotationHint));
             OnPropertyChanged(nameof(LinksSummary));
             OnPropertyChanged(nameof(SourceKindSummary));
             OnPropertyChanged(nameof(TargetKindSummary));
@@ -54,6 +62,18 @@ public sealed partial class PairViewModel : ObservableObject
 
     /// <summary>What to do with files that live only in the cloud when they have to be copied out.</summary>
     [ObservableProperty] private CloudFileMode _cloudFiles = CloudFileMode.Skip;
+
+    /// <summary>Ask Windows/OneDrive to make each target copy online-only as soon as it is uploaded.</summary>
+    [ObservableProperty] private bool _freeUpSpaceAfterCopy;
+
+    /// <summary>Protect a free-space reserve independently of the destination's storage provider.</summary>
+    [ObservableProperty] private bool _diskQuotaEnabled;
+
+    /// <summary>Disk reserve protected before every target write.</summary>
+    [ObservableProperty] private int _minFreeSpaceGb = 5;
+
+    /// <summary>Permanently delete oldest verified copies on any target when the quota is enabled.</summary>
+    [ObservableProperty] private bool _rotateOnLowSpace;
 
     /// <summary>Mirror with memory (default) or full two-way synchronisation.</summary>
     [ObservableProperty] private SyncMode _mode = SyncMode.Mirror;
@@ -218,6 +238,28 @@ public sealed partial class PairViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Unlike the broad cloud-placeholder setting above, this write-side feature is available only when
+    /// Windows confirms that the destination belongs to a registered Files On-Demand sync root.
+    /// </summary>
+    public bool FreeUpSpaceApplies => Core.CloudFiles.Possible(Target) && _cloudPlatform.IsSyncRoot(Target);
+
+    public string FreeUpSpaceHint => FreeUpSpaceApplies
+        ? I18n.T("pair.cloud_offload_hint")
+        : I18n.T("pair.cloud_offload_not_applicable");
+
+    public bool DiskQuotaApplies => !string.IsNullOrWhiteSpace(Target);
+
+    public string DiskQuotaHint => DiskQuotaApplies
+        ? I18n.T("pair.disk_quota_hint")
+        : I18n.T("pair.disk_quota_not_applicable");
+
+    public bool RotationApplies => DiskQuotaEnabled && DiskQuotaApplies;
+
+    public string RotationHint => RotationApplies
+        ? I18n.T("pair.rotation_hint")
+        : I18n.T("pair.rotation_not_applicable");
+
     /// <summary>What kind of storage the first folder sits on, as far as it can be told without touching the network.</summary>
     public string SourceKindSummary => KindSummary(Source);
     public string TargetKindSummary => KindSummary(Target);
@@ -299,6 +341,9 @@ public sealed partial class PairViewModel : ObservableObject
                 if (RequireApproval) parts.Add(I18n.T("pair.facts_approval"));
             }
             if (Versioning) parts.Add(I18n.T("pair.facts_versioning", VersionsKeepDays, VersionsMaxGb));
+            if (DiskQuotaEnabled) parts.Add(I18n.T("pair.facts_disk_quota", MinFreeSpaceGb));
+            if (FreeUpSpaceAfterCopy) parts.Add(I18n.T("pair.facts_cloud_offload"));
+            if (RotateOnLowSpace) parts.Add(I18n.T("pair.facts_rotation"));
             if (ExcludeCount > 0) parts.Add(I18n.T("pair.facts_excludes", ExcludeCount));
             // Auto is the default and needs no explanation; the other two are choices worth showing.
             if (Watch != WatchMode.Auto) parts.Add(Watch == WatchMode.On ? I18n.T("pair.facts_watch_on") : I18n.T("pair.facts_watch_off"));
@@ -333,6 +378,10 @@ public sealed partial class PairViewModel : ObservableObject
         Links = p.Links,
         Watch = p.Watch,
         CloudFiles = p.CloudFiles,
+        FreeUpSpaceAfterCopy = p.FreeUpSpaceAfterCopy,
+        DiskQuotaEnabled = p.DiskQuotaEnabled,
+        MinFreeSpaceGb = p.MinFreeSpaceGb,
+        RotateOnLowSpace = p.RotateOnLowSpace,
         IntervalMinutes = p.Interval is { } iv ? Math.Max(1, (int)Math.Round(iv.TotalMinutes)) : 30,
         HasMaxAge = p.MaxAge is not null,
         MaxAgeDays = p.MaxAge is { } ma ? Math.Max(1, (int)Math.Round(ma.TotalDays)) : 365,
@@ -355,6 +404,10 @@ public sealed partial class PairViewModel : ObservableObject
         Links = Links,
         Watch = Watch,
         CloudFiles = CloudFiles,
+        FreeUpSpaceAfterCopy = FreeUpSpaceAfterCopy,
+        DiskQuotaEnabled = DiskQuotaEnabled,
+        MinFreeSpaceGb = Math.Clamp(MinFreeSpaceGb, 1, 1000),
+        RotateOnLowSpace = DiskQuotaEnabled && RotateOnLowSpace,
         Interval = TimeSpan.FromMinutes(Math.Max(1, IntervalMinutes)),
         MaxAge = HasMaxAge ? TimeSpan.FromDays(MaxAgeDays) : null,
         // Auto-clean is a mirror-only idea; a two-way pair carries real deletions across instead.
@@ -378,6 +431,10 @@ public sealed partial class PairViewModel : ObservableObject
         Links = other.Links;
         Watch = other.Watch;
         CloudFiles = other.CloudFiles;
+        FreeUpSpaceAfterCopy = other.FreeUpSpaceAfterCopy;
+        DiskQuotaEnabled = other.DiskQuotaEnabled;
+        MinFreeSpaceGb = other.MinFreeSpaceGb;
+        RotateOnLowSpace = other.RotateOnLowSpace;
         IntervalMinutes = other.IntervalMinutes;
         HasMaxAge = other.HasMaxAge;
         MaxAgeDays = other.MaxAgeDays;
@@ -459,6 +516,8 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(HasMoreItemsAfterLinks));
         OnPropertyChanged(nameof(HasMoreItemsAfterApproval));
         OnPropertyChanged(nameof(HasMoreItemsAfterWatch));
+        OnPropertyChanged(nameof(FreeUpSpaceApplies));
+        OnPropertyChanged(nameof(FreeUpSpaceHint));
     }
 
     partial void OnRequireApprovalChanged(bool value)
@@ -474,6 +533,17 @@ public sealed partial class PairViewModel : ObservableObject
         RaiseFacts(nameof(Facts));
         OnPropertyChanged(nameof(VersioningSummaryShort));
     }
+
+    partial void OnFreeUpSpaceAfterCopyChanged(bool value) => RaiseFacts(nameof(FreeUpSpaceHint));
+    partial void OnDiskQuotaEnabledChanged(bool value)
+    {
+        if (!value && RotateOnLowSpace) RotateOnLowSpace = false;
+        RaiseFacts(nameof(DiskQuotaHint));
+        OnPropertyChanged(nameof(RotationApplies));
+        OnPropertyChanged(nameof(RotationHint));
+    }
+    partial void OnMinFreeSpaceGbChanged(int value) => RaiseFacts(nameof(DiskQuotaHint));
+    partial void OnRotateOnLowSpaceChanged(bool value) => RaiseFacts(nameof(RotationHint));
 
     partial void OnCloudFilesChanged(CloudFileMode value) => RaiseCloudFiles();
 
@@ -491,6 +561,12 @@ public sealed partial class PairViewModel : ObservableObject
     {
         RaiseFacts(nameof(TargetKindSummary));
         RaiseCloudFiles();
+        OnPropertyChanged(nameof(FreeUpSpaceApplies));
+        OnPropertyChanged(nameof(FreeUpSpaceHint));
+        OnPropertyChanged(nameof(DiskQuotaApplies));
+        OnPropertyChanged(nameof(DiskQuotaHint));
+        OnPropertyChanged(nameof(RotationApplies));
+        OnPropertyChanged(nameof(RotationHint));
     }
 
     private void RaiseCloudFiles()
@@ -514,6 +590,8 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(ModeHint));
         OnPropertyChanged(nameof(MaxAgeHint));
         OnPropertyChanged(nameof(AutoCleanHint));
+        OnPropertyChanged(nameof(RotationApplies));
+        OnPropertyChanged(nameof(RotationHint));
         OnPropertyChanged(nameof(SourceLabel));
         OnPropertyChanged(nameof(TargetLabel));
         RaiseCloudFiles();          // a mirror reads its source, two-way reads both — the answer changes

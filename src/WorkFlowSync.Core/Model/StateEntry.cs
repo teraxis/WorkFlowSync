@@ -28,6 +28,9 @@ public sealed record StateEntry
     public long? CopiedSize { get; init; }
     public DateTimeOffset? CopiedMtimeUtc { get; init; }
 
+    /// <summary>Moment this program last completed the target copy. Rotation uses it as its primary age key.</summary>
+    public DateTimeOffset? CopiedAtUtc { get; init; }
+
     /// <summary>True when the item was reached through a symlink/junction (diagnostics only).</summary>
     public bool ViaLink { get; init; }
 
