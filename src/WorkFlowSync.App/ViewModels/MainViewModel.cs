@@ -23,17 +23,23 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty] private PairViewModel? _selectedPair;
 
-    /// <summary>Which page the navigation rail shows: 0 folders, 1 activity, 2 settings.</summary>
+    public ObservableCollection<AccountItemViewModel> Accounts { get; } = new();
+
+    public bool HasAccounts => Accounts.Count > 0;
+
+    /// <summary>Which page the navigation rail shows: 0 folders, 1 activity, 2 accounts, 3 settings.</summary>
     [ObservableProperty] private int _selectedPage;
 
     public bool IsFoldersPage => SelectedPage == 0;
     public bool IsActivityPage => SelectedPage == 1;
-    public bool IsSettingsPage => SelectedPage == 2;
+    public bool IsAccountsPage => SelectedPage == 2;
+    public bool IsSettingsPage => SelectedPage == 3;
 
     public string PageTitle => SelectedPage switch
     {
         0 => I18n.T("nav.tasks"),
         1 => I18n.T("nav.events"),
+        2 => I18n.T("nav.accounts"),
         _ => I18n.T("nav.settings"),
     };
 
@@ -74,6 +80,8 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Hours when routine messages are held back. Equal values = no quiet period.</summary>
     [ObservableProperty] private int _quietHoursFrom;
     [ObservableProperty] private int _quietHoursTo;
+
+    [ObservableProperty] private GoogleAuthConfig? _googleAuth;
 
     public static IReadOnlyList<NotifyMode> NotifyModes { get; } = Enum.GetValues<NotifyMode>();
 
@@ -146,6 +154,10 @@ public sealed partial class MainViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(HasPairs));
             RaiseLastCheckSummary();
+        };
+        Accounts.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasAccounts));
         };
         I18n.Instance.LanguageChanged += () =>
         {
@@ -262,6 +274,14 @@ public sealed partial class MainViewModel : ObservableObject
         SkippedVersion = cfg.SkippedVersion;
         QuietHoursFrom = cfg.QuietHoursFrom;
         QuietHoursTo = cfg.QuietHoursTo;
+        GoogleAuth = cfg.GoogleAuth;
+        Accounts.Clear();
+        foreach (var a in cfg.Accounts)
+        {
+            var item = new AccountItemViewModel(a, RemoveAccount, () => MarkDirty());
+            Accounts.Add(item);
+        }
+        OnPropertyChanged(nameof(HasAccounts));
         _loading = false;
         FollowPairStates();
         LoadSyncStates();
@@ -339,6 +359,16 @@ public sealed partial class MainViewModel : ObservableObject
         SkippedVersion = SkippedVersion,
         QuietHoursFrom = QuietHoursFrom,
         QuietHoursTo = QuietHoursTo,
+        Accounts = Accounts.Select(a => a.Model).ToList(),
+        GoogleAuth = GoogleAuth ?? (Accounts.FirstOrDefault(a => a.Provider == CloudProvider.GoogleDrive && a.IsActive)?.Model is { } g
+            ? new GoogleAuthConfig
+            {
+                AccessToken = g.AccessToken,
+                RefreshToken = g.RefreshToken,
+                ClientId = g.ClientId,
+                ClientSecret = g.ClientSecret
+            }
+            : null),
     };
 
     /// <summary>Returns validation problems (empty = OK).</summary>
@@ -394,6 +424,23 @@ public sealed partial class MainViewModel : ObservableObject
         if (ReferenceEquals(SelectedPair, pair)) SelectedPair = null;
         SaveNow();
         SetStatus($"Завдання «{pair.Name}» видалено зі списку.", error: false);
+    }
+
+    public void AddAccount(CloudAccount account)
+    {
+        var item = new AccountItemViewModel(account, RemoveAccount, () => MarkDirty());
+        Accounts.Add(item);
+        OnPropertyChanged(nameof(HasAccounts));
+        SaveNow();
+        SetStatus($"Обліковий запис «{account.Name}» ({account.Email}) успішно підключено.", error: false);
+    }
+
+    public void RemoveAccount(AccountItemViewModel item)
+    {
+        Accounts.Remove(item);
+        OnPropertyChanged(nameof(HasAccounts));
+        SaveNow();
+        SetStatus($"Обліковий запис «{item.Name}» видалено.", error: false);
     }
 
     public string SuggestPairName(string source)
@@ -462,6 +509,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsFoldersPage));
         OnPropertyChanged(nameof(IsActivityPage));
+        OnPropertyChanged(nameof(IsAccountsPage));
         OnPropertyChanged(nameof(IsSettingsPage));
         OnPropertyChanged(nameof(PageTitle));
         if (IsActivityPage) Run.RefreshSummary();

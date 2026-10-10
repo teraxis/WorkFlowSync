@@ -30,6 +30,24 @@ Requires .NET SDK 8.0.x on PATH (`C:\Program Files\dotnet`). No other services.
 
 If a command cannot run, record the exact reason and the next step needed.
 
+## Current Status (2026-10-10, F24 — Accounts management & Google OAuth wizard)
+
+- `scripts\build.ps1`: OK, 0 warnings.
+- `dotnet build WorkFlowSync.sln -warnaserror`: OK, 0 warnings, 0 errors.
+- `scripts\test.ps1`: **492 passed, 0 failed** (45 s).
+- `AccountsTests` (9): CloudAccount config serialization, expiration time logic, active Google account retrieval, loopback port binding, token refresh when expired and skip when valid, wizard validation, MainViewModel accounts collection and config sync.
+- `LocalizationTests`: 100% key parity verified for new account and wizard keys across uk.json and en.json.
+
+## Current Status (2026-10-10, F23 — Google Drive integration & Google Docs conversion)
+
+- `scripts\build.ps1`: OK, 0 warnings.
+- `dotnet build WorkFlowSync.sln -warnaserror`: OK, 0 warnings, 0 errors.
+- `scripts\test.ps1`: **483 passed, 0 failed** (40 s).
+- `GoogleDriveTests` (27): identification of Google web documents (.gdoc, .gsheet, etc.), export extension mapping, mime types, entry projection, planner rules (destination-only, suppression of reverse writes, suppression of origin deletion), executor conversion pipeline with REST API and atomic temporary files.
+- `PairViewModelTests`: Google Drive volume recognition, Google Docs export mode roundtrip, facts line updates, dynamic UI visibility.
+- `scripts\publish.ps1`: single-file portables generated (`wfs.exe` 34.8 MB, `WorkFlowSync.exe` 44.6 MB), smoke version check `0.2.0` OK.
+- GUI smoke: launched `WorkFlowSync.exe --config config.example.json`, process alive after 6 s, 0 crash logs.
+
 ## Current Status (2026-09-16, Stage 5 complete)
 
 - `scripts\build.ps1`: OK, 0 warnings. `scripts\test.ps1`: **313 passed, 0 failed** (12 s).

@@ -20,6 +20,7 @@ public sealed class TwoWayPlanner
     private readonly DateTimeOffset _now;
     private readonly PlanScope? _scope;
     private readonly FrozenPaths? _frozenPaths;
+    private readonly WorkFlowSync.Core.Config.GoogleDocExportMode _googleDocExport;
 
     /// <param name="scope">
     /// Limits the pass to one directory. Deletions do not travel in a scoped pass: they are inferred from
@@ -28,22 +29,29 @@ public sealed class TwoWayPlanner
     /// <param name="frozenPaths">
     /// Paths and directory subtrees frozen from automatic sync because they are awaiting human approval (docs/plan-etap6.md §5.2).
     /// </param>
-    public TwoWayPlanner(string pair, DateTimeOffset now, PlanScope? scope = null, FrozenPaths? frozenPaths = null)
+    /// <param name="googleDocExport">
+    /// Export mode for native Google web documents (.gdoc, .gsheet, etc.): Office, Pdf, or Skip.
+    /// Converted files strictly travel towards destination (Side B); reverse sync to Side A is suppressed.
+    /// </param>
+    public TwoWayPlanner(string pair, DateTimeOffset now, PlanScope? scope = null, FrozenPaths? frozenPaths = null,
+        WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office)
     {
         _pair = pair;
         _now = now;
         _scope = scope;
         _frozenPaths = frozenPaths;
+        _googleDocExport = googleDocExport;
     }
 
     public SyncPlan Plan(IReadOnlyDictionary<string, ScanEntry> a, IReadOnlyDictionary<string, ScanEntry> b,
         IReadOnlyDictionary<string, StateEntry> state)
     {
         var plan = new SyncPlan();
+        var mappedA = GoogleDrive.MapGoogleDocsForExport(a, _googleDocExport, out var targetToSourceMap);
         var deletions = new List<SyncAction>();
 
         var all = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        all.UnionWith(a.Keys);
+        all.UnionWith(mappedA.Keys);
         all.UnionWith(b.Keys);
         all.UnionWith(state.Keys);
         if (_scope is { } scope) all.RemoveWhere(p => !scope.Contains(p));
@@ -57,9 +65,17 @@ public sealed class TwoWayPlanner
                 continue;
             }
 
-            a.TryGetValue(path, out var sa);
+            if (GoogleDrive.IsGoogleDoc(path))
+            {
+                if (state.ContainsKey(path) && _scope is null) plan.Forget.Add(path);
+                plan.Warnings.Add($"{path}: native Google document without binary file content; skipped");
+                continue;
+            }
+
+            mappedA.TryGetValue(path, out var sa);
             b.TryGetValue(path, out var sb);
             state.TryGetValue(path, out var db);
+            targetToSourceMap.TryGetValue(path, out var sourceDocPath);
 
             // Rotation is target-only even in two-way mode. Its tombstone is a final suppression marker:
             // do not restore the target from A and, crucially, do not propagate the target removal to A.
@@ -79,7 +95,7 @@ public sealed class TwoWayPlanner
 
             if (sa is not null && sb is not null)
             {
-                Both(plan, path, sa, sb, db);
+                Both(plan, path, sa, sb, db, sourceDocPath);
                 continue;
             }
 
@@ -89,17 +105,27 @@ public sealed class TwoWayPlanner
 
             if (db is null)
             {
+                if (sourceDocPath is not null && missingSide == SyncSide.Source)
+                {
+                    plan.Warnings.Add($"{path}: reverse sync of converted Google doc to Google Drive is suppressed (destination-only export)");
+                    continue;
+                }
                 // New here, never seen before → give it to the other side.
-                Create(plan, present, missingSide);
+                Create(plan, present, missingSide, sourceDocPath);
                 continue;
             }
 
             if (Changed(present, db, sa is not null))
             {
+                if (sourceDocPath is not null && missingSide == SyncSide.Source)
+                {
+                    plan.Warnings.Add($"{path}: reverse sync of converted Google doc to Google Drive is suppressed (destination-only export)");
+                    continue;
+                }
                 // Deleted on one side but edited on the other since the last pass: keep the edit, copy it back.
                 plan.Warnings.Add($"{path}: deleted on one side, changed on the other; the changed copy is kept");
                 plan.Stats.Conflicts++;
-                Create(plan, present, missingSide);
+                Create(plan, present, missingSide, sourceDocPath);
                 continue;
             }
 
@@ -113,6 +139,12 @@ public sealed class TwoWayPlanner
             }
 
             var side = sa is null ? SyncSide.Target : SyncSide.Source;   // where the surviving copy lives
+            if (side == SyncSide.Source && sourceDocPath is not null)
+            {
+                plan.Warnings.Add($"{path}: deletion of Google Doc on Google Drive because of destination deletion is suppressed (destination-only export)");
+                continue;
+            }
+
             deletions.Add(new SyncAction(present.Kind == EntryKind.Directory ? SyncActionKind.DeleteDirectory : SyncActionKind.DeleteFile,
                 path, db, side));
         }
@@ -122,7 +154,7 @@ public sealed class TwoWayPlanner
     }
 
     /// <summary>Both sides have the item: adopt it, leave it alone, or carry the newer version across.</summary>
-    private void Both(SyncPlan plan, string path, ScanEntry sa, ScanEntry sb, StateEntry? db)
+    private void Both(SyncPlan plan, string path, ScanEntry sa, ScanEntry sb, StateEntry? db, string? sourceDocPath = null)
     {
         if (sa.Kind != sb.Kind)
         {
@@ -160,22 +192,30 @@ public sealed class TwoWayPlanner
             ? sa.MtimeUtc >= sb.MtimeUtc
             : aChanged;
 
+        if (sourceDocPath is not null && !fromA)
+        {
+            // Reverse sync to Side A (Google Drive) is suppressed for converted Google Docs
+            plan.Warnings.Add($"{path}: reverse sync of converted Google doc to Google Drive is suppressed (destination-only export)");
+            return;
+        }
+
         // After the copy both sides hold the winner, so the row describes it twice; the executor
         // then refreshes the side it actually wrote from the file it produced.
         var winner = fromA ? sa : sb;
         plan.Actions.Add(new SyncAction(SyncActionKind.UpdateFile, path, Row(winner, winner, db),
-            fromA ? SyncSide.Target : SyncSide.Source));
+            fromA ? SyncSide.Target : SyncSide.Source,
+            fromA ? sourceDocPath : null));
         plan.Stats.Updated++;
         plan.Stats.BytesToCopy += winner.Size;
     }
 
     /// <summary>Copy an item that exists on one side only to the other side.</summary>
-    private void Create(SyncPlan plan, ScanEntry present, SyncSide to)
+    private void Create(SyncPlan plan, ScanEntry present, SyncSide to, string? sourceDocPath = null)
     {
         var row = Row(present, present);
         plan.Actions.Add(new SyncAction(
             present.Kind == EntryKind.Directory ? SyncActionKind.CreateDirectory : SyncActionKind.CopyFile,
-            present.RelativePath, row, to));
+            present.RelativePath, row, to, to == SyncSide.Target ? sourceDocPath : null));
         plan.Stats.New++;
         plan.Stats.BytesToCopy += present.Size;
     }

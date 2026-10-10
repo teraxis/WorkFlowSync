@@ -72,6 +72,16 @@
                         </Grid>
                     </ListBoxItem>
                     <ListBoxItem>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Path Grid.Column="0" Classes="ico" Data="{StaticResource IconUsers}" Width="18" Height="18" Margin="0,0,12,0" />
+                            <TextBlock Grid.Column="1" Text="{loc:Loc nav.accounts}" VerticalAlignment="Center" />
+                            <Border Grid.Column="2" Classes="nav-badge"
+                                    IsVisible="{Binding Accounts.Count, Converter={x:Static app:Converters.GreaterThanZero}}">
+                                <TextBlock Text="{Binding Accounts.Count}" Classes="nav-badge-text" />
+                            </Border>
+                        </Grid>
+                    </ListBoxItem>
+                    <ListBoxItem>
                         <Grid ColumnDefinitions="Auto,*">
                             <Path Grid.Column="0" Classes="ico" Data="{StaticResource IconSettings}" Width="18" Height="18" Margin="0,0,12,0" />
                             <TextBlock Grid.Column="1" Text="{loc:Loc nav.settings}" VerticalAlignment="Center" />
@@ -97,6 +107,16 @@
                                 <Path Classes="ico" Data="{StaticResource IconPlus}" Width="15" Height="15"
                                       Stroke="{DynamicResource TextOnAccent}" StrokeThickness="2" />
                                 <TextBlock Text="{loc:Loc nav.add_task}" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                                IsVisible="{Binding IsAccountsPage}">
+                        <Button Classes="primary" Click="OnAddAccount" CornerRadius="10" Padding="16,10">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Path Classes="ico" Data="{StaticResource IconPlus}" Width="15" Height="15"
+                                      Stroke="{DynamicResource TextOnAccent}" StrokeThickness="2" />
+                                <TextBlock Text="{loc:Loc accounts.add_account}" FontWeight="SemiBold" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -471,6 +491,103 @@
                                  ScrollViewer.AllowAutoHide="False" />
                     </Border>
                 </DockPanel>
+                </Panel>
+
+                <!-- ────────────────────────── page: accounts ────────────────────────── -->
+                <Panel IsVisible="{Binding IsAccountsPage}">
+                    <!-- When accounts exist -->
+                    <ListBox Classes="rows" ItemsSource="{Binding Accounts}"
+                             IsVisible="{Binding HasAccounts}"
+                             Padding="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.AllowAutoHide="False">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AccountItemViewModel">
+                                <Border Classes="row" Background="Transparent" Padding="20,16">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <!-- Official Provider Logo -->
+                                        <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                                                Background="{DynamicResource SurfaceSubtle}" Margin="0,0,16,0"
+                                                BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+                                                VerticalAlignment="Center">
+                                            <ctl:ProviderLogo ProviderId="{Binding ProviderId}" Width="26" Height="26"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+
+                                        <!-- Account Info -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5" Margin="0,0,20,0">
+                                            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="15"
+                                                           Foreground="{DynamicResource TextPrimary}" />
+                                                <Border Classes="badge" VerticalAlignment="Center"
+                                                        Classes.success="{Binding !IsExpired}"
+                                                        Classes.warning="{Binding IsExpired}">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Ellipse Classes="badge-dot"
+                                                                 Classes.success="{Binding !IsExpired}"
+                                                                 Classes.warning="{Binding IsExpired}" />
+                                                        <TextBlock Classes="badge-text"
+                                                                   Classes.success="{Binding !IsExpired}"
+                                                                   Classes.warning="{Binding IsExpired}"
+                                                                   Text="{Binding StatusBadgeText}" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+
+                                            <!-- Metadata: WrapPanel prevents overlapping into action buttons -->
+                                            <WrapPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Email}" Classes="secondary" FontSize="13" Margin="0,0,8,3" />
+                                                <TextBlock Text="•" Classes="secondary" FontSize="13" Margin="0,0,8,3" />
+                                                <TextBlock Text="{Binding ProviderName}" Classes="secondary" FontSize="13" Margin="0,0,8,3" />
+                                                <TextBlock Text="•" Classes="secondary" FontSize="13" Margin="0,0,8,3" />
+                                                <TextBlock Text="{Binding CreatedAtSummary}" Classes="caption" FontSize="12" Margin="0,0,0,3" VerticalAlignment="Center" />
+                                            </WrapPanel>
+
+                                            <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                       TextWrapping="Wrap" FontSize="12"
+                                                       Foreground="{Binding StatusIsError, Converter={x:Static app:Converters.StatusText}}" />
+                                        </StackPanel>
+
+                                        <!-- Actions -->
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                            <Button Content="{loc:Loc accounts.btn_test}" Command="{Binding TestConnectionCommand}"
+                                                    IsEnabled="{Binding !IsBusy}" Padding="14,7" />
+                                            <Button Classes="danger" Content="{loc:Loc accounts.btn_delete}" Command="{Binding RemoveCommand}"
+                                                    Padding="14,7" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- Empty state when no accounts connected -->
+                    <Border Classes="card" IsVisible="{Binding !HasAccounts}" Padding="36,44" HorizontalAlignment="Center"
+                            VerticalAlignment="Center" MaxWidth="520" CornerRadius="{DynamicResource RadiusLg}">
+                        <StackPanel Spacing="16" HorizontalAlignment="Center">
+                            <Border Width="64" Height="64" CornerRadius="32" Background="{DynamicResource AccentSoft}"
+                                    HorizontalAlignment="Center">
+                                <Path Classes="ico" Data="{StaticResource IconCloud}" Width="30" Height="30"
+                                      Stroke="{DynamicResource Accent}" StrokeThickness="2"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Spacing="6" HorizontalAlignment="Center">
+                                <TextBlock Text="{loc:Loc accounts.empty_title}" FontWeight="Bold" FontSize="17"
+                                           HorizontalAlignment="Center" TextAlignment="Center" />
+                                <TextBlock Text="{loc:Loc accounts.empty_hint}" Classes="secondary" TextWrapping="Wrap"
+                                           FontSize="13" HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="440" />
+                            </StackPanel>
+                            <Button Classes="primary" Click="OnAddAccount" CornerRadius="10" Padding="20,10"
+                                    HorizontalAlignment="Center" Margin="0,8,0,0">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Path Classes="ico" Data="{StaticResource IconPlus}" Width="15" Height="15"
+                                          Stroke="{DynamicResource TextOnAccent}" StrokeThickness="2" />
+                                    <TextBlock Text="{loc:Loc accounts.connect_google}" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
                 </Panel>
 
                 <!-- ────────────────────────── page: settings ────────────────────────── -->

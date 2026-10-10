@@ -119,4 +119,16 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void OnAddAccount(object? sender, RoutedEventArgs e)
+    {
+        var existingClientId = Vm.GoogleAuth?.ClientId ?? Vm.Accounts.FirstOrDefault(a => a.Provider == Core.Config.CloudProvider.GoogleDrive)?.Model.ClientId;
+        var existingClientSecret = Vm.GoogleAuth?.ClientSecret ?? Vm.Accounts.FirstOrDefault(a => a.Provider == Core.Config.CloudProvider.GoogleDrive)?.Model.ClientSecret;
+
+        var account = await AccountWizardDialog.ShowAsync(this, existingClientId, existingClientSecret);
+        if (account is not null)
+        {
+            Vm.AddAccount(account);
+        }
+    }
+
 }

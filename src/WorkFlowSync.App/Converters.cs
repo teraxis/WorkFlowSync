@@ -46,6 +46,14 @@ public static class Converters
             _ => I18n.T("enum.cloud.skip"),
         });
 
+    public static readonly IValueConverter GoogleDocExportName =
+        new FuncValueConverter<GoogleDocExportMode, string>(m => m switch
+        {
+            GoogleDocExportMode.Office => I18n.T("enum.gdoc_export.office"),
+            GoogleDocExportMode.Pdf => I18n.T("enum.gdoc_export.pdf"),
+            _ => I18n.T("enum.gdoc_export.skip"),
+        });
+
     public static readonly IValueConverter LinkName =
         new FuncValueConverter<LinkMode, string>(l => l switch
         {
@@ -102,6 +110,16 @@ public static class Converters
 
     public static readonly IValueConverter GreaterThanZero =
         new FuncValueConverter<int, bool>(n => n > 0);
+
+    public static readonly IValueConverter IconGeometry =
+        new FuncValueConverter<string, Geometry?>(key =>
+        {
+            if (string.IsNullOrWhiteSpace(key)) return null;
+            var app = Avalonia.Application.Current;
+            if (app is not null && app.TryGetResource(key, null, out var value) && value is Geometry g)
+                return g;
+            return null;
+        });
 
     /// <summary>Looks a brush up in the application resources for the current theme variant.</summary>
     private static IBrush? Brush(string key, bool wanted)

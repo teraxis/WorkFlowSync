@@ -53,6 +53,15 @@ public sealed class SyncConfig
     public int QuietHoursFrom { get; set; }
     public int QuietHoursTo { get; set; }
 
+    /// <summary>Google Drive authorization parameters for exporting native Google Docs.</summary>
+    public GoogleAuthConfig? GoogleAuth { get; set; }
+
+    /// <summary>Connected cloud provider accounts (e.g. Google Drive OAuth).</summary>
+    public List<CloudAccount> Accounts { get; set; } = new();
+
+    /// <summary>Returns the first active Google Cloud account, if any.</summary>
+    public CloudAccount? GetActiveGoogleAccount() =>
+        Accounts.FirstOrDefault(a => a.Provider == CloudProvider.GoogleDrive && a.IsActive);
 
     /// <summary>Directory listing buffer for the scanner; large values cut SMB round-trips.</summary>
     public int ScanBufferSize { get; set; } = 256 * 1024;
@@ -131,6 +140,15 @@ public sealed class SyncConfig
     public static string? Nesting(string? source, string? target)
     {
         if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(target)) return null;
+        var srcCloud = GoogleDrive.IsCloudPath(source);
+        var tgtCloud = GoogleDrive.IsCloudPath(target);
+        if (srcCloud || tgtCloud)
+        {
+            if (srcCloud && tgtCloud && string.Equals(source.Trim(), target.Trim(), StringComparison.OrdinalIgnoreCase))
+                return "source and target are the same folder.";
+            return null;
+        }
+
         string Norm(string p)
         {
             try { return Path.GetFullPath(p.Trim()).TrimEnd('\\', '/'); }
@@ -143,6 +161,44 @@ public sealed class SyncConfig
         if (a.StartsWith(b + "\\", StringComparison.OrdinalIgnoreCase)) return "source is inside the target folder.";
         return null;
     }
+}
+
+public enum GoogleDocExportMode
+{
+    Office = 0,
+    Pdf = 1,
+    Skip = 2,
+}
+
+public enum CloudProvider
+{
+    GoogleDrive = 0,
+}
+
+public sealed class CloudAccount
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public CloudProvider Provider { get; set; } = CloudProvider.GoogleDrive;
+    public string Name { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string ClientId { get; set; } = "";
+    public string ClientSecret { get; set; } = "";
+    public string? AccessToken { get; set; }
+    public string? RefreshToken { get; set; }
+    public DateTimeOffset? ExpiresAtUtc { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public bool IsActive { get; set; } = true;
+
+    [JsonIgnore]
+    public bool IsExpired => ExpiresAtUtc.HasValue && DateTimeOffset.UtcNow >= ExpiresAtUtc.Value.AddSeconds(-60);
+}
+
+public sealed class GoogleAuthConfig
+{
+    public string? AccessToken { get; set; }
+    public string? RefreshToken { get; set; }
+    public string? ClientId { get; set; }
+    public string? ClientSecret { get; set; }
 }
 
 /// <summary>One source → target mirror.</summary>
@@ -163,6 +219,11 @@ public sealed class FolderPair
     /// <summary>Destination root: a local, removable, network, or Windows Files On-Demand folder.</summary>
     public string Target { get; set; } = "";
 
+    public string? SourceAccountId { get; set; }
+    public string? SourceFolderId { get; set; }
+    public string? TargetAccountId { get; set; }
+    public string? TargetFolderId { get; set; }
+
     /// <summary>One-way mirror with memory (default) or full two-way synchronisation.</summary>
     public SyncMode Mode { get; set; } = SyncMode.Mirror;
 
@@ -180,6 +241,12 @@ public sealed class FolderPair
     /// as <see cref="WatchMode.Auto"/>. The periodic pass runs either way — watching only shortens the wait.
     /// </summary>
     public WatchMode Watch { get; set; } = WatchMode.Auto;
+
+    /// <summary>
+    /// Mode for exporting native Google web documents (.gdoc, .gsheet, .gslides, etc.) into the destination folder.
+    /// Only written to destination; source is never modified. Office (default) = .docx/.xlsx/.pptx; Pdf = .pdf; Skip = skip.
+    /// </summary>
+    public GoogleDocExportMode GoogleDocExport { get; set; } = GoogleDocExportMode.Office;
 
     /// <summary>
     /// Cloud-only files (OneDrive Files On-Demand) when this pair has to copy one out: leave it alone

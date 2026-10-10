@@ -27,10 +27,32 @@ public static class ConfigFile
     /// <summary>Atomic save: write to a temp file, then replace, so a crash never leaves a half-written config.</summary>
     public static void Save(SyncConfig config, string path)
     {
-        var dir = Path.GetDirectoryName(Path.GetFullPath(path));
+        var fullPath = Path.GetFullPath(path);
+        var dir = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-        var tmp = path + ".tmp";
-        File.WriteAllText(tmp, config.ToJson() + Environment.NewLine, new System.Text.UTF8Encoding(false));
-        File.Move(tmp, path, overwrite: true);
+        var tmp = fullPath + ".tmp." + Guid.NewGuid().ToString("N");
+        try
+        {
+            File.WriteAllText(tmp, config.ToJson() + Environment.NewLine, new System.Text.UTF8Encoding(false));
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    File.Move(tmp, fullPath, overwrite: true);
+                    return;
+                }
+                catch (IOException) when (attempt < 4)
+                {
+                    Thread.Sleep(25);
+                }
+            }
+        }
+        finally
+        {
+            if (File.Exists(tmp))
+            {
+                try { File.Delete(tmp); } catch { /* best effort */ }
+            }
+        }
     }
 }

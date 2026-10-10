@@ -88,7 +88,7 @@ public sealed class InstantSyncTests : IDisposable
         // waits rather than asserts outright. The counter is what proves it was a partial pass, not a full one.
         Assert.True(WaitUntil(() => loop.ScopedPassesRun >= 1),
             "it must have arrived through a partial pass, not a full one. Loop log:\n" +
-            string.Join("\n", _log.Lines.Select(l => $"  {l.Level} {l.Message}")));
+            string.Join("\n", _log.Snapshot().Select(l => $"  {l.Level} {l.Message}")));
 
         cts.Cancel();
         await running;
@@ -113,7 +113,7 @@ public sealed class InstantSyncTests : IDisposable
         // Root file cannot be scoped, so it triggers a full pass (PassesRun >= 2: first was startup pass).
         Assert.True(WaitUntil(() => loop.PassesRun >= 2),
             "it must have arrived through a full pass triggered by the watcher. Loop log:\n" +
-            string.Join("\n", _log.Lines.Select(l => $"  {l.Level} {l.Message}")));
+            string.Join("\n", _log.Snapshot().Select(l => $"  {l.Level} {l.Message}")));
 
         cts.Cancel();
         await running;
@@ -136,7 +136,7 @@ public sealed class InstantSyncTests : IDisposable
 
         Assert.True(WaitUntil(() => File.ReadAllText(Mirrored("кореневий_оновлення.docx")) == "v2 - updated content"),
             "the updated root file should have been mirrored long before the hour is up. Loop log:\n" +
-            string.Join("\n", _log.Lines.Select(l => $"  {l.Level} {l.Message}")));
+            string.Join("\n", _log.Snapshot().Select(l => $"  {l.Level} {l.Message}")));
         Assert.True(WaitUntil(() => loop.PassesRun >= 2));
 
         cts.Cancel();

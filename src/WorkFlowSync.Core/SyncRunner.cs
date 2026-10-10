@@ -250,8 +250,8 @@ public sealed class SyncRunner
         }
 
         var plan = twoWay
-            ? new TwoWayPlanner(pair.Name, now, scope, frozen).Plan(source.Entries, target.Entries, state)
-            : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, scope).Plan(source.Entries, target.Entries, state);
+            ? new TwoWayPlanner(pair.Name, now, scope, frozen, pair.GoogleDocExport).Plan(source.Entries, target.Entries, state)
+            : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, scope, pair.GoogleDocExport).Plan(source.Entries, target.Entries, state);
         foreach (var w in plan.Warnings) _log.Warn($"{tag} plan: {w}");
         result.Plan = plan.Stats;
         _log.Info($"{tag} plan  {plan.Stats}");
@@ -276,7 +276,8 @@ public sealed class SyncRunner
         // 5. Execute (target only). Checkpoints persist copied rows as we go, so an interrupted first pass
         //    over a huge tree keeps what it already did — and first_seen stays the real date (F3).
         var exec = new SyncExecutor(pair.Source, pair.Target, _log, dryRun, pair.CloudFiles,
-            pair.DiskQuotaEnabled, pair.FreeUpSpaceAfterCopy, pair.MinFreeSpaceGb, _cloudPlatform) { SelfWrites = SelfWrites }
+            pair.DiskQuotaEnabled, pair.FreeUpSpaceAfterCopy, pair.MinFreeSpaceGb, _cloudPlatform,
+            pair.GoogleDocExport, _config.GoogleAuth, _config.GetActiveGoogleAccount()) { SelfWrites = SelfWrites }
             .Execute(plan, tag, ct, dryRun ? null : rows => store.Upsert(rows));
         result.Execution = exec;
 

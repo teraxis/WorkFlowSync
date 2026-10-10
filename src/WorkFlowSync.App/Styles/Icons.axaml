@@ -48,6 +48,7 @@
     <StreamGeometry x:Key="IconHardDrive">M22 12H2 M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z M6 16h.01 M10 16h.01</StreamGeometry>
     <StreamGeometry x:Key="IconServer">M2 2h20v8H2z M2 14h20v8H2z M6 6h.01 M6 18h.01</StreamGeometry>
     <StreamGeometry x:Key="IconUsb">M12 2v13 M5 7l7-5 7 5 M12 22a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z M5 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M19 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M5 10v3a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4v-3</StreamGeometry>
+    <StreamGeometry x:Key="IconCloud">M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z</StreamGeometry>
     <StreamGeometry x:Key="IconClock">M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 6v6l4 2</StreamGeometry>
     <StreamGeometry x:Key="IconLink">M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71</StreamGeometry>
     <StreamGeometry x:Key="IconCalendar">M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z M16 2v4 M8 2v4 M3 10h18</StreamGeometry>
@@ -57,6 +58,12 @@
     <StreamGeometry x:Key="IconEye">M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z</StreamGeometry>
     <StreamGeometry x:Key="IconBarChart">M18 20V10 M12 20V4 M6 20v-6</StreamGeometry>
     <StreamGeometry x:Key="IconProgressRing">M 25 3 A 22 22 0 1 1 3 25</StreamGeometry>
+    <StreamGeometry x:Key="IconGoogleDrive">M8.2 2.7L2.4 12.8l3.3 5.7 5.8-10.1z M15.8 2.7H8.2l3.3 5.7h7.6z M12.5 13.5l-3.3 5.7h12.4l3.3-5.7z</StreamGeometry>
+    <StreamGeometry x:Key="IconOneDrive">M19.4 10C18.7 6.6 15.6 4 12 4c-3.1 0-5.7 1.8-6.9 4.3C2.2 8.7 0 11.2 0 14.3c0 3.3 2.7 6 6 6h13.3c2.6 0 4.7-2.1 4.7-4.7 0-2.5-1.9-4.5-4.6-4.6z</StreamGeometry>
+    <StreamGeometry x:Key="IconDropbox">M6 2L0 6l6 4-6 4 6 4 6-4-6-4 6-4zm12 0l-6 4 6 4-6 4 6 4 6-4-6-4 6-4zM6 15.5l6 3.9 6-3.9-6-3.9z</StreamGeometry>
+    <StreamGeometry x:Key="IconNextcloud">M12 2a4 4 0 0 0-4 4 4 4 0 0 0 1 2.6A6 6 0 0 0 5 14a6 6 0 0 0 6 6 6 6 0 0 0 5.6-3.9A4 4 0 0 0 20 14a4 4 0 0 0-4-4 4 4 0 0 0-1-2.6A4 4 0 0 0 12 2z</StreamGeometry>
+    <StreamGeometry x:Key="IconAmazonS3">M4 4h16l-2 15a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L4 4zm4 0V2h8v2</StreamGeometry>
+    <StreamGeometry x:Key="IconSftp">M4 4h16v12H4z M2 20h20 M8 8l3 3-3 3 M13 14h3</StreamGeometry>
 
     <!-- ── solid ── -->
     <StreamGeometry x:Key="IconMoreVertical">M0 0 M24 24 M12 3.5a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6z M12 10.2a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6z M12 16.9a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6z</StreamGeometry>

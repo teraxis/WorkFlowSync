@@ -18,6 +18,7 @@ public sealed class SyncPlanner
     private readonly TimeSpan? _maxAge;
     private readonly TimeSpan? _autoClean;
     private readonly PlanScope? _scope;
+    private readonly WorkFlowSync.Core.Config.GoogleDocExportMode _googleDocExport;
 
     /// <param name="backfillFirstSeen">First pass: use min(ctime, mtime) of the source item as first_seen (docs F3).</param>
     /// <param name="maxAge">
@@ -29,8 +30,12 @@ public sealed class SyncPlanner
     /// Limits the pass to one directory. A scoped pass only adds and updates: every destructive decision is
     /// inferred from absence, and absence inside a slice of the tree proves nothing (docs/plan-etap5.md §4.2).
     /// </param>
+    /// <param name="googleDocExport">
+    /// Export mode for native Google web documents (.gdoc, .gsheet, etc.): Office, Pdf, or Skip.
+    /// </param>
     public SyncPlanner(string pair, DateTimeOffset now, bool backfillFirstSeen, TimeSpan? maxAge = null,
-        TimeSpan? autoClean = null, PlanScope? scope = null)
+        TimeSpan? autoClean = null, PlanScope? scope = null,
+        WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office)
     {
         _pair = pair;
         _now = now;
@@ -38,6 +43,7 @@ public sealed class SyncPlanner
         _maxAge = maxAge;
         _autoClean = autoClean;
         _scope = scope;
+        _googleDocExport = googleDocExport;
     }
 
     /// <summary>True while planning only part of the tree; destructive rules are off.</summary>
@@ -47,6 +53,7 @@ public sealed class SyncPlanner
         IReadOnlyDictionary<string, StateEntry> state)
     {
         var plan = new SyncPlan();
+        var mappedSource = GoogleDrive.MapGoogleDocsForExport(source, _googleDocExport, out var targetToSourceMap);
         var tombstoneDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var e in state.Values)
             if (e.Kind == EntryKind.Directory && e.Status == EntryStatus.Tombstone)
@@ -54,7 +61,7 @@ public sealed class SyncPlanner
 
         // Parents before children so a directory decision (tombstone cascade) precedes its content.
         var all = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        all.UnionWith(source.Keys);
+        all.UnionWith(mappedSource.Keys);
         all.UnionWith(target.Keys);
         all.UnionWith(state.Keys);
         // Belt and braces: callers already hand a scoped pass nothing but its own subtree, but a stray path
@@ -66,9 +73,17 @@ public sealed class SyncPlanner
 
         foreach (var path in ordered)
         {
-            source.TryGetValue(path, out var s);
+            mappedSource.TryGetValue(path, out var s);
             target.TryGetValue(path, out var l);
             state.TryGetValue(path, out var db);
+            targetToSourceMap.TryGetValue(path, out var sourceRel);
+
+            if (GoogleDrive.IsGoogleDoc(path))
+            {
+                if (db is not null && !Scoped) plan.Forget.Add(path);
+                plan.Warnings.Add($"{path}: native Google document without binary file content; skipped");
+                continue;
+            }
 
             if (UnderTombstone(path, tombstoneDirs))
             {
@@ -81,7 +96,7 @@ public sealed class SyncPlanner
             if (db is null)
             {
                 if (s is null) { plan.Stats.IgnoredLocalOnly++; continue; }   // local-only item: not ours
-                if (l is null) { AddNew(plan, s); continue; }
+                if (l is null) { AddNew(plan, s, sourceRel); continue; }
                 Adopt(plan, s, l);
                 continue;
             }
@@ -108,7 +123,7 @@ public sealed class SyncPlanner
                             Status = EntryStatus.Active, StatusChangedUtc = _now, LastSeenUtc = _now,
                             SourceSize = s.Size, SourceMtimeUtc = s.MtimeUtc, ViaLink = s.ViaLink,
                         };
-                        plan.Actions.Add(new SyncAction(SyncActionKind.CopyFile, path, admitted));
+                        plan.Actions.Add(new SyncAction(SyncActionKind.CopyFile, path, admitted, SyncSide.Target, sourceRel));
                         plan.Stats.New++;
                         plan.Stats.BytesToCopy += s.Size;
                         break;
@@ -157,7 +172,7 @@ public sealed class SyncPlanner
                         // stays exactly as it is (auto-clean, not the filter, is what removes things).
                         if (OutsideIntakeWindow(db.FirstSeenUtc)) { plan.Stats.TooOld++; break; }
                         var proposed = db with { SourceSize = s.Size, SourceMtimeUtc = s.MtimeUtc, LastSeenUtc = _now, ViaLink = s.ViaLink };
-                        plan.Actions.Add(new SyncAction(SyncActionKind.UpdateFile, path, proposed));
+                        plan.Actions.Add(new SyncAction(SyncActionKind.UpdateFile, path, proposed, SyncSide.Target, sourceRel));
                         plan.Stats.Updated++;
                         plan.Stats.BytesToCopy += s.Size;
                         break;
@@ -249,7 +264,7 @@ public sealed class SyncPlanner
     /// </summary>
     private bool OutsideIntakeWindow(DateTimeOffset firstSeen) => _maxAge is { } m && firstSeen < _now - m;
 
-    private void AddNew(SyncPlan plan, ScanEntry s)
+    private void AddNew(SyncPlan plan, ScanEntry s, string? sourceRelativePath = null)
     {
         var entry = NewEntry(s);
         // The intake window is decided here, before a single byte moves: a file that appeared outside it is
@@ -263,7 +278,7 @@ public sealed class SyncPlanner
             plan.Stats.TooOld++;
             return;
         }
-        plan.Actions.Add(new SyncAction(s.Kind == EntryKind.Directory ? SyncActionKind.CreateDirectory : SyncActionKind.CopyFile, s.RelativePath, entry));
+        plan.Actions.Add(new SyncAction(s.Kind == EntryKind.Directory ? SyncActionKind.CreateDirectory : SyncActionKind.CopyFile, s.RelativePath, entry, SyncSide.Target, sourceRelativePath));
         plan.Stats.New++;
         plan.Stats.BytesToCopy += s.Size;
     }

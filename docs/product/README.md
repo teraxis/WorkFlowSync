@@ -50,6 +50,8 @@
 | [localization.md](features/localization.md) | Двомовність (українська та англійська), конфіги JSON, миттєве перемикання мови інтерфейсу |
 | [auto-update.md](features/auto-update.md) | Автоматичне оновлення через GitHub Releases: тиха перевірка, повідомлення, завантаження з прогресом |
 | [storage-space.md](features/storage-space.md) | Незалежна дискова квота, Files On-Demand вивантаження та безпечна ротація копій |
+| [google-drive.md](features/google-drive.md) | Синхронізація з Google Диск: десктопний клієнт, пропуск нативних веб-документів (.gdoc/.gsheet), двобічна та дзеркальна синхронізація |
+| [accounts.md](features/accounts.md) | Керування обліковими записами: новий розділ інтерфейсу, інтерактивний візард Google OAuth 2.0 (RFC 8252), автоматичне оновлення токенів |
 
 ## Документаційний контракт
 

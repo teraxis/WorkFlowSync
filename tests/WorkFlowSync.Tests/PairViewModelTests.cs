@@ -107,9 +107,10 @@ public class PairViewModelTests
             Assert.True(File.Exists(path));                      // portable: created next to the app on first start
             Assert.Empty(SyncConfig.Load(path).Pairs);
             vm.AddPair(new PairViewModel { Name = "p1", Source = @"C:\src", Target = @"C:\dst", HasMaxAge = true, MaxAgeDays = 30, IntervalMinutes = 15 });
+            vm.Background.Stop();
             vm.ScanBufferKb = 512;
             vm.SaveNow();
-            vm.Background.Stop();                                // the added pair started the checker; not needed here
+            // checker already stopped above
 
             // Autosave: everything above is on disk without any explicit save.
             var reloaded = new MainViewModel(path);

@@ -62,6 +62,10 @@ public sealed class SyncExecutor
     private bool _cloudRequestFailed;
     private bool _quotaBlocked;
 
+    private readonly GoogleDocExportMode _googleDocExport;
+    private readonly GoogleAuthConfig? _googleAuth;
+    private readonly IGoogleDriveExporter _googleDriveExporter;
+
     // Answered once per pass instead of once per file: both are properties of the root, not of the item.
     private readonly bool _sourceHasRecycleBin;
     private readonly bool _targetHasRecycleBin;
@@ -76,7 +80,9 @@ public sealed class SyncExecutor
 
     public SyncExecutor(string sourceRoot, string targetRoot, ISyncLog log, bool dryRun,
         CloudFileMode cloudFiles = CloudFileMode.Skip, bool diskQuotaEnabled = false, bool freeUpSpaceAfterCopy = false,
-        int minFreeSpaceGb = 5, ICloudFilePlatform? cloudPlatform = null)
+        int minFreeSpaceGb = 5, ICloudFilePlatform? cloudPlatform = null,
+        GoogleDocExportMode googleDocExport = GoogleDocExportMode.Office, GoogleAuthConfig? googleAuth = null,
+        CloudAccount? account = null, IGoogleDriveExporter? googleDriveExporter = null)
     {
         _sourceRoot = Path.GetFullPath(sourceRoot).TrimEnd('\\', '/');
         _targetRoot = Path.GetFullPath(targetRoot).TrimEnd('\\', '/');
@@ -91,6 +97,9 @@ public sealed class SyncExecutor
         _targetHasRecycleBin = RecycleBin.IsAvailableFor(_targetRoot);
         _sourceMayHavePlaceholders = CloudFiles.Possible(_sourceRoot);
         _targetMayHavePlaceholders = CloudFiles.Possible(_targetRoot);
+        _googleDocExport = googleDocExport;
+        _googleAuth = googleAuth;
+        _googleDriveExporter = googleDriveExporter ?? new GoogleDriveExporter(googleDocExport, googleAuth, account);
     }
 
     /// <summary>Rows that may wait unwritten before a checkpoint is due. Lowered by tests.</summary>
@@ -138,7 +147,8 @@ public sealed class SyncExecutor
             FlushCheckpoint(force: false);
             // Mirror only ever writes to the target; two-way may also write back to the source (docs F10).
             var back = action.Side == SyncSide.Source;
-            var src = Path.Combine(back ? _targetRoot : _sourceRoot, action.RelativePath);
+            var srcRel = back ? action.RelativePath : (action.SourceRelativePath ?? action.RelativePath);
+            var src = Path.Combine(back ? _targetRoot : _sourceRoot, srcRel);
             var dst = Path.Combine(back ? _sourceRoot : _targetRoot, action.RelativePath);
             var where = back ? " <-" : "";
             // Noted before the write, not after: the notification can reach the watcher first.
@@ -156,12 +166,22 @@ public sealed class SyncExecutor
 
                     case SyncActionKind.CopyFile:
                     case SyncActionKind.UpdateFile:
+                        var isGoogleDocExport = !back && action.SourceRelativePath is not null && GoogleDrive.IsGoogleDoc(action.SourceRelativePath);
+
                         // Reading a cloud-only file downloads it in full. On a large tree that would silently
                         // pull back everything the user freed up, so it needs saying yes to (docs §4.6).
-                        if (_cloudFiles == CloudFileMode.Skip && MayBePlaceholder(back) && CloudFiles.IsPlaceholder(src))
+                        if (!isGoogleDocExport && _cloudFiles == CloudFileMode.Skip && MayBePlaceholder(back) && CloudFiles.IsPlaceholder(src))
                         {
                             _log.Warn($"{pairTag} skip  \\{action.RelativePath}: the file is only in the cloud; copying it would download it " +
                                       "(pair setting «Файли з хмари»)");
+                            result.Skipped++;
+                            break;
+                        }
+
+                        // Native Google documents (.gdoc/.gsheet/...) without conversion mapping cannot be read as binary files.
+                        if (!isGoogleDocExport && GoogleDrive.IsGoogleDoc(action.RelativePath))
+                        {
+                            _log.Warn($"{pairTag} skip  \\{action.RelativePath}: native Google document (.gdoc/.gsheet) cannot be read as a binary file; skipped");
                             result.Skipped++;
                             break;
                         }
@@ -196,11 +216,58 @@ public sealed class SyncExecutor
                             }
                         }
 
-                        var verb = action.Kind == SyncActionKind.CopyFile ? "copy " : "update";
+                        var verb = isGoogleDocExport
+                            ? (action.Kind == SyncActionKind.CopyFile ? "export" : "export-update")
+                            : (action.Kind == SyncActionKind.CopyFile ? "copy " : "update");
                         _log.Info($"{prefix}{verb}{where}  \\{action.RelativePath}  {FormatSize(action.Proposed.SourceSize ?? 0)}");
                         if (_dryRun)
                         {
                             result.Completed.Add(action.Proposed);
+                        }
+                        else if (isGoogleDocExport)
+                        {
+                            var exportRes = _googleDriveExporter.Export(src, dst, action.Proposed.SourceMtimeUtc, ct);
+                            if (exportRes.AuthRequired)
+                            {
+                                _log.Warn($"{pairTag} skip  \\{action.RelativePath}: Google Doc export requires authorization token. Set up Google account in settings or config.json.");
+                                result.Skipped++;
+                                break;
+                            }
+                            if (!exportRes.Success)
+                            {
+                                _log.Warn($"{pairTag} skip  \\{action.RelativePath}: Google Doc export failed: {exportRes.ErrorMessage}");
+                                result.Skipped++;
+                                break;
+                            }
+
+                            var copiedAt = DateTimeOffset.UtcNow;
+                            result.Completed.Add(action.Proposed with
+                            {
+                                CopiedSize = exportRes.BytesWritten,
+                                CopiedMtimeUtc = exportRes.Mtime ?? action.Proposed.SourceMtimeUtc,
+                                CopiedAtUtc = copiedAt,
+                            });
+
+                            if (manageCloud)
+                            {
+                                try
+                                {
+                                    _cloudPlatform.RequestOnlineOnly(dst);
+                                    result.OnlineOnlyRequested++;
+                                    _log.Debug($"{pairTag} online-only requested  \\{action.RelativePath}");
+                                }
+                                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+                                {
+                                    _cloudRequestFailed = true;
+                                    result.Errors++;
+                                    _log.Error($"{pairTag} cannot request online-only state for \\{action.RelativePath}; " +
+                                               $"further target copies are paused: {ex.GetType().Name}: {ex.Message}");
+                                }
+                            }
+
+                            if (action.Kind == SyncActionKind.CopyFile) result.FilesCopied++; else result.FilesUpdated++;
+                            result.BytesCopied += exportRes.BytesWritten;
+                            break;
                         }
                         else
                         {

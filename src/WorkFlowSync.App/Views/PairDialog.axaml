@@ -45,12 +45,22 @@
                             <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Name}" Watermark="{loc:Loc pair.name_watermark}" />
 
                             <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding SourceLabel}" VerticalAlignment="Center" />
-                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Source}" Classes="mono" Watermark="\\server\share\тека" />
-                            <Button Grid.Row="2" Grid.Column="2" Content="{loc:Loc common.browse}" Margin="8,0,0,0" Click="OnBrowseSource" />
+                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Source}" Classes="mono" Watermark="\\server\share\тека або gdrive://" />
+                            <StackPanel Grid.Row="2" Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
+                                <Button Content="{loc:Loc common.browse}" Click="OnBrowseSource" ToolTip.Tip="{loc:Loc pair.browse_local_tooltip}" />
+                                <Button Classes="icon-btn" ToolTip.Tip="{loc:Loc pair.cloud_browse_tooltip}" Click="OnCloudSourceClick">
+                                    <Path Classes="ico" Data="{StaticResource IconCloud}" Width="16" Height="16" />
+                                </Button>
+                            </StackPanel>
 
                             <TextBlock Grid.Row="4" Grid.Column="0" Text="{Binding TargetLabel}" VerticalAlignment="Center" />
-                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Target}" Classes="mono" Watermark="D:\Sync\тека" />
-                            <Button Grid.Row="4" Grid.Column="2" Content="{loc:Loc common.browse}" Margin="8,0,0,0" Click="OnBrowseTarget" />
+                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Target}" Classes="mono" Watermark="D:\Sync\тека або gdrive://" />
+                            <StackPanel Grid.Row="4" Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
+                                <Button Content="{loc:Loc common.browse}" Click="OnBrowseTarget" ToolTip.Tip="{loc:Loc pair.browse_local_tooltip}" />
+                                <Button Classes="icon-btn" ToolTip.Tip="{loc:Loc pair.cloud_browse_tooltip}" Click="OnCloudTargetClick">
+                                    <Path Classes="ico" Data="{StaticResource IconCloud}" Width="16" Height="16" />
+                                </Button>
+                            </StackPanel>
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -111,6 +121,19 @@
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto" IsVisible="{Binding GoogleDocExportApplies}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.google_doc_export}" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.GoogleDocExportModes}" SelectedItem="{Binding GoogleDocExport}" Width="320" HorizontalAlignment="Left">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="cfg:GoogleDocExportMode">
+                                        <TextBlock Text="{Binding Converter={x:Static app:Converters.GoogleDocExportName}}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
+                                       Text="{loc:Loc pair.google_doc_export_hint}" />
                         </Grid>
 
                         <!-- The hint sits in the same column as every other one, and stays readable even when

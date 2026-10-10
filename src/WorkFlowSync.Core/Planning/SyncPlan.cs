@@ -28,7 +28,12 @@ public enum SyncSide
 }
 
 /// <summary>A file-system action plus the state row to persist once it succeeds.</summary>
-public sealed record SyncAction(SyncActionKind Kind, string RelativePath, StateEntry Proposed, SyncSide Side = SyncSide.Target);
+public sealed record SyncAction(
+    SyncActionKind Kind,
+    string RelativePath,
+    StateEntry Proposed,
+    SyncSide Side = SyncSide.Target,
+    string? SourceRelativePath = null);
 
 public sealed class PlanStats
 {
@@ -63,7 +68,6 @@ public sealed class PlanStats
 
     public override string ToString() =>
         $"new={New} update={Updated} adopt={Adopted} tombstone={Tombstoned} local_modified={LocalModified} unchanged={Unchanged} local_only={IgnoredLocalOnly} expired={Expired} empty_dirs={EmptyDirs}{(TooOld > 0 ? $" too_old={TooOld}" : "")}{(Deleted > 0 || Conflicts > 0 ? $" deleted={Deleted} conflicts={Conflicts}" : "")}{(AwaitingApproval > 0 ? $" awaiting_approval={AwaitingApproval}" : "")}{(DeferredToFullPass > 0 ? $" deferred={DeferredToFullPass}" : "")} bytes={BytesToCopy}";
-
 }
 
 public sealed class SyncPlan

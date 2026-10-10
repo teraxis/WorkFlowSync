@@ -58,6 +58,68 @@ public partial class PairDialog : Window
         return folder?.TryGetLocalPath();
     }
 
+    private void OnCloudSourceClick(object? sender, RoutedEventArgs e)
+    {
+        HandleCloudClick(sender as Control, isSource: true);
+    }
+
+    private void OnCloudTargetClick(object? sender, RoutedEventArgs e)
+    {
+        HandleCloudClick(sender as Control, isSource: false);
+    }
+
+    private void HandleCloudClick(Control? anchor, bool isSource)
+    {
+        var accounts = _main.Accounts;
+        if (accounts.Count == 0)
+        {
+            ErrorText.Text = I18n.T("pair.no_cloud_accounts", "Немає підключених облікових записів Google. Спочатку додайте обліковий запис у розділі «Облікові записи».");
+            return;
+        }
+
+        if (anchor is null) return;
+
+        var menu = new ContextMenu();
+        foreach (var item in accounts)
+        {
+            var acc = item.Model;
+            var mi = new MenuItem
+            {
+                Header = $"{acc.Name} ({acc.Email})",
+            };
+            mi.Click += async (_, _) => await PickCloudFolderAsync(acc, isSource);
+            menu.Items.Add(mi);
+        }
+
+        menu.Open(anchor);
+    }
+
+    private async Task PickCloudFolderAsync(CloudAccount account, bool isSource)
+    {
+        var pickerVm = new CloudFolderPickerViewModel(account);
+        var dlg = new CloudFolderPickerDialog { DataContext = pickerVm };
+        var selection = await dlg.ShowDialog<CloudFolderSelection?>(this);
+        if (selection is not null)
+        {
+            if (isSource)
+            {
+                _draft.Source = selection.CloudPath;
+                _draft.SourceAccountId = selection.AccountId;
+                _draft.SourceFolderId = selection.FolderId;
+                if (string.IsNullOrWhiteSpace(_draft.Name))
+                {
+                    _draft.Name = $"Google Drive: {selection.FolderName}";
+                }
+            }
+            else
+            {
+                _draft.Target = selection.CloudPath;
+                _draft.TargetAccountId = selection.AccountId;
+                _draft.TargetFolderId = selection.FolderId;
+            }
+        }
+    }
+
     private void OnOk(object? sender, RoutedEventArgs e)
     {
         var problems = new List<string>();

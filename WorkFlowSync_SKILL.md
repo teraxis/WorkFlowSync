@@ -12,16 +12,20 @@ plus `first_seen` timestamps, an intake window (maxAge) and auto-clean. Replaces
 ## Layout
 
 ```
-src/WorkFlowSync.Core/   Config/ (SyncConfig, FolderPair, LinkMode, ConfigFile)  Model/ (StateEntry, EntryStatus, EntryKind)
-                         Scanning/ (TreeScanner, ExcludeMatcher, ScanEntry)  State/StateStore  Planning/ (SyncPlanner, SyncPlan)
-                         Execution/ (SyncExecutor, RecycleBin)  Logging/SyncLog (+Prune)
+src/WorkFlowSync.Core/   Config/ (SyncConfig, FolderPair, LinkMode, ConfigFile, CloudAccount, GoogleDocExportMode)
+                         Model/ (StateEntry, EntryStatus, EntryKind)  Scanning/ (TreeScanner, ExcludeMatcher, ScanEntry)
+                         State/StateStore  Planning/ (SyncPlanner, SyncPlan, TwoWayPlanner)
+                         Execution/ (SyncExecutor, RecycleBin, GoogleDriveExporter)  Logging/SyncLog (+Prune)
+                         GoogleDrive.cs (Drive API v3 client)  OAuth/ (GoogleOAuthService, RFC 8252 loopback flow)
                          SyncRunner (one pass)  LoopRunner (resident)  PassLock (cross-process)  Autostart (Startup .lnk, schtasks)
-                         RootProbe (RootKind Local/Removable/LanShare/RemoteShare, WNetGetConnection, latency, notify probe)
+                         RootProbe (RootKind Local/Removable/LanShare/RemoteShare/GoogleDrive, WNetGetConnection, latency, notify probe)
 src/WorkFlowSync.Cli/    wfs.exe: Program.cs (commands), ConsoleOwner.cs (pause on double-click), app.manifest (asInvoker + longPathAware + UTF-8)
 src/WorkFlowSync.App/    WorkFlowSync.exe: Avalonia 11.3 GUI - Styles/ (Palette, Controls, Icons = design system, docs F12),
-                         Views/ (MainWindow, PairDialog, ConfirmDialog), ViewModels/ (Main, Pair, Run, Autostart; no Avalonia types),
+                         Views/ (MainWindow, PairDialog, ConfirmDialog, AccountWizardDialog, CloudFolderPickerDialog),
+                         Views/Controls/ (ProviderLogo),
+                         ViewModels/ (Main, Pair, Run, Autostart, AccountItem, AccountWizard, CloudFolderPicker; no Avalonia types),
                          Services/BackgroundLoop.cs (tray loop), App.axaml.cs (TrayIcon+NativeMenu), Assets/app.ico, Converters.cs
-tests/WorkFlowSync.Tests/
+tests/WorkFlowSync.Tests/ (AccountsTests, GoogleDriveTests, InstantSyncTests, PairViewModelTests, etc.)
 scripts/                 build.ps1, test.ps1, publish.ps1
 config.example.json      reference config
 ```
@@ -197,3 +201,7 @@ WorkFlowSync is fully bilingual (Ukrainian and English) with dynamic runtime lan
 - Bash heredocs in the agent tool choke on C# raw strings / quotes — use Write for code files.
 - `Microsoft.Data.Sqlite` 10.0.12 (bundle_e_sqlite3) is compatible with net8.0 and single-file publish (`IncludeNativeLibrariesForSelfExtract`).
 - (historical) FFS migration benchmark was tested against a 6.6 MB batch.ffs_batch file with 22,569 excludes.
+- Google Drive for desktop: mounted drive letters (e.g. G:\, volume label "Google Drive", filesystem "Google DriveFS" or "FAT32"). Native Google Docs (.gdoc, .gsheet, .gslides, etc.) are virtual stub pointers without binary bodies; reading or copying them throws IOException: Incorrect function (0x1). SyncPlanner and TwoWayPlanner MUST skip them, forget from state, and log warnings. SyncExecutor includes defense-in-depth skip.
+- Google Drive OAuth Loopback Flow (RFC 8252): dynamic loopback port (`GetFreeLoopbackPort()`), local HttpListener on `http://127.0.0.1:{port}/`, system browser launch, CSRF state verification, auto-refresh with 60-second safety window. Tokens are stored locally in config.json and never logged.
+- Avalonia ItemsControl UniformGrid stretching: `ItemsControl` wraps elements in `ContentPresenter` with default non-stretch alignment; style `ItemsControl > ContentPresenter` with `HorizontalAlignment="Stretch"` and set `HorizontalAlignment="Stretch"` on child buttons to ensure identical card width across all columns. Buttons styled as small circle dots must explicitly set `MinHeight="0" MinWidth="0"` on both Button and `/template/ ContentPresenter#PART_ContentPresenter` to avoid Fluent theme minimum button height inflation.
+- Dynamic visibility for cloud-specific settings: Google Documents export settings are visible only when at least one folder of the pair is a Google Drive root (`RootKind.GoogleDrive` or `gdrive://` scheme); hidden for standard local-only pairs.

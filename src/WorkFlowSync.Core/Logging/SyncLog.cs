@@ -101,4 +101,5 @@ public sealed class MemorySyncLog : ISyncLog
 {
     public List<(LogLevel Level, string Message)> Lines { get; } = new();
     public void Write(LogLevel level, string message) { lock (Lines) Lines.Add((level, message)); }
+    public IReadOnlyList<(LogLevel Level, string Message)> Snapshot() { lock (Lines) return Lines.ToArray(); }
 }

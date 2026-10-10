@@ -1,4 +1,3 @@
-
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using WorkFlowSync.Core;
@@ -48,6 +47,7 @@ public sealed partial class PairViewModel : ObservableObject
             OnPropertyChanged(nameof(VersioningSummaryShort));
             OnPropertyChanged(nameof(WatchSummaryShort));
             OnPropertyChanged(nameof(ExcludeCountSummary));
+            OnPropertyChanged(nameof(GoogleDocExportSummary));
         };
     }
 
@@ -56,6 +56,13 @@ public sealed partial class PairViewModel : ObservableObject
     [ObservableProperty] private string _source = "";
     [ObservableProperty] private string _target = "";
     [ObservableProperty] private LinkMode _links = LinkMode.Follow;
+
+    /// <summary>Export mode for native Google web documents (.gdoc, .gsheet, etc.) into destination.</summary>
+    [ObservableProperty] private GoogleDocExportMode _googleDocExport = GoogleDocExportMode.Office;
+    [ObservableProperty] private string? _sourceAccountId;
+    [ObservableProperty] private string? _sourceFolderId;
+    [ObservableProperty] private string? _targetAccountId;
+    [ObservableProperty] private string? _targetFolderId;
 
     /// <summary>Whether the pair reacts to changes as they happen or only on the interval.</summary>
     [ObservableProperty] private WatchMode _watch = WatchMode.Auto;
@@ -260,6 +267,24 @@ public sealed partial class PairViewModel : ObservableObject
         ? I18n.T("pair.rotation_hint")
         : I18n.T("pair.rotation_not_applicable");
 
+    public static IReadOnlyList<GoogleDocExportMode> GoogleDocExportModes { get; } = new[]
+    {
+        GoogleDocExportMode.Office,
+        GoogleDocExportMode.Pdf,
+        GoogleDocExportMode.Skip,
+    };
+
+    public bool GoogleDocExportApplies =>
+        GoogleDrive.IsGoogleDrivePath(Source) ||
+        GoogleDrive.IsGoogleDrivePath(Target);
+
+    public string GoogleDocExportSummary => GoogleDocExport switch
+    {
+        GoogleDocExportMode.Office => I18n.T("enum.gdoc_export.office"),
+        GoogleDocExportMode.Pdf => I18n.T("enum.gdoc_export.pdf"),
+        _ => I18n.T("enum.gdoc_export.skip"),
+    };
+
     /// <summary>What kind of storage the first folder sits on, as far as it can be told without touching the network.</summary>
     public string SourceKindSummary => KindSummary(Source);
     public string TargetKindSummary => KindSummary(Target);
@@ -272,21 +297,25 @@ public sealed partial class PairViewModel : ObservableObject
 
     private static Geometry? KindIcon(string path) => string.IsNullOrWhiteSpace(path)
         ? Icon("IconHardDrive")
-        : RootProbe.QuickKind(path) switch
-        {
-            RootKind.Removable => Icon("IconUsb"),
-            RootKind.LanShare or RootKind.RemoteShare => Icon("IconServer"),
-            _ => Icon("IconHardDrive"),
-        };
+        : GoogleDrive.IsGoogleDrivePath(path)
+            ? Icon("IconCloud")
+            : RootProbe.QuickKind(path) switch
+            {
+                RootKind.Removable => Icon("IconUsb"),
+                RootKind.LanShare or RootKind.RemoteShare => Icon("IconServer"),
+                _ => Icon("IconHardDrive"),
+            };
 
     private static string KindSummary(string path) => string.IsNullOrWhiteSpace(path)
         ? "—"
-        : RootProbe.QuickKind(path) switch
-        {
-            RootKind.Local => I18n.T("pair.storage_local"),
-            RootKind.Removable => I18n.T("pair.storage_removable"),
-            _ => I18n.T("pair.storage_network"),
-        };
+        : GoogleDrive.IsGoogleDrivePath(path)
+            ? I18n.T("pair.storage_google_drive")
+            : RootProbe.QuickKind(path) switch
+            {
+                RootKind.Local => I18n.T("pair.storage_local"),
+                RootKind.Removable => I18n.T("pair.storage_removable"),
+                _ => I18n.T("pair.storage_network"),
+            };
 
     public bool IsMirror => Mode == SyncMode.Mirror;
 
@@ -344,6 +373,7 @@ public sealed partial class PairViewModel : ObservableObject
             if (DiskQuotaEnabled) parts.Add(I18n.T("pair.facts_disk_quota", MinFreeSpaceGb));
             if (FreeUpSpaceAfterCopy) parts.Add(I18n.T("pair.facts_cloud_offload"));
             if (RotateOnLowSpace) parts.Add(I18n.T("pair.facts_rotation"));
+            if (GoogleDocExportApplies && GoogleDocExport != GoogleDocExportMode.Skip) parts.Add(I18n.T("pair.facts_gdoc_export", GoogleDocExportSummary));
             if (ExcludeCount > 0) parts.Add(I18n.T("pair.facts_excludes", ExcludeCount));
             // Auto is the default and needs no explanation; the other two are choices worth showing.
             if (Watch != WatchMode.Auto) parts.Add(Watch == WatchMode.On ? I18n.T("pair.facts_watch_on") : I18n.T("pair.facts_watch_off"));
@@ -392,6 +422,11 @@ public sealed partial class PairViewModel : ObservableObject
         Versioning = p.Versioning,
         VersionsKeepDays = p.VersionsKeepDays < 1 ? 30 : p.VersionsKeepDays,
         VersionsMaxGb = p.VersionsMaxGb < 1 ? 5 : p.VersionsMaxGb,
+        GoogleDocExport = p.GoogleDocExport,
+        SourceAccountId = p.SourceAccountId,
+        SourceFolderId = p.SourceFolderId,
+        TargetAccountId = p.TargetAccountId,
+        TargetFolderId = p.TargetFolderId,
     };
 
     public FolderPair ToModel() => new()
@@ -400,6 +435,10 @@ public sealed partial class PairViewModel : ObservableObject
         Enabled = Enabled,
         Source = Source.Trim(),
         Target = Target.Trim(),
+        SourceAccountId = SourceAccountId,
+        SourceFolderId = SourceFolderId,
+        TargetAccountId = TargetAccountId,
+        TargetFolderId = TargetFolderId,
         Mode = Mode,
         Links = Links,
         Watch = Watch,
@@ -417,6 +456,7 @@ public sealed partial class PairViewModel : ObservableObject
         Versioning = Versioning,
         VersionsKeepDays = Math.Clamp(VersionsKeepDays, 1, 3650),
         VersionsMaxGb = Math.Clamp(VersionsMaxGb, 1, 1000),
+        GoogleDocExport = GoogleDocExport,
     };
 
     public PairViewModel Clone() => FromModel(ToModel());
@@ -427,6 +467,10 @@ public sealed partial class PairViewModel : ObservableObject
         Enabled = other.Enabled;
         Source = other.Source;
         Target = other.Target;
+        SourceAccountId = other.SourceAccountId;
+        SourceFolderId = other.SourceFolderId;
+        TargetAccountId = other.TargetAccountId;
+        TargetFolderId = other.TargetFolderId;
         Mode = other.Mode;
         Links = other.Links;
         Watch = other.Watch;
@@ -445,6 +489,7 @@ public sealed partial class PairViewModel : ObservableObject
         Versioning = other.Versioning;
         VersionsKeepDays = other.VersionsKeepDays;
         VersionsMaxGb = other.VersionsMaxGb;
+        GoogleDocExport = other.GoogleDocExport;
         RaiseSummaries();
     }
 
@@ -461,6 +506,8 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(ExcludeCount));
         OnPropertyChanged(nameof(SourceKindSummary));
         OnPropertyChanged(nameof(TargetKindSummary));
+        OnPropertyChanged(nameof(SourceIcon));
+        OnPropertyChanged(nameof(TargetIcon));
         OnPropertyChanged(nameof(WatchHint));
         OnPropertyChanged(nameof(FolderName));
         OnPropertyChanged(nameof(HasFolderName));
@@ -471,6 +518,8 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowWatch));
         OnPropertyChanged(nameof(HasExcludes));
         OnPropertyChanged(nameof(ExcludeCountSummary));
+        OnPropertyChanged(nameof(GoogleDocExportApplies));
+        OnPropertyChanged(nameof(GoogleDocExportSummary));
         RaiseSyncState();
         RaiseMode();
     }
@@ -552,14 +601,19 @@ public sealed partial class PairViewModel : ObservableObject
     partial void OnSourceChanged(string value)
     {
         RaiseFacts(nameof(SourceKindSummary));
+        OnPropertyChanged(nameof(SourceIcon));
         RaiseCloudFiles();
         OnPropertyChanged(nameof(FolderName));
         OnPropertyChanged(nameof(HasFolderName));
+        OnPropertyChanged(nameof(GoogleDocExportApplies));
     }
+
+    partial void OnGoogleDocExportChanged(GoogleDocExportMode value) => RaiseFacts(nameof(GoogleDocExportSummary));
 
     partial void OnTargetChanged(string value)
     {
         RaiseFacts(nameof(TargetKindSummary));
+        OnPropertyChanged(nameof(TargetIcon));
         RaiseCloudFiles();
         OnPropertyChanged(nameof(FreeUpSpaceApplies));
         OnPropertyChanged(nameof(FreeUpSpaceHint));
@@ -567,6 +621,7 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(DiskQuotaHint));
         OnPropertyChanged(nameof(RotationApplies));
         OnPropertyChanged(nameof(RotationHint));
+        OnPropertyChanged(nameof(GoogleDocExportApplies));
     }
 
     private void RaiseCloudFiles()

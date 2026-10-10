@@ -1,0 +1,402 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WorkFlowSync.App.ViewModels"
+        xmlns:app="using:WorkFlowSync.App"
+        xmlns:loc="using:WorkFlowSync.App.Localization"
+        xmlns:ctl="using:WorkFlowSync.App.Views.Controls"
+        x:Class="WorkFlowSync.App.Views.AccountWizardDialog"
+        x:DataType="vm:AccountWizardViewModel"
+        Title="{loc:Loc accounts.wizard_title}"
+        Width="920" SizeToContent="Height" MinWidth="850" CanResize="False"
+        Background="{DynamicResource SurfaceCanvas}"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Window.Styles>
+        <Style Selector="Button.carousel-dot">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="4,0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Height" Value="10" />
+            <Setter Property="Width" Value="10" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Background" Value="#cbd5e1" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.carousel-dot /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="5" />
+        </Style>
+        <Style Selector="Button.carousel-dot:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#94a3b8" />
+        </Style>
+        <Style Selector="Button.carousel-dot.active">
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Width" Value="10" />
+            <Setter Property="Height" Value="10" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Background" Value="{DynamicResource Accent}" />
+        </Style>
+        <Style Selector="Button.carousel-dot.active /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Accent}" />
+            <Setter Property="CornerRadius" Value="5" />
+        </Style>
+    </Window.Styles>
+
+    <Border Padding="28,24">
+        <StackPanel Spacing="18">
+
+            <!-- ═════════════════════ Step 0: Select Provider ═════════════════════ -->
+            <StackPanel Spacing="18" IsVisible="{Binding IsStep0}">
+                <Grid ColumnDefinitions="Auto,*">
+                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12"
+                            Background="{DynamicResource AccentSoft}" Margin="0,0,16,0"
+                            VerticalAlignment="Center">
+                        <Path Classes="ico" Data="{StaticResource IconCloud}" Width="22" Height="22"
+                              Stroke="{DynamicResource Accent}" StrokeThickness="2"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="title" Text="{loc:Loc accounts.wizard_select_provider}" FontSize="18" FontWeight="Bold" />
+                        <TextBlock Classes="caption" Text="{loc:Loc accounts.wizard_select_hint}" FontSize="13" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Providers Grid (4 square uniform cards per row) -->
+                <ItemsControl ItemsSource="{Binding Providers}" HorizontalAlignment="Stretch">
+                    <ItemsControl.Styles>
+                        <Style Selector="ItemsControl > ContentPresenter">
+                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                            <Setter Property="VerticalAlignment" Value="Stretch" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ItemsControl.Styles>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="4" HorizontalAlignment="Stretch" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CloudProviderOption">
+                            <Button Classes="card-button" Margin="6" Padding="0"
+                                    Height="195"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch"
+                                    Command="{Binding $parent[Window].((vm:AccountWizardViewModel)DataContext).SelectProviderCommand}"
+                                    CommandParameter="{Binding}"
+                                    Tag="{Binding}"
+                                    Click="OnSelectProviderClick"
+                                    IsEnabled="{Binding IsAvailable}">
+                                <Button.Styles>
+                                    <Style Selector="Button.card-button">
+                                        <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+                                        <Setter Property="BorderThickness" Value="1" />
+                                        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
+                                        <Setter Property="Padding" Value="0" />
+                                        <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                        <Setter Property="VerticalAlignment" Value="Stretch" />
+                                    </Style>
+                                    <Style Selector="Button.card-button /template/ ContentPresenter#PART_ContentPresenter">
+                                        <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+                                        <Setter Property="BorderThickness" Value="1" />
+                                        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}" />
+                                        <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                        <Setter Property="VerticalAlignment" Value="Stretch" />
+                                    </Style>
+                                    <Style Selector="Button.card-button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                                        <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                    </Style>
+                                    <Style Selector="Button.card-button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                                        <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+                                        <Setter Property="Opacity" Value="0.6" />
+                                    </Style>
+                                </Button.Styles>
+                                <Border Padding="14,12" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                        <!-- Top-Right Status Badge -->
+                                        <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                Classes="badge"
+                                                Classes.success="{Binding IsAvailable}">
+                                            <TextBlock Classes="badge-text" Text="{Binding BadgeText}"
+                                                       Classes.success="{Binding IsAvailable}" />
+                                        </Border>
+
+                                        <!-- Centered Content: Official Brand Logo, Title & Description -->
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="5" Margin="2,4,2,2">
+                                            <!-- Provider Logo Container -->
+                                            <Border Width="52" Height="52" CornerRadius="14"
+                                                    Background="{DynamicResource SurfaceSubtle}"
+                                                    BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+                                                    HorizontalAlignment="Center">
+                                                <ctl:ProviderLogo ProviderId="{Binding Id}" Width="32" Height="32"
+                                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+
+                                            <!-- Provider Name -->
+                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13.5"
+                                                       TextAlignment="Center" HorizontalAlignment="Center"
+                                                       Margin="0,2,0,0" />
+
+                                            <!-- Provider Description -->
+                                            <TextBlock Text="{Binding Description}" Classes="secondary" FontSize="11"
+                                                       TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center"
+                                                       MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                    <Button Content="{loc:Loc common.cancel}" Click="OnCancel" IsCancel="True" MinWidth="100" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- ═════════════════════ Step 1: Input Credentials (Two Zones) ═════════════════════ -->
+            <StackPanel Spacing="16" IsVisible="{Binding IsStep1}">
+                <!-- Header with Back Button -->
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                        <Border Width="44" Height="44" CornerRadius="12"
+                                Background="{DynamicResource SurfaceSubtle}"
+                                BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+                                VerticalAlignment="Center">
+                            <ctl:ProviderLogo ProviderId="GoogleDrive" Width="28" Height="28"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Classes="title" Text="{loc:Loc accounts.wizard_title}" FontSize="18" FontWeight="Bold" />
+                            <TextBlock Classes="caption" Text="{loc:Loc accounts.provider_google}" FontSize="13" />
+                        </StackPanel>
+                    </StackPanel>
+                    <Button Grid.Column="2" Command="{Binding BackToProvidersCommand}"
+                            Content="{loc:Loc accounts.step_back}" Classes="link" VerticalAlignment="Center" />
+                </Grid>
+
+                <!-- Two-Zone Split Grid -->
+                <Grid ColumnDefinitions="1.05*,18,1.25*">
+                    <!-- LEFT ZONE: Input Parameters -->
+                    <Border Grid.Column="0" Background="{DynamicResource SurfaceCard}"
+                            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+                            CornerRadius="{DynamicResource RadiusLg}" Padding="20">
+                        <StackPanel Spacing="16">
+                            <TextBlock Text="{loc:Loc accounts.wizard_instructions_title}" FontWeight="Bold" FontSize="14" />
+
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="{loc:Loc accounts.wizard_client_id}" FontWeight="Medium" FontSize="13" />
+                                <TextBox Text="{Binding ClientId}" Watermark="123456789-xyz.apps.googleusercontent.com" Height="36" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="{loc:Loc accounts.wizard_client_secret}" FontWeight="Medium" FontSize="13" />
+                                <TextBox Text="{Binding ClientSecret}" PasswordChar="•" Watermark="GOCSPX-..." Height="36" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,12,0,0">
+                                <Button Content="{loc:Loc common.cancel}" Click="OnCancel" IsCancel="True" MinWidth="90" />
+                                <Button Classes="primary" Content="{loc:Loc accounts.wizard_btn_login}"
+                                        Command="{Binding StartAuthorizationCommand}"
+                                        IsEnabled="{Binding CanStart}" MinWidth="160" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- RIGHT ZONE: Step-by-Step Instructions Carousel (Clean Single Card) -->
+                    <Border Grid.Column="2" Background="{DynamicResource SurfaceCard}"
+                            BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+                            CornerRadius="{DynamicResource RadiusLg}" Padding="20">
+                        <Grid RowDefinitions="*,Auto" MinHeight="340">
+                            <!-- Carousel Body: Step 1 to 5 (Stretched cleanly across full card size) -->
+                            <Panel Grid.Row="0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+                                <!-- ═══ STEP 1 ═══ -->
+                                <Grid IsVisible="{Binding IsInstructionStep1}" RowDefinitions="*,Auto" VerticalAlignment="Stretch">
+                                    <StackPanel Grid.Row="0" Spacing="12" VerticalAlignment="Stretch">
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step1_title}" FontWeight="Bold" FontSize="14.5"
+                                                   Foreground="{DynamicResource TextPrimary}" />
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step1_desc}" TextWrapping="Wrap"
+                                                   Classes="secondary" FontSize="12.5" LineHeight="20" />
+                                    </StackPanel>
+
+                                    <Button Grid.Row="1" Classes="primary" HorizontalAlignment="Left" Margin="0,14,0,0"
+                                            Command="{Binding OpenUrlCommand}" CommandParameter="https://console.cloud.google.com/projectcreate">
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step1_btn}" FontWeight="SemiBold" FontSize="12" />
+                                    </Button>
+                                </Grid>
+
+                                <!-- ═══ STEP 2 ═══ -->
+                                <Grid IsVisible="{Binding IsInstructionStep2}" RowDefinitions="*,Auto" VerticalAlignment="Stretch">
+                                    <StackPanel Grid.Row="0" Spacing="12" VerticalAlignment="Stretch">
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step2_title}" FontWeight="Bold" FontSize="14.5"
+                                                   Foreground="{DynamicResource TextPrimary}" />
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step2_desc}" TextWrapping="Wrap"
+                                                   Classes="secondary" FontSize="12.5" LineHeight="20" />
+                                    </StackPanel>
+
+                                    <Button Grid.Row="1" Classes="primary" HorizontalAlignment="Left" Margin="0,14,0,0"
+                                            Command="{Binding OpenUrlCommand}" CommandParameter="https://console.cloud.google.com/apis/library/drive.googleapis.com">
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step2_btn}" FontWeight="SemiBold" FontSize="12" />
+                                    </Button>
+                                </Grid>
+
+                                <!-- ═══ STEP 3 ═══ -->
+                                <Grid IsVisible="{Binding IsInstructionStep3}" RowDefinitions="*,Auto" VerticalAlignment="Stretch">
+                                    <StackPanel Grid.Row="0" Spacing="12" VerticalAlignment="Stretch">
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step3_title}" FontWeight="Bold" FontSize="14.5"
+                                                   Foreground="{DynamicResource TextPrimary}" />
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step3_desc}" TextWrapping="Wrap"
+                                                   Classes="secondary" FontSize="12.5" LineHeight="20" />
+                                    </StackPanel>
+
+                                    <Button Grid.Row="1" Classes="primary" HorizontalAlignment="Left" Margin="0,14,0,0"
+                                            Command="{Binding OpenUrlCommand}" CommandParameter="https://console.cloud.google.com/apis/credentials/consent">
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step3_btn}" FontWeight="SemiBold" FontSize="12" />
+                                    </Button>
+                                </Grid>
+
+                                <!-- ═══ STEP 4 ═══ -->
+                                <Grid IsVisible="{Binding IsInstructionStep4}" RowDefinitions="*,Auto" VerticalAlignment="Stretch">
+                                    <StackPanel Grid.Row="0" Spacing="12" VerticalAlignment="Stretch">
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step4_title}" FontWeight="Bold" FontSize="14.5"
+                                                   Foreground="{DynamicResource TextPrimary}" />
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step4_desc}" TextWrapping="Wrap"
+                                                   Classes="secondary" FontSize="12.5" LineHeight="20" />
+                                    </StackPanel>
+
+                                    <Button Grid.Row="1" Classes="primary" HorizontalAlignment="Left" Margin="0,14,0,0"
+                                            Command="{Binding OpenUrlCommand}" CommandParameter="https://console.cloud.google.com/apis/credentials">
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step4_btn}" FontWeight="SemiBold" FontSize="12" />
+                                    </Button>
+                                </Grid>
+
+                                <!-- ═══ STEP 5 ═══ -->
+                                <Grid IsVisible="{Binding IsInstructionStep5}" RowDefinitions="*,Auto" VerticalAlignment="Stretch">
+                                    <StackPanel Grid.Row="0" Spacing="12" VerticalAlignment="Stretch">
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step5_title}" FontWeight="Bold" FontSize="14.5"
+                                                   Foreground="{DynamicResource TextPrimary}" />
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step5_desc}" TextWrapping="Wrap"
+                                                   Classes="secondary" FontSize="12.5" LineHeight="20" />
+                                    </StackPanel>
+
+                                    <Border Grid.Row="1" Background="#fef3c7" BorderBrush="#fde68a" BorderThickness="1"
+                                            CornerRadius="8" Padding="12,8" Margin="0,10,0,0">
+                                        <TextBlock Text="{loc:Loc accounts.instructions_step5_tip}" FontWeight="SemiBold"
+                                                   Foreground="#92400e" FontSize="11.5" TextWrapping="Wrap" />
+                                    </Border>
+                                </Grid>
+                            </Panel>
+
+                            <!-- Carousel Navigation Controls & Circle Indicators -->
+                            <Border Grid.Row="1" Margin="0,14,0,0" Padding="0,12,0,0"
+                                    BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <!-- Back Button -->
+                                    <Button Grid.Column="0" Command="{Binding PrevInstructionStepCommand}"
+                                            IsEnabled="{Binding CanInstructionPrev}" Classes="secondary" Padding="12,6">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Path Classes="ico" Data="{StaticResource IconArrowLeft}" Width="12" Height="12" />
+                                            <TextBlock Text="{loc:Loc common.back}" FontSize="12" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+
+                                    <!-- Carousel Circle Indicators (5 equal round dots) -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                                        <Button Classes="carousel-dot" Classes.active="{Binding IsInstructionStep1}"
+                                                Command="{Binding SetInstructionStepCommand}" CommandParameter="1" />
+                                        <Button Classes="carousel-dot" Classes.active="{Binding IsInstructionStep2}"
+                                                Command="{Binding SetInstructionStepCommand}" CommandParameter="2" />
+                                        <Button Classes="carousel-dot" Classes.active="{Binding IsInstructionStep3}"
+                                                Command="{Binding SetInstructionStepCommand}" CommandParameter="3" />
+                                        <Button Classes="carousel-dot" Classes.active="{Binding IsInstructionStep4}"
+                                                Command="{Binding SetInstructionStepCommand}" CommandParameter="4" />
+                                        <Button Classes="carousel-dot" Classes.active="{Binding IsInstructionStep5}"
+                                                Command="{Binding SetInstructionStepCommand}" CommandParameter="5" />
+                                    </StackPanel>
+
+                                    <!-- Next Button -->
+                                    <Button Grid.Column="2" Command="{Binding NextInstructionStepCommand}"
+                                            IsEnabled="{Binding CanInstructionNext}" Classes="secondary" Padding="12,6">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{loc:Loc accounts.btn_next}" FontSize="12" VerticalAlignment="Center" />
+                                            <Path Classes="ico" Data="{StaticResource IconArrowRight}" Width="12" Height="12" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </StackPanel>
+
+            <!-- ═════════════════════ Step 2: Waiting for browser ═════════════════════ -->
+            <StackPanel Spacing="18" IsVisible="{Binding IsStep2}" HorizontalAlignment="Center" Margin="0,24">
+                <Border Width="56" Height="56" CornerRadius="28" Background="{DynamicResource AccentSoft}"
+                        HorizontalAlignment="Center">
+                    <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="26" Height="26"
+                          Stroke="{DynamicResource Accent}" StrokeThickness="2.5"
+                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                    <TextBlock Text="{loc:Loc accounts.wizard_waiting_title}" FontWeight="Bold" FontSize="16"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Classes="secondary" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="480"
+                               Text="{loc:Loc accounts.wizard_waiting_desc}" />
+                </StackPanel>
+
+                <Button Content="{loc:Loc common.cancel}" Command="{Binding CancelAuthorizationCommand}"
+                        HorizontalAlignment="Center" MinWidth="120" Margin="0,10,0,0" />
+            </StackPanel>
+
+            <!-- ═════════════════════ Step 3: Success ═════════════════════ -->
+            <StackPanel Spacing="18" IsVisible="{Binding IsStep3}" HorizontalAlignment="Center" Margin="0,24">
+                <Border Width="56" Height="56" CornerRadius="28" Background="#dcfce7"
+                        HorizontalAlignment="Center">
+                    <Path Classes="ico" Data="{StaticResource IconCheck}" Width="28" Height="28"
+                          Stroke="#16a34a" StrokeThickness="2.5"
+                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                    <TextBlock Text="{loc:Loc accounts.wizard_success}" FontWeight="Bold" FontSize="16"
+                               Foreground="#16a34a" HorizontalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                        <TextBlock Text="{loc:Loc accounts.account_label}" Classes="secondary" />
+                        <TextBlock Text="{Binding AuthorizedEmail}" FontWeight="SemiBold" />
+                    </StackPanel>
+                </StackPanel>
+
+                <Button Classes="primary" Content="{loc:Loc common.done}" Click="OnDone"
+                        HorizontalAlignment="Center" MinWidth="130" Margin="0,10,0,0" />
+            </StackPanel>
+
+            <!-- ═════════════════════ Step 4: Error ═════════════════════ -->
+            <StackPanel Spacing="16" IsVisible="{Binding IsStep4}" Margin="0,16">
+                <Border Background="#fef2f2" CornerRadius="{DynamicResource RadiusMd}"
+                        Padding="16" BorderBrush="#fecaca" BorderThickness="1">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="{loc:Loc accounts.wizard_error_title}" FontWeight="Bold" Foreground="#dc2626" />
+                        <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="#991b1b" FontSize="13" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,8,0,0">
+                    <Button Content="{loc:Loc common.cancel}" Click="OnCancel" IsCancel="True" MinWidth="100" />
+                    <Button Classes="primary" Content="{loc:Loc common.retry}" Command="{Binding RetryCommand}" MinWidth="130" />
+                </StackPanel>
+            </StackPanel>
+
+        </StackPanel>
+    </Border>
+</Window>
