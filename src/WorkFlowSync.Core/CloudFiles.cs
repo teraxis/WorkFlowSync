@@ -81,6 +81,9 @@ public interface ICloudFilePlatform
 public sealed class WindowsCloudFilePlatform : ICloudFilePlatform
 {
     private const int CfSyncRootInfoBasic = 0;
+    private const int ErrorInvalidFunction = 1;
+    private const int ErrorNotSupported = 50;
+    private const int ErrorCloudFileNotSupported = 384;
     private const int ErrorNotUnderCloudSyncRoot = 390;
 
     [DllImport("CldApi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
@@ -132,14 +135,24 @@ public sealed class WindowsCloudFilePlatform : ICloudFilePlatform
                 out _, sizeof(long), out _);
             if (hr >= 0) return CloudRootStatus.Cloud;
 
-            // ERROR_NOT_A_CLOUD_SYNC_ROOT is the one negative answer that proves permanent rotation may
-            // be considered. Any other API/access/path failure is indeterminate and therefore fail-closed.
+            // ERROR_NOT_A_CLOUD_SYNC_ROOT is the negative answer that proves permanent rotation may
+            // be considered. On volumes or server OSes where Cloud Files are unsupported or the filter
+            // driver is inactive (ERROR_CLOUD_FILE_NOT_SUPPORTED, ERROR_NOT_SUPPORTED, ERROR_INVALID_FUNCTION, E_NOTIMPL),
+            // the folder is also definitively confirmed as not a cloud sync root.
             var win32 = hr & 0xffff;
-            return win32 == ErrorNotUnderCloudSyncRoot
+            return win32 is ErrorNotUnderCloudSyncRoot
+                or ErrorCloudFileNotSupported
+                or ErrorNotSupported
+                or ErrorInvalidFunction
+                || hr == unchecked((int)0x80004001) // E_NOTIMPL
                 ? CloudRootStatus.NotCloud
                 : CloudRootStatus.Unknown;
         }
-        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return CloudRootStatus.NotCloud;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return CloudRootStatus.Unknown;
         }
