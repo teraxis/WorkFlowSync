@@ -1,8 +1,8 @@
-# WorkFlowSync: синхронізація файлів та папок
+# WorkFlowSync: File & Folder Synchronization
 
 <p align="center">
-  <a href="README.md"><b>🇺🇦 Українська</b></a> •
-  <a href="README.en.md"><b>🇬🇧 English</b></a>
+  <a href="README.md"><b>🇬🇧 English</b></a> •
+  <a href="README.uk.md"><b>🇺🇦 Українська</b></a>
 </p>
 
 <p align="center">
@@ -13,127 +13,127 @@
   <img src="https://img.shields.io/badge/UI-Avalonia%2011.3-8B5CF6" alt="Avalonia UI" />
 </p>
 
-**WorkFlowSync** — проста, надійна та зручна програма для синхронізації файлів і папок на Windows, розроблена для захисту ваших робочих даних при роботі з локальними дисками, спільними мережевими папками (SMB), **Google Drive** та **OneDrive**.
+**WorkFlowSync** is a lightweight, reliable, and user-friendly file and folder synchronization tool for Windows, purpose-built to safeguard your daily work across local disks, network shares (SMB), **Google Drive**, and **Microsoft OneDrive**.
 
-Вона створена для того, щоб ваші робочі документи, проєкти чи архіви завжди були під рукою в актуальному стані. Наприклад, ви можете налаштувати синхронізацію між спільною папкою на сервері компанії, Google Диском та вашою локальною папкою (зокрема в OneDrive). Програма сама відстежує зміни і виконує всю рутину за вас.
+It keeps your office documents, active projects, and archives effortlessly synchronized. For instance, you can set up continuous sync between a shared company file server, Google Drive, and your local working folders (such as OneDrive). The app automatically tracks file events and handles the entire sync routine in the background.
 
-Головна перевага: **програма пам'ятає історію ваших дій**. Більшість звичайних синхронізаторів діють наосліп і можуть ненароком перетерти ваші свіжі правки або знову завантажити файли, які ви давно видалили. WorkFlowSync знає, що ви змінили чи прибрали у себе, тому ваші файли завжди в безпеці, а чужі правки не знищать вашу роботу.
+Key advantage: **WorkFlowSync remembers your action history**. Traditional sync utilities act blindly: they can accidentally overwrite your latest edits or redownload files you deleted months ago. WorkFlowSync tracks what you intentionally modified or deleted locally, ensuring your documents remain safe without other people's edits destroying your work.
 
-Працює на Windows відразу після розпаковки, без встановлення та без прав адміністратора.
-
----
-
-## Як виглядає програма
-
-### 1. Головне вікно зі списком ваших завдань
-Тут зібрані всі ваші пари папок для синхронізації. Ви бачите стан кожного завдання, коли була остання перевірка, активні прапорці та обсяг синхронізованих файлів. Запустити або призупинити будь-яке завдання можна в один клік.
-
-![Головне вікно: перелік завдань](docs/screen/1.png)
-
-### 2. Просте та зручне налаштування завдання
-Налаштувати завдання можна буквально за хвилину: вибираєте папки, задаєте розклад і правила. Усі параметри логічно згруповані за картками: **«Що і куди»**, **«Правила»**, новий виділений блок **«Хмарні сховища»** та **«Параметри системи»**.
-
-![Налаштування завдання синхронізації](docs/screen/2.png)
-
-### 3. Зрозумілий журнал подій
-Ви завжди точно знаєте, що саме робить програма. У журналі відкрито показано кожен прохід: скільки файлів перевірено, що скопійовано, що вивантажено в хмару, а що пропущено.
-
-![Журнал подій](docs/screen/3.png)
-
-### 4. Налаштування під ваші вподобання
-Обирайте мову інтерфейсу (українська або англійська), темну чи світлу тему, налаштовуйте тихі години для сповіщень, автозапуск разом із Windows, сканер продуктивності та переглядайте підключені хмарні сховища.
-
-![Загальні налаштування програми](docs/screen/4.png)
-
-### 5. Робота у фоні та швидкий доступ біля годинника
-WorkFlowSync тихо живе значком у системному треї Windows і не відволікає від роботи. Клікнувши на іконку біля годинника, ви можете миттєво відкрити останні змінені файли.
-
-![Меню у системному треї](docs/screen/5.png)
+Runs on Windows immediately after unpacking — **no installer, no administrative privileges required**.
 
 ---
 
-## Головні можливості та переваги
+## Application Showcase
 
-- **Хмарні сховища та Google Drive:**
-  - Повна підтримка офіційного **Google Drive for desktop** та віддалених акаунтів Google.
-  - Автоматична конвертація веб-документів Google (`.gdoc`, `.gsheet`, `.gslides`, `.gdraw`) у повноцінні офісні формати (`.docx`, `.xlsx`, `.pptx`, `.png`) або PDF.
-  - **Безпека хмарних оригіналів:** веб-документи експортуються виключно в папку призначення; оригінал на Google Диску ніколи не затирається.
-  - **Зворотна синхронізація:** опція вивантаження локально змінених конвертованих файлів назад на Google Диск у режимі двобічної синхронізації.
-  - Інтерактивний візард авторизації **OAuth 2.0 Loopback** (RFC 8252) в один клік без ручного копіювання токенів.
-  - Зручний браузер папок Google Диска для вибору каталогу прямо з інтерфейсу.
-- **Підтримка OneDrive & Windows Files On-Demand:**
-  - Розумна робота з онлайн-файлами без примусового завантаження всього диску.
-  - Опція вивільнення простору («лише онлайн») після копіювання файлів.
-- **Захист від неприємних несподіванок:**
-  - Якщо хтось на сервері або в хмарі видалив файл, у вашій локальній копії він не зникне без вашого відома.
-  - Якщо ви змінили чи видалили файл локально, програма зафіксує це та не повертатиме стару версію.
-  - Усі локальні видалення відправляються виключно у звичайний **Кошик Windows**, звідки їх легко відновити.
-- **Контроль дискового простору та вікна часу:**
-  - Синхронізація лише свіжих файлів (наприклад, за останні 365 днів) — старі архіви залишаються на сервері.
-  - Захист вільного місця на диску (дискова квота) та автоматична ротація найстаріших копій при нестачі пам'яті.
-- **Двомовний інтерфейс:**
-  - Повна підтримка української та англійської мов із миттєвим перемиканням без перезапуску програми.
-- **Повна автономність:**
-  - Портативний формат: запуск без встановлення, без прав адміністратора, без сторонніх залежностей.
+### 1. Main Window & Task Overview
+Lists all your configured folder pairs. At a glance, inspect current task status, time of the last run, active rule flags, and synced file metrics. Run or pause any task with a single click.
 
----
+![Main Window: Task List](docs/screen/1.png)
 
-## Режими синхронізації
+### 2. Streamlined Task Configuration
+Setting up a task takes less than a minute: choose your source and destination paths, set a check schedule, and configure sync rules. Controls are logically arranged into clean cards: **"Folders"**, **"Rules"**, a dedicated **"Cloud Storage"** section, and **"System Parameters"**.
 
-1. **Дзеркало (в один бік): зі спільного сховища або сервера до вас**  
-   Ідеально для роботи з мережевими дисками та хмарними архівами. Усе нове автоматично копіюється вам, а джерело гарантовано залишається захищеним від будь-яких змін (read-only).
+![Task Configuration Dialog](docs/screen/2.png)
 
-2. **Двобічна синхронізація (в обидва боки): між двома папками**  
-   Зручно для спільної роботи та синхронізації між робочим і домашнім комп'ютером, локальним диском і Google Drive. Підтримує автоматичне погодження конфліктів та версіонування у `.wfsversions`.
+### 3. Clear Event History & Audit Log
+Always know exactly what the application did. The event log displays every sync pass: items scanned, files copied or exported, online offloads, and skipped entries.
+
+![Activity Log](docs/screen/3.png)
+
+### 4. Tailored Settings
+Switch interface languages instantly (Ukrainian or English), pick a dark or light theme, configure quiet hours for desktop notifications, toggle Windows autostart, adjust scanner performance, and manage connected cloud accounts.
+
+![General Settings](docs/screen/4.png)
+
+### 5. Background Operation & System Tray
+WorkFlowSync stays quietly out of your way in the Windows notification area. Clicking the tray icon gives instant access to recently modified files and lets you pause sync on demand.
+
+![System Tray Menu](docs/screen/5.png)
 
 ---
 
-## Швидкий старт
+## Key Features & Benefits
 
-1. **Завантажте** портативний архів [WorkFlowSync-0.3.0-win-x64.zip](https://github.com/teraxis/WorkFlowSync/releases) та розпакуйте в будь-яку теку на диску (наприклад, `D:\Tools\WorkFlowSync`).
-2. **Запустіть** `WorkFlowSync.exe`.
-3. Натисніть **«+ Додати завдання»**, оберіть папки та налаштуйте розклад або увімкніть відстеження змін у реальному часі.
-
-Щоб програма автоматично запускалася під час увімкнення комп'ютера, активуйте опцію **«Запускати з Windows»** у Налаштуваннях.
+- **Cloud Storage & Google Drive Integration:**
+  - Full support for **Google Drive for desktop** virtual drives and cloud accounts.
+  - Automatic export of web-native Google Docs (`.gdoc`, `.gsheet`, `.gslides`, `.gdraw`) to standard formats (`.docx`, `.xlsx`, `.pptx`, `.png`) or PDF.
+  - **Source-Safe Guarantees:** Converted files are written strictly to the target folder; cloud originals on Google Drive are never altered or deleted.
+  - **Reverse Sync:** Option to upload modified converted documents back to Google Drive as standard files in two-way sync mode.
+  - Interactive **OAuth 2.0 Loopback** (RFC 8252) authorization wizard in your browser without manual token copying.
+  - Built-in remote folder browser for choosing Google Drive directories directly from the app.
+- **OneDrive & Windows Files On-Demand:**
+  - Scans attributes without triggering full placeholder hydration.
+  - Automatic free-up space option (sets files back to "online-only" after copying) to preserve disk capacity.
+- **Fail-Safe Deletion Guard:**
+  - Remote deletions do not silently wipe your local working files.
+  - Files removed locally are never restored against your will.
+  - Local removals go exclusively to the standard **Windows Recycle Bin**, allowing easy recovery.
+- **Quota & Retention Protection:**
+  - Time intake window: sync only recent files (e.g., added within the last 365 days), keeping stale archives on the remote server.
+  - Minimum free disk space reserve and oldest-copy rotation when disk space runs low.
+- **Instant Bilingual Experience:**
+  - Full Ukrainian and English support with seamless runtime language switching across all windows.
+- **Truly Portable:**
+  - Standalone single-file executables; no registry pollution, no administrator rights needed.
 
 ---
 
-## Консольна утиліта (CLI)
+## Two Synchronization Modes
 
-У комплекті постачається консольна утиліта `wfs.exe` для автоматизації через скрипти або Планувальник завдань:
+1. **One-Way Mirror: from shared server / cloud to you**  
+   Ideal for working with company network shares and cloud archives. New and updated items are copied to your machine, while the source folder remains strictly read-only.
+
+2. **Two-Way Synchronization: between two folders**  
+   Perfect for keeping work in sync across multiple computers, local folders, and Google Drive. Supports file versioning in `.wfsversions` and interactive review of pending changes.
+
+---
+
+## Getting Started
+
+1. **Download** the portable release [WorkFlowSync-0.3.0-win-x64.zip](https://github.com/teraxis/WorkFlowSync/releases) and extract it to any convenient directory (e.g. `D:\Tools\WorkFlowSync`).
+2. **Launch** `WorkFlowSync.exe`.
+3. Click **"+ Add Task"**, select your folders, and set your check schedule or enable real-time change tracking.
+
+To launch automatically on system boot, enable **"Start with Windows"** in Settings.
+
+---
+
+## Command-Line Interface (CLI)
+
+The package includes `wfs.exe` for scripting, CI/CD, or headless automation via Windows Task Scheduler:
 
 ```powershell
-wfs sync --once --dry-run   # тестовий запуск: показати план дій, не змінюючи файли
-wfs sync --once             # один повний прохід синхронізації
-wfs sync --loop             # безперервний фоновий моніторинг
-wfs status                  # перевірка стану та підсумку останнього проходу
-wfs accounts list           # список підключених хмарних акаунтів
+wfs sync --once --dry-run   # test run: preview planned actions without touching files
+wfs sync --once             # perform a single synchronization pass
+wfs sync --loop             # continuous background monitoring loop
+wfs status                  # report current status and last sync metrics
+wfs accounts list           # list connected cloud accounts
 ```
 
 ---
 
-## Документація проєкту
+## Documentation
 
-- [Огляд продукту та каталог функцій](docs/product/README.md)
-- [Синхронізація з Google Диск](docs/product/features/google-drive.md)
-- [Керування обліковими записами](docs/product/features/accounts.md)
-- [Технічні вимоги](docs/requirements.md) • [Архітектура рішення](docs/architecture.md)
-- [Історія релізів](docs/release-history.md) • [Тестування](docs/testing.md)
+- [Product Overview & Feature Catalog](docs/product/README.md)
+- [Google Drive Integration](docs/product/features/google-drive.md)
+- [Account Management & OAuth](docs/product/features/accounts.md)
+- [Technical Requirements](docs/requirements.md) • [Architecture Guide](docs/architecture.md)
+- [Release History](docs/release-history.md) • [Testing Guide](docs/testing.md)
 
 ---
 
-## Збірка з вихідного коду
+## Building from Source
 
-Потрібен .NET SDK 8.0:
+Requires .NET 8.0 SDK:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\package.ps1   # створення zip-пакета в publish\
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\package.ps1   # produces portable zip in publish\
 ```
 
 ---
 
-## Ліцензія
+## License
 
-Розповсюджується за ліцензією MIT. © 2026 Білик Ігор.
+Distributed under the MIT License. © 2026 Білик Ігор.
