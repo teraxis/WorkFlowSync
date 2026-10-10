@@ -59,6 +59,10 @@ public sealed partial class PairViewModel : ObservableObject
 
     /// <summary>Export mode for native Google web documents (.gdoc, .gsheet, etc.) into destination.</summary>
     [ObservableProperty] private GoogleDocExportMode _googleDocExport = GoogleDocExportMode.Office;
+
+    /// <summary>Sync/upload locally modified converted documents back to Google Drive.</summary>
+    [ObservableProperty] private bool _uploadConvertedDocs;
+
     [ObservableProperty] private string? _sourceAccountId;
     [ObservableProperty] private string? _sourceFolderId;
     [ObservableProperty] private string? _targetAccountId;
@@ -285,6 +289,13 @@ public sealed partial class PairViewModel : ObservableObject
         _ => I18n.T("enum.gdoc_export.skip"),
     };
 
+    public bool CanUploadConvertedDocs =>
+        !IsMirror && GoogleDocExportApplies && GoogleDocExport != GoogleDocExportMode.Skip;
+
+    public string SyncConvertedDocsHint => IsMirror
+        ? I18n.T("pair.sync_converted_docs_hint_mirror")
+        : I18n.T("pair.sync_converted_docs_hint");
+
     /// <summary>What kind of storage the first folder sits on, as far as it can be told without touching the network.</summary>
     public string SourceKindSummary => KindSummary(Source);
     public string TargetKindSummary => KindSummary(Target);
@@ -373,7 +384,12 @@ public sealed partial class PairViewModel : ObservableObject
             if (DiskQuotaEnabled) parts.Add(I18n.T("pair.facts_disk_quota", MinFreeSpaceGb));
             if (FreeUpSpaceAfterCopy) parts.Add(I18n.T("pair.facts_cloud_offload"));
             if (RotateOnLowSpace) parts.Add(I18n.T("pair.facts_rotation"));
-            if (GoogleDocExportApplies && GoogleDocExport != GoogleDocExportMode.Skip) parts.Add(I18n.T("pair.facts_gdoc_export", GoogleDocExportSummary));
+            if (GoogleDocExportApplies && GoogleDocExport != GoogleDocExportMode.Skip)
+            {
+                var exportFact = GoogleDocExportSummary;
+                if (!IsMirror && UploadConvertedDocs) exportFact += $" + {I18n.T("pair.facts_upload_converted")}";
+                parts.Add(I18n.T("pair.facts_gdoc_export", exportFact));
+            }
             if (ExcludeCount > 0) parts.Add(I18n.T("pair.facts_excludes", ExcludeCount));
             // Auto is the default and needs no explanation; the other two are choices worth showing.
             if (Watch != WatchMode.Auto) parts.Add(Watch == WatchMode.On ? I18n.T("pair.facts_watch_on") : I18n.T("pair.facts_watch_off"));
@@ -423,6 +439,7 @@ public sealed partial class PairViewModel : ObservableObject
         VersionsKeepDays = p.VersionsKeepDays < 1 ? 30 : p.VersionsKeepDays,
         VersionsMaxGb = p.VersionsMaxGb < 1 ? 5 : p.VersionsMaxGb,
         GoogleDocExport = p.GoogleDocExport,
+        UploadConvertedDocs = p.UploadConvertedDocs,
         SourceAccountId = p.SourceAccountId,
         SourceFolderId = p.SourceFolderId,
         TargetAccountId = p.TargetAccountId,
@@ -457,6 +474,7 @@ public sealed partial class PairViewModel : ObservableObject
         VersionsKeepDays = Math.Clamp(VersionsKeepDays, 1, 3650),
         VersionsMaxGb = Math.Clamp(VersionsMaxGb, 1, 1000),
         GoogleDocExport = GoogleDocExport,
+        UploadConvertedDocs = UploadConvertedDocs,
     };
 
     public PairViewModel Clone() => FromModel(ToModel());
@@ -490,6 +508,7 @@ public sealed partial class PairViewModel : ObservableObject
         VersionsKeepDays = other.VersionsKeepDays;
         VersionsMaxGb = other.VersionsMaxGb;
         GoogleDocExport = other.GoogleDocExport;
+        UploadConvertedDocs = other.UploadConvertedDocs;
         RaiseSummaries();
     }
 
@@ -520,6 +539,8 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(ExcludeCountSummary));
         OnPropertyChanged(nameof(GoogleDocExportApplies));
         OnPropertyChanged(nameof(GoogleDocExportSummary));
+        OnPropertyChanged(nameof(CanUploadConvertedDocs));
+        OnPropertyChanged(nameof(SyncConvertedDocsHint));
         RaiseSyncState();
         RaiseMode();
     }
@@ -606,9 +627,18 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(FolderName));
         OnPropertyChanged(nameof(HasFolderName));
         OnPropertyChanged(nameof(GoogleDocExportApplies));
+        OnPropertyChanged(nameof(CanUploadConvertedDocs));
+        OnPropertyChanged(nameof(SyncConvertedDocsHint));
     }
 
-    partial void OnGoogleDocExportChanged(GoogleDocExportMode value) => RaiseFacts(nameof(GoogleDocExportSummary));
+    partial void OnGoogleDocExportChanged(GoogleDocExportMode value)
+    {
+        RaiseFacts(nameof(GoogleDocExportSummary));
+        OnPropertyChanged(nameof(CanUploadConvertedDocs));
+        OnPropertyChanged(nameof(SyncConvertedDocsHint));
+    }
+
+    partial void OnUploadConvertedDocsChanged(bool value) => RaiseFacts(nameof(Facts));
 
     partial void OnTargetChanged(string value)
     {
@@ -622,6 +652,8 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(RotationApplies));
         OnPropertyChanged(nameof(RotationHint));
         OnPropertyChanged(nameof(GoogleDocExportApplies));
+        OnPropertyChanged(nameof(CanUploadConvertedDocs));
+        OnPropertyChanged(nameof(SyncConvertedDocsHint));
     }
 
     private void RaiseCloudFiles()
@@ -649,6 +681,8 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(RotationHint));
         OnPropertyChanged(nameof(SourceLabel));
         OnPropertyChanged(nameof(TargetLabel));
+        OnPropertyChanged(nameof(CanUploadConvertedDocs));
+        OnPropertyChanged(nameof(SyncConvertedDocsHint));
         RaiseCloudFiles();          // a mirror reads its source, two-way reads both — the answer changes
     }
     partial void OnExcludeTextChanged(string value) => RaiseFacts(nameof(ExcludeCount));

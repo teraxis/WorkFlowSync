@@ -249,6 +249,12 @@ public sealed class FolderPair
     public GoogleDocExportMode GoogleDocExport { get; set; } = GoogleDocExportMode.Office;
 
     /// <summary>
+    /// When true, locally modified converted documents (.docx, .xlsx, .pptx, etc.) are synchronized back
+    /// to Google Drive as regular binary files. False (default) preserves the safe destination-only export rule.
+    /// </summary>
+    public bool UploadConvertedDocs { get; set; }
+
+    /// <summary>
     /// Cloud-only files (OneDrive Files On-Demand) when this pair has to copy one out: leave it alone
     /// (default) or download it. Only relevant in two-way mode — a mirror never reads its target.
     /// </summary>

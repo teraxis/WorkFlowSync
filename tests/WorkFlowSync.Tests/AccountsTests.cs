@@ -292,7 +292,7 @@ public sealed class AccountsTests
         try
         {
             var initial = new SyncConfig();
-            initial.Pairs.Add(new FolderPair { Name = "p1", Source = @"C:\src", Target = @"C:\dst" });
+            initial.Pairs.Add(new FolderPair { Name = "p1", Source = @"C:\src", Target = @"C:\dst", Enabled = false });
             initial.Accounts.Add(new CloudAccount
             {
                 Id = "a1",
@@ -431,6 +431,55 @@ public sealed class AccountsTests
         Assert.Equal("root", vm.Result.FolderId);
         Assert.Equal("acc999", vm.Result.AccountId);
         Assert.StartsWith("gdrive://", vm.Result.CloudPath);
+    }
+
+    [Fact]
+    public void CloudAccountsSummary_And_GoToAccounts_WorkCorrectly()
+    {
+        var tempConfigPath = Path.Combine(Path.GetTempPath(), $"wfs_cloud_summary_{Guid.NewGuid():N}.json");
+        try
+        {
+            var config = new SyncConfig();
+            config.Pairs.Add(new FolderPair { Name = "p1", Source = @"C:\src", Target = @"C:\dst", Enabled = false });
+            ConfigFile.Save(config, tempConfigPath);
+
+            var vm = new MainViewModel(tempConfigPath);
+            vm.Background.Stop();
+
+            // Zero accounts
+            Assert.False(string.IsNullOrWhiteSpace(vm.CloudAccountsSummary));
+
+            // Navigation to accounts page
+            vm.SelectedPage = 3;
+            Assert.True(vm.IsSettingsPage);
+            vm.GoToAccountsCommand.Execute(null);
+            Assert.Equal(2, vm.SelectedPage);
+            Assert.True(vm.IsAccountsPage);
+
+            // 1 account
+            vm.AddAccount(new CloudAccount
+            {
+                Id = "acc-1",
+                Name = "Google Drive 1",
+                Email = "user1@example.com",
+                Provider = CloudProvider.GoogleDrive
+            });
+            Assert.Contains("Google Drive 1", vm.CloudAccountsSummary);
+
+            // 2 accounts
+            vm.AddAccount(new CloudAccount
+            {
+                Id = "acc-2",
+                Name = "Google Drive 2",
+                Email = "user2@example.com",
+                Provider = CloudProvider.GoogleDrive
+            });
+            Assert.Contains("2", vm.CloudAccountsSummary);
+        }
+        finally
+        {
+            if (File.Exists(tempConfigPath)) File.Delete(tempConfigPath);
+        }
     }
 
     private sealed class MockOAuthService : IGoogleOAuthService

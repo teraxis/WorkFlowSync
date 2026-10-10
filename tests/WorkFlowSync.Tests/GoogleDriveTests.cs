@@ -267,6 +267,47 @@ public sealed class GoogleDriveTests
     }
 
     [Fact]
+    public void TwoWayPlanner_UploadsModifiedConvertedDoc_WhenUploadConvertedDocsIsTrue()
+    {
+        var a = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["sheet.gsheet"] = new ScanEntry { RelativePath = "sheet.gsheet", Kind = EntryKind.File, Size = 0, MtimeUtc = T1, CtimeUtc = T1 }
+        };
+        var b = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Destination file was modified locally with newer timestamp
+            ["sheet.xlsx"] = new ScanEntry { RelativePath = "sheet.xlsx", Kind = EntryKind.File, Size = 1500, MtimeUtc = Now, CtimeUtc = T1 }
+        };
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["sheet.xlsx"] = new StateEntry
+            {
+                PairName = "p",
+                RelativePath = "sheet.xlsx",
+                Kind = EntryKind.File,
+                Status = EntryStatus.Active,
+                FirstSeenUtc = T1,
+                LastSeenUtc = T1,
+                SourceSize = 0,
+                SourceMtimeUtc = T1,
+                CopiedSize = 1200,
+                CopiedMtimeUtc = T1
+            }
+        };
+
+        var planner = new TwoWayPlanner("p", Now, googleDocExport: GoogleDocExportMode.Office, uploadConvertedDocs: true);
+        var plan = planner.Plan(a, b, state);
+
+        // Reverse sync must be allowed! An action to update Side A (Source) should be planned
+        var action = Assert.Single(plan.Actions);
+        Assert.Equal(SyncSide.Source, action.Side);
+        Assert.Equal(SyncActionKind.UpdateFile, action.Kind);
+        Assert.Equal("sheet.xlsx", action.RelativePath);
+        Assert.Equal(1500, action.Proposed.CopiedSize);
+        Assert.Contains(plan.Warnings, w => w.Contains("sheet.xlsx") && w.Contains("uploading"));
+    }
+
+    [Fact]
     public void TwoWayPlanner_SuppressesDeletion_OnGoogleDrive()
     {
         var a = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)

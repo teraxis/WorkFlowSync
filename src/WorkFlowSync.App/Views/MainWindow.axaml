@@ -622,6 +622,20 @@
 
                         <Border Classes="card">
                             <StackPanel Spacing="12">
+                                <TextBlock Classes="section" Text="{loc:Loc settings.cloud_section}" />
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Loc settings.cloud_accounts_title}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding CloudAccountsSummary}" Classes="secondary" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="{loc:Loc settings.cloud_manage_accounts}"
+                                            Command="{Binding GoToAccountsCommand}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Classes="card">
+                            <StackPanel Spacing="12">
                                 <TextBlock Classes="section" Text="{loc:Loc settings.appearance_section}" />
                                 <Grid ColumnDefinitions="240,*">
                                     <TextBlock Grid.Column="0" Text="{loc:Loc settings.language}" VerticalAlignment="Center" />

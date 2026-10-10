@@ -250,7 +250,7 @@ public sealed class SyncRunner
         }
 
         var plan = twoWay
-            ? new TwoWayPlanner(pair.Name, now, scope, frozen, pair.GoogleDocExport).Plan(source.Entries, target.Entries, state)
+            ? new TwoWayPlanner(pair.Name, now, scope, frozen, pair.GoogleDocExport, pair.UploadConvertedDocs).Plan(source.Entries, target.Entries, state)
             : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, scope, pair.GoogleDocExport).Plan(source.Entries, target.Entries, state);
         foreach (var w in plan.Warnings) _log.Warn($"{tag} plan: {w}");
         result.Plan = plan.Stats;

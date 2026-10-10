@@ -27,6 +27,19 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool HasAccounts => Accounts.Count > 0;
 
+    public string CloudAccountsSummary => Accounts.Count switch
+    {
+        0 => I18n.T("settings.cloud_accounts_none"),
+        1 => string.Format(I18n.T("settings.cloud_accounts_one"), Accounts[0].Name),
+        _ => string.Format(I18n.T("settings.cloud_accounts_multiple"), Accounts.Count)
+    };
+
+    [RelayCommand]
+    private void GoToAccounts()
+    {
+        SelectedPage = 2;
+    }
+
     /// <summary>Which page the navigation rail shows: 0 folders, 1 activity, 2 accounts, 3 settings.</summary>
     [ObservableProperty] private int _selectedPage;
 
@@ -158,11 +171,13 @@ public sealed partial class MainViewModel : ObservableObject
         Accounts.CollectionChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(HasAccounts));
+            OnPropertyChanged(nameof(CloudAccountsSummary));
         };
         I18n.Instance.LanguageChanged += () =>
         {
             OnPropertyChanged(nameof(PageTitle));
             OnPropertyChanged(nameof(Version));
+            OnPropertyChanged(nameof(CloudAccountsSummary));
             OnPropertyChanged(nameof(NotificationsHint));
             OnPropertyChanged(nameof(CpuLoadHint));
             OnPropertyChanged(nameof(Languages));
@@ -282,6 +297,7 @@ public sealed partial class MainViewModel : ObservableObject
             Accounts.Add(item);
         }
         OnPropertyChanged(nameof(HasAccounts));
+        OnPropertyChanged(nameof(CloudAccountsSummary));
         _loading = false;
         FollowPairStates();
         LoadSyncStates();

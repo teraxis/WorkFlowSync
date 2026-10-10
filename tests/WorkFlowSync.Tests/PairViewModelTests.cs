@@ -56,6 +56,32 @@ public class PairViewModelTests
     }
 
     [Fact]
+    public void UploadConvertedDocs_RoundTrips_And_GatedByMode()
+    {
+        var model = new FolderPair
+        {
+            Name = "gdrive-pair",
+            Source = @"gdrive://user@gmail.com/Reports?id=123&acc=456",
+            Target = @"D:\LocalDocs",
+            Mode = SyncMode.TwoWay,
+            GoogleDocExport = GoogleDocExportMode.Office,
+            UploadConvertedDocs = true,
+        };
+
+        var vm = PairViewModel.FromModel(model);
+        Assert.True(vm.GoogleDocExportApplies);
+        Assert.True(vm.CanUploadConvertedDocs);
+        Assert.True(vm.UploadConvertedDocs);
+
+        var back = vm.ToModel();
+        Assert.True(back.UploadConvertedDocs);
+
+        // In Mirror mode, upload is not applicable (source is read-only)
+        vm.Mode = SyncMode.Mirror;
+        Assert.False(vm.CanUploadConvertedDocs);
+    }
+
+    [Fact]
     public void Unchecked_windows_mean_no_filter_and_no_cleanup_and_blank_exclude_lines_are_dropped()
     {
         var vm = new PairViewModel { Name = "a", Source = "x", Target = "y", HasMaxAge = false, HasAutoClean = false, ExcludeText = "\r\n  *.bak \r\n\r\n" };

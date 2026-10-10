@@ -112,30 +112,6 @@
                             </ComboBox>
                         </Grid>
 
-                        <Grid ColumnDefinitions="160,*">
-                            <TextBlock Grid.Column="0" Text="{loc:Loc pair.cloud_files}" VerticalAlignment="Center" />
-                            <ComboBox Grid.Column="1" IsEnabled="{Binding CloudFilesApplies}" ItemsSource="{x:Static vm:PairViewModel.CloudFileModes}" SelectedItem="{Binding CloudFiles}" Width="320" HorizontalAlignment="Left">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="cfg:CloudFileMode">
-                                        <TextBlock Text="{Binding Converter={x:Static app:Converters.CloudFilesName}}" />
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                        </Grid>
-
-                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto" IsVisible="{Binding GoogleDocExportApplies}">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.google_doc_export}" VerticalAlignment="Center" />
-                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.GoogleDocExportModes}" SelectedItem="{Binding GoogleDocExport}" Width="320" HorizontalAlignment="Left">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="cfg:GoogleDocExportMode">
-                                        <TextBlock Text="{Binding Converter={x:Static app:Converters.GoogleDocExportName}}" />
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
-                                       Text="{loc:Loc pair.google_doc_export_hint}" />
-                        </Grid>
-
                         <!-- The hint sits in the same column as every other one, and stays readable even when
                              the controls are off: a disabled row is when the explanation matters most. -->
                         <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
@@ -189,6 +165,52 @@
 
                 <Border Classes="card">
                     <StackPanel Spacing="12">
+                        <TextBlock Classes="section" Text="{loc:Loc pair.section_cloud}" />
+
+                        <Grid ColumnDefinitions="160,*">
+                            <TextBlock Grid.Column="0" Text="{loc:Loc pair.cloud_files}" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" IsEnabled="{Binding CloudFilesApplies}" ItemsSource="{x:Static vm:PairViewModel.CloudFileModes}" SelectedItem="{Binding CloudFiles}" Width="320" HorizontalAlignment="Left">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="cfg:CloudFileMode">
+                                        <TextBlock Text="{Binding Converter={x:Static app:Converters.CloudFilesName}}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.cloud_offload}"
+                                       VerticalAlignment="Top" Margin="0,4,0,0" />
+                            <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding FreeUpSpaceAfterCopy}"
+                                      IsEnabled="{Binding FreeUpSpaceApplies}" Content="{loc:Loc pair.cloud_offload_checkbox}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
+                                       Text="{Binding FreeUpSpaceHint}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto" IsVisible="{Binding GoogleDocExportApplies}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.google_doc_export}" VerticalAlignment="Center" />
+                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.GoogleDocExportModes}" SelectedItem="{Binding GoogleDocExport}" Width="320" HorizontalAlignment="Left">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="cfg:GoogleDocExportMode">
+                                        <TextBlock Text="{Binding Converter={x:Static app:Converters.GoogleDocExportName}}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
+                                       Text="{loc:Loc pair.google_doc_export_hint}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto" IsVisible="{Binding GoogleDocExportApplies}">
+                            <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding UploadConvertedDocs}"
+                                      IsEnabled="{Binding CanUploadConvertedDocs}" Content="{loc:Loc pair.sync_converted_docs_checkbox}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
+                                       Text="{Binding SyncConvertedDocsHint}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="12">
                         <TextBlock Classes="section" Text="{loc:Loc pair.section_system}" />
 
                         <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
@@ -201,15 +223,6 @@
                             </StackPanel>
                             <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
                                        Text="{Binding DiskQuotaHint}" />
-                        </Grid>
-
-                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.cloud_offload}"
-                                       VerticalAlignment="Top" Margin="0,4,0,0" />
-                            <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding FreeUpSpaceAfterCopy}"
-                                      IsEnabled="{Binding FreeUpSpaceApplies}" Content="{loc:Loc pair.cloud_offload_checkbox}" />
-                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
-                                       Text="{Binding FreeUpSpaceHint}" />
                         </Grid>
 
                         <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">

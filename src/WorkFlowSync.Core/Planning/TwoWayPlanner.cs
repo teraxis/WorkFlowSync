@@ -21,6 +21,7 @@ public sealed class TwoWayPlanner
     private readonly PlanScope? _scope;
     private readonly FrozenPaths? _frozenPaths;
     private readonly WorkFlowSync.Core.Config.GoogleDocExportMode _googleDocExport;
+    private readonly bool _uploadConvertedDocs;
 
     /// <param name="scope">
     /// Limits the pass to one directory. Deletions do not travel in a scoped pass: they are inferred from
@@ -31,16 +32,21 @@ public sealed class TwoWayPlanner
     /// </param>
     /// <param name="googleDocExport">
     /// Export mode for native Google web documents (.gdoc, .gsheet, etc.): Office, Pdf, or Skip.
-    /// Converted files strictly travel towards destination (Side B); reverse sync to Side A is suppressed.
+    /// Converted files strictly travel towards destination (Side B); reverse sync to Side A is suppressed unless <paramref name="uploadConvertedDocs"/> is true.
+    /// </param>
+    /// <param name="uploadConvertedDocs">
+    /// When true, locally modified converted documents are uploaded to Google Drive as regular binary files.
     /// </param>
     public TwoWayPlanner(string pair, DateTimeOffset now, PlanScope? scope = null, FrozenPaths? frozenPaths = null,
-        WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office)
+        WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office,
+        bool uploadConvertedDocs = false)
     {
         _pair = pair;
         _now = now;
         _scope = scope;
         _frozenPaths = frozenPaths;
         _googleDocExport = googleDocExport;
+        _uploadConvertedDocs = uploadConvertedDocs;
     }
 
     public SyncPlan Plan(IReadOnlyDictionary<string, ScanEntry> a, IReadOnlyDictionary<string, ScanEntry> b,
@@ -107,8 +113,12 @@ public sealed class TwoWayPlanner
             {
                 if (sourceDocPath is not null && missingSide == SyncSide.Source)
                 {
-                    plan.Warnings.Add($"{path}: reverse sync of converted Google doc to Google Drive is suppressed (destination-only export)");
-                    continue;
+                    if (!_uploadConvertedDocs)
+                    {
+                        plan.Warnings.Add($"{path}: reverse sync of converted Google doc to Google Drive is suppressed (destination-only export)");
+                        continue;
+                    }
+                    plan.Warnings.Add($"{path}: uploading converted document back to Google Drive");
                 }
                 // New here, never seen before → give it to the other side.
                 Create(plan, present, missingSide, sourceDocPath);
@@ -119,8 +129,12 @@ public sealed class TwoWayPlanner
             {
                 if (sourceDocPath is not null && missingSide == SyncSide.Source)
                 {
-                    plan.Warnings.Add($"{path}: reverse sync of converted Google doc to Google Drive is suppressed (destination-only export)");
-                    continue;
+                    if (!_uploadConvertedDocs)
+                    {
+                        plan.Warnings.Add($"{path}: reverse sync of converted Google doc to Google Drive is suppressed (destination-only export)");
+                        continue;
+                    }
+                    plan.Warnings.Add($"{path}: uploading modified converted document back to Google Drive");
                 }
                 // Deleted on one side but edited on the other since the last pass: keep the edit, copy it back.
                 plan.Warnings.Add($"{path}: deleted on one side, changed on the other; the changed copy is kept");
@@ -194,9 +208,13 @@ public sealed class TwoWayPlanner
 
         if (sourceDocPath is not null && !fromA)
         {
-            // Reverse sync to Side A (Google Drive) is suppressed for converted Google Docs
-            plan.Warnings.Add($"{path}: reverse sync of converted Google doc to Google Drive is suppressed (destination-only export)");
-            return;
+            if (!_uploadConvertedDocs)
+            {
+                // Reverse sync to Side A (Google Drive) is suppressed for converted Google Docs
+                plan.Warnings.Add($"{path}: reverse sync of converted Google doc to Google Drive is suppressed (destination-only export)");
+                return;
+            }
+            plan.Warnings.Add($"{path}: uploading modified converted document back to Google Drive");
         }
 
         // After the copy both sides hold the winner, so the row describes it twice; the executor
