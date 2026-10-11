@@ -14,6 +14,7 @@ project behavior.
 - For each new or changed product behavior, update `docs/requirements.md`, the applicable document
   under `docs/product/features/`, and the links in `docs/product/README.md`.
 - For each completed user-visible change, update `docs/pending-release-notes.md` in the same task.
+- When creating a GitHub Release, always upload `WorkFlowSync-{version}-win-x64.zip`, `WorkFlowSync.exe`, and `wfs.exe` so the built-in auto-updater (`UpdateChecker`) detects and downloads updates.
 - After code changes, run the verification commands listed in `docs/testing.md` or state why they could not run.
 - Report changed files, checks run, unverified areas, and required approvals.
 

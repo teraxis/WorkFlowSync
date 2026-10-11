@@ -47,6 +47,7 @@ comments and log messages are English.
 - After successful publication, move used entries under `vX.Y.Z (YYYY-MM-DD)` in
   `docs/release-history.md`, then reset the pending sections for the next cycle.
 - Treat published history as immutable except for a clearly identified documentary correction.
+- When publishing a GitHub release, always attach `WorkFlowSync-{version}-win-x64.zip`, `WorkFlowSync.exe`, and `wfs.exe`. The client auto-updater (`UpdateChecker.cs`) searches GitHub Release assets explicitly for `WorkFlowSync.exe`; if the standalone binary is absent, running client instances will not detect or download the update (see `docs/deployment.md` and `WorkFlowSync_SKILL.md`).
 
 ## Domain Invariants (never break)
 
