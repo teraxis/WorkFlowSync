@@ -10,20 +10,28 @@ namespace WorkFlowSync.App.ViewModels;
 
 public sealed record BreadcrumbItem(string Id, string Name);
 
+public enum CloudFolderTab
+{
+    MyDrive,
+    Shared,
+}
+
 public sealed partial class CloudFolderItemViewModel : ObservableObject
 {
     public string Id { get; }
     public string Name { get; }
     public DateTimeOffset? ModifiedTime { get; }
+    public bool IsShortcut { get; }
     public string ModifiedDisplay => ModifiedTime.HasValue
         ? ModifiedTime.Value.ToLocalTime().ToString("g")
         : "";
 
     public CloudFolderItemViewModel(CloudFolderItem item)
     {
-        Id = item.Id;
+        Id = item.EffectiveFolderId;
         Name = item.Name;
         ModifiedTime = item.ModifiedTime;
+        IsShortcut = item.IsShortcut;
     }
 }
 
@@ -46,20 +54,34 @@ public sealed partial class CloudFolderPickerViewModel : ObservableObject
     [ObservableProperty] private bool _hasError;
     [ObservableProperty] private bool _canGoUp;
     [ObservableProperty] private CloudFolderItemViewModel? _selectedFolder;
+    [ObservableProperty] private CloudFolderTab _activeTab = CloudFolderTab.MyDrive;
+
+    public bool IsMyDriveTab => ActiveTab == CloudFolderTab.MyDrive;
+    public bool IsSharedTab => ActiveTab == CloudFolderTab.Shared;
+    public bool CanSelectCurrentFolder => CurrentFolderId != "sharedWithMe";
+
+    public string EmptyMessage => IsSharedTab
+        ? I18n.T("cloud_picker.empty_shared", "Немає спільних документів або папок")
+        : I18n.T("cloud_picker.empty", "У цій теці немає підпапок");
 
     public ObservableCollection<BreadcrumbItem> Breadcrumbs { get; } = new();
     public ObservableCollection<CloudFolderItemViewModel> Folders { get; } = new();
 
     public CloudFolderSelection? Result { get; private set; }
 
-    public string CurrentFolderName => Breadcrumbs.Count > 0 ? Breadcrumbs[^1].Name : I18n.T("cloud_picker.my_drive", "My Drive");
-    public string CurrentFolderId => Breadcrumbs.Count > 0 ? Breadcrumbs[^1].Id : "root";
+    public string CurrentFolderName => Breadcrumbs.Count > 0
+        ? Breadcrumbs[^1].Name
+        : (IsSharedTab ? I18n.T("cloud_picker.shared_documents", "Спільні документи") : I18n.T("cloud_picker.my_drive", "Мій диск"));
 
-    public bool IsRootFolder => CurrentFolderId == "root";
+    public string CurrentFolderId => Breadcrumbs.Count > 0 ? Breadcrumbs[^1].Id : (IsSharedTab ? "sharedWithMe" : "root");
 
-    public string SelectCurrentButtonText => IsRootFolder
-        ? I18n.T("cloud_picker.select_entire_drive", "Select entire Google Drive")
-        : I18n.T("cloud_picker.select_current", "Select current folder: {0}", CurrentFolderName);
+    public bool IsRootFolder => CurrentFolderId == "root" || CurrentFolderId == "sharedWithMe";
+
+    public string SelectCurrentButtonText => CurrentFolderId == "sharedWithMe"
+        ? I18n.T("cloud_picker.choose_folder_from_list", "Оберіть спільну папку зі списку")
+        : (IsRootFolder
+            ? I18n.T("cloud_picker.select_entire_drive", "Обрати весь Google Диск")
+            : I18n.T("cloud_picker.select_current", "Обрати відкриту теку: {0}", CurrentFolderName));
 
     public event Action? RequestClose;
 
@@ -74,9 +96,36 @@ public sealed partial class CloudFolderPickerViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
+        ActiveTab = CloudFolderTab.MyDrive;
         Breadcrumbs.Clear();
         Breadcrumbs.Add(new BreadcrumbItem("root", I18n.T("cloud_picker.my_drive", "My Drive")));
         await LoadFoldersInternalAsync("root");
+    }
+
+    [RelayCommand]
+    public async Task SwitchTabAsync(string tabName)
+    {
+        var newTab = string.Equals(tabName, "shared", StringComparison.OrdinalIgnoreCase)
+            ? CloudFolderTab.Shared
+            : CloudFolderTab.MyDrive;
+        if (ActiveTab == newTab && Breadcrumbs.Count <= 1) return;
+
+        ActiveTab = newTab;
+        OnPropertyChanged(nameof(IsMyDriveTab));
+        OnPropertyChanged(nameof(IsSharedTab));
+        OnPropertyChanged(nameof(EmptyMessage));
+
+        Breadcrumbs.Clear();
+        if (ActiveTab == CloudFolderTab.Shared)
+        {
+            Breadcrumbs.Add(new BreadcrumbItem("sharedWithMe", I18n.T("cloud_picker.shared_documents", "Спільні документи")));
+            await LoadFoldersInternalAsync("sharedWithMe");
+        }
+        else
+        {
+            Breadcrumbs.Add(new BreadcrumbItem("root", I18n.T("cloud_picker.my_drive", "Мій диск")));
+            await LoadFoldersInternalAsync("root");
+        }
     }
 
     [RelayCommand]
@@ -124,7 +173,7 @@ public sealed partial class CloudFolderPickerViewModel : ObservableObject
         {
             SetResultAndClose(SelectedFolder.Id, SelectedFolder.Name);
         }
-        else
+        else if (CanSelectCurrentFolder)
         {
             SetResultAndClose(CurrentFolderId, CurrentFolderName);
         }
@@ -133,7 +182,10 @@ public sealed partial class CloudFolderPickerViewModel : ObservableObject
     [RelayCommand]
     public void SelectCurrentFolder()
     {
-        SetResultAndClose(CurrentFolderId, CurrentFolderName);
+        if (CanSelectCurrentFolder)
+        {
+            SetResultAndClose(CurrentFolderId, CurrentFolderName);
+        }
     }
 
     [RelayCommand]
@@ -161,7 +213,10 @@ public sealed partial class CloudFolderPickerViewModel : ObservableObject
 
         try
         {
-            var items = await _oauthService.ListFoldersAsync(_account, folderId);
+            var items = folderId == "sharedWithMe"
+                ? await _oauthService.ListSharedWithMeFoldersAsync(_account)
+                : await _oauthService.ListFoldersAsync(_account, folderId);
+
             foreach (var item in items)
             {
                 Folders.Add(new CloudFolderItemViewModel(item));
@@ -179,7 +234,9 @@ public sealed partial class CloudFolderPickerViewModel : ObservableObject
             OnPropertyChanged(nameof(CurrentFolderName));
             OnPropertyChanged(nameof(CurrentFolderId));
             OnPropertyChanged(nameof(IsRootFolder));
+            OnPropertyChanged(nameof(CanSelectCurrentFolder));
             OnPropertyChanged(nameof(SelectCurrentButtonText));
+            OnPropertyChanged(nameof(EmptyMessage));
         }
     }
 }

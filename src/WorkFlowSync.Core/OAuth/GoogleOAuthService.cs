@@ -22,10 +22,26 @@ public sealed record GoogleUserInfo(
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("picture")] string? Picture);
 
+public sealed record CloudFolderShortcutDetails(
+    [property: JsonPropertyName("targetId")] string? TargetId,
+    [property: JsonPropertyName("targetMimeType")] string? TargetMimeType);
+
 public sealed record CloudFolderItem(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("modifiedTime")] DateTimeOffset? ModifiedTime);
+    [property: JsonPropertyName("modifiedTime")] DateTimeOffset? ModifiedTime,
+    [property: JsonPropertyName("mimeType")] string? MimeType = null,
+    [property: JsonPropertyName("shortcutDetails")] CloudFolderShortcutDetails? ShortcutDetails = null)
+{
+    public string EffectiveFolderId =>
+        ShortcutDetails is { TargetId: { Length: > 0 } targetId } &&
+        string.Equals(ShortcutDetails.TargetMimeType, "application/vnd.google-apps.folder", StringComparison.OrdinalIgnoreCase)
+            ? targetId
+            : Id;
+
+    public bool IsShortcut =>
+        ShortcutDetails is not null || string.Equals(MimeType, "application/vnd.google-apps.shortcut", StringComparison.OrdinalIgnoreCase);
+}
 
 internal sealed record DriveFileListResponse(
     [property: JsonPropertyName("files")] List<CloudFolderItem>? Files);
@@ -36,6 +52,7 @@ public interface IGoogleOAuthService
     Task<bool> RefreshTokenIfNeededAsync(CloudAccount account, CancellationToken ct = default);
     Task<bool> TestConnectionAsync(CloudAccount account, CancellationToken ct = default);
     Task<IReadOnlyList<CloudFolderItem>> ListFoldersAsync(CloudAccount account, string parentId = "root", CancellationToken ct = default);
+    Task<IReadOnlyList<CloudFolderItem>> ListSharedWithMeFoldersAsync(CloudAccount account, CancellationToken ct = default);
 }
 
 public sealed class GoogleOAuthService : IGoogleOAuthService
@@ -269,8 +286,8 @@ public sealed class GoogleOAuthService : IGoogleOAuthService
             throw new InvalidOperationException("Account is not authorized.");
 
         var pid = string.IsNullOrWhiteSpace(parentId) ? "root" : parentId;
-        var query = $"'{pid.Replace("'", "\\'")}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-        var url = $"https://www.googleapis.com/drive/v3/files?q={Uri.EscapeDataString(query)}&fields=files(id,name,modifiedTime)&orderBy=name&pageSize=100";
+        var query = $"'{pid.Replace("'", "\\'")}' in parents and (mimeType = 'application/vnd.google-apps.folder' or mimeType = 'application/vnd.google-apps.shortcut') and trashed = false";
+        var url = $"https://www.googleapis.com/drive/v3/files?q={Uri.EscapeDataString(query)}&fields=files(id,name,mimeType,modifiedTime,shortcutDetails)&orderBy=name&pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true";
 
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
@@ -283,7 +300,41 @@ public sealed class GoogleOAuthService : IGoogleOAuthService
 
         var json = await res.Content.ReadAsStringAsync(ct);
         var parsed = JsonSerializer.Deserialize<DriveFileListResponse>(json);
-        return parsed?.Files ?? (IReadOnlyList<CloudFolderItem>)Array.Empty<CloudFolderItem>();
+        var files = parsed?.Files ?? (IReadOnlyList<CloudFolderItem>)Array.Empty<CloudFolderItem>();
+        return files.Where(FilterFolderOrFolderShortcut).ToList();
+    }
+
+    public async Task<IReadOnlyList<CloudFolderItem>> ListSharedWithMeFoldersAsync(CloudAccount account, CancellationToken ct = default)
+    {
+        await RefreshTokenIfNeededAsync(account, ct);
+        if (string.IsNullOrWhiteSpace(account.AccessToken))
+            throw new InvalidOperationException("Account is not authorized.");
+
+        var query = "sharedWithMe = true and (mimeType = 'application/vnd.google-apps.folder' or mimeType = 'application/vnd.google-apps.shortcut') and trashed = false";
+        var url = $"https://www.googleapis.com/drive/v3/files?q={Uri.EscapeDataString(query)}&fields=files(id,name,mimeType,modifiedTime,shortcutDetails)&orderBy=name&pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true";
+
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.AccessToken);
+        using var res = await _httpClient.SendAsync(req, ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            var err = await res.Content.ReadAsStringAsync(ct);
+            throw new HttpRequestException($"Failed to list shared folders (HTTP {(int)res.StatusCode}): {err}");
+        }
+
+        var json = await res.Content.ReadAsStringAsync(ct);
+        var parsed = JsonSerializer.Deserialize<DriveFileListResponse>(json);
+        var files = parsed?.Files ?? (IReadOnlyList<CloudFolderItem>)Array.Empty<CloudFolderItem>();
+        return files.Where(FilterFolderOrFolderShortcut).ToList();
+    }
+
+    private static bool FilterFolderOrFolderShortcut(CloudFolderItem item)
+    {
+        if (string.Equals(item.MimeType, "application/vnd.google-apps.folder", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(item.MimeType, "application/vnd.google-apps.shortcut", StringComparison.OrdinalIgnoreCase))
+            return string.Equals(item.ShortcutDetails?.TargetMimeType, "application/vnd.google-apps.folder", StringComparison.OrdinalIgnoreCase);
+        return item.ShortcutDetails is null || string.Equals(item.ShortcutDetails?.TargetMimeType, "application/vnd.google-apps.folder", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void SendHtmlResponse(HttpListenerResponse response, bool success, string message)

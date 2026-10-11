@@ -90,7 +90,7 @@ WorkFlowSync тихо живе значком у системному треї W
 
 ## Швидкий старт
 
-1. **Завантажте** портативний архів [WorkFlowSync-0.3.0-win-x64.zip](https://github.com/teraxis/WorkFlowSync/releases) та розпакуйте в будь-яку теку на диску (наприклад, `D:\Tools\WorkFlowSync`).
+1. **Завантажте** портативний архів [WorkFlowSync-0.3.1-win-x64.zip](https://github.com/teraxis/WorkFlowSync/releases) та розпакуйте в будь-яку теку на диску (наприклад, `D:\Tools\WorkFlowSync`).
 2. **Запустіть** `WorkFlowSync.exe`.
 3. Натисніть **«+ Додати завдання»**, оберіть папки та налаштуйте розклад або увімкніть відстеження змін у реальному часі.
 

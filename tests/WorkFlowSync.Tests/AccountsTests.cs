@@ -434,6 +434,73 @@ public sealed class AccountsTests
     }
 
     [Fact]
+    public async Task CloudFolderPickerViewModel_SharedDocumentsTab_SwitchesAndNavigates()
+    {
+        var mockOauth = new MockOAuthService();
+        var account = new CloudAccount
+        {
+            Id = "acc999",
+            Email = "picker@test.com",
+            Name = "Picker User",
+            AccessToken = "valid_token"
+        };
+
+        var vm = new CloudFolderPickerViewModel(account, mockOauth);
+        await vm.InitializeAsync();
+
+        Assert.True(vm.IsMyDriveTab);
+        Assert.False(vm.IsSharedTab);
+
+        // Switch to "Спільні документи"
+        await vm.SwitchTabAsync("shared");
+        Assert.False(vm.IsMyDriveTab);
+        Assert.True(vm.IsSharedTab);
+        Assert.Equal("sharedWithMe", vm.CurrentFolderId);
+        Assert.False(vm.CanSelectCurrentFolder);
+        Assert.Single(vm.Breadcrumbs);
+        Assert.Equal(2, vm.Folders.Count);
+        Assert.Equal("Shared Project", vm.Folders[0].Name);
+        Assert.Equal("shared-folder-1", vm.Folders[0].Id);
+        Assert.False(vm.Folders[0].IsShortcut);
+
+        // Shortcut item in shared documents
+        var shortcutFolder = vm.Folders[1];
+        Assert.Equal("Shortcut to Shared Budget", shortcutFolder.Name);
+        Assert.Equal("target-budget-456", shortcutFolder.Id);
+        Assert.True(shortcutFolder.IsShortcut);
+
+        // Open shortcut folder -> navigates into target
+        await vm.OpenFolderAsync(shortcutFolder);
+        Assert.Equal("target-budget-456", vm.CurrentFolderId);
+        Assert.True(vm.CanSelectCurrentFolder);
+        Assert.Equal(2, vm.Breadcrumbs.Count);
+
+        // Select the opened shared folder
+        vm.SelectCurrentFolder();
+        Assert.NotNull(vm.Result);
+        Assert.Equal("target-budget-456", vm.Result.FolderId);
+        Assert.Equal("Shortcut to Shared Budget", vm.Result.FolderName);
+        Assert.StartsWith("gdrive://", vm.Result.CloudPath);
+    }
+
+    [Fact]
+    public void CloudFolderItem_EffectiveFolderId_HandlesShortcuts()
+    {
+        var normal = new CloudFolderItem("f1", "Folder 1", null, "application/vnd.google-apps.folder");
+        Assert.Equal("f1", normal.EffectiveFolderId);
+        Assert.False(normal.IsShortcut);
+
+        var shortcut = new CloudFolderItem("s1", "Shortcut 1", null, "application/vnd.google-apps.shortcut",
+            new CloudFolderShortcutDetails("target-99", "application/vnd.google-apps.folder"));
+        Assert.Equal("target-99", shortcut.EffectiveFolderId);
+        Assert.True(shortcut.IsShortcut);
+
+        var fileShortcut = new CloudFolderItem("s2", "File Shortcut", null, "application/vnd.google-apps.shortcut",
+            new CloudFolderShortcutDetails("target-doc", "application/vnd.google-apps.document"));
+        Assert.Equal("s2", fileShortcut.EffectiveFolderId);
+    }
+
+    [Fact]
     public void CloudAccountsSummary_And_GoToAccounts_WorkCorrectly()
     {
         var tempConfigPath = Path.Combine(Path.GetTempPath(), $"wfs_cloud_summary_{Guid.NewGuid():N}.json");
@@ -505,6 +572,18 @@ public sealed class AccountsTests
                 {
                     new("folder-nested", "Nested Child", DateTimeOffset.UtcNow)
                 };
+            return Task.FromResult(list);
+        }
+
+        public Task<IReadOnlyList<CloudFolderItem>> ListSharedWithMeFoldersAsync(CloudAccount account, CancellationToken ct = default)
+        {
+            IReadOnlyList<CloudFolderItem> list = new List<CloudFolderItem>
+            {
+                new("shared-folder-1", "Shared Project", DateTimeOffset.UtcNow, "application/vnd.google-apps.folder"),
+                new("shortcut-item", "Shortcut to Shared Budget", DateTimeOffset.UtcNow,
+                    "application/vnd.google-apps.shortcut",
+                    new CloudFolderShortcutDetails("target-budget-456", "application/vnd.google-apps.folder")),
+            };
             return Task.FromResult(list);
         }
     }

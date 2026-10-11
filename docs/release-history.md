@@ -4,6 +4,17 @@ This is the immutable archive of published user-facing changes. During a release
 entries from `docs/pending-release-notes.md` under a new `vX.Y.Z (YYYY-MM-DD)` heading, omit empty
 sections, and reset the pending file for the next cycle.
 
+## v0.3.1 (2026-10-11)
+
+### Added
+
+- Вкладка «Спільні документи» у вікні огляду Google Drive: перегляд і вибір папок, якими поділилися інші користувачі (`sharedWithMe`), підтримка переходів за ярликами на спільні папки та відображення позначок ярликів.
+- Автоматичне розгортання цільового ID для ярликів Google Drive (`shortcutDetails.targetId`) із глибокою навігацією по структурі вкладених папок.
+
+### Fixed
+
+- Безпечна обробка статусів Windows Cloud Filter у середовищах, де файлова система повертає відсутність підтримки хмарних фільтрів.
+
 ## v0.3.0 (2026-10-11)
 
 ### Added
