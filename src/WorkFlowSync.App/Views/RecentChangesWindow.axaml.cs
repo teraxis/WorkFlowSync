@@ -25,6 +25,32 @@ public partial class RecentChangesWindow : Window
     {
         InitializeComponent();
         Deactivated += (_, _) => Hide();
+        AddHandler(ScrollViewer.ScrollChangedEvent, OnScrollChanged);
+        AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheelChanged, RoutingStrategies.Tunnel);
+    }
+
+    private void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        if (e.Source is ScrollViewer sv && DataContext is RecentChangesViewModel vm)
+        {
+            if (sv.Extent.Height > sv.Viewport.Height &&
+                sv.Offset.Y + sv.Viewport.Height >= sv.Extent.Height - 60)
+            {
+                vm.LoadMore();
+            }
+        }
+    }
+
+    private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (DataContext is RecentChangesViewModel vm && vm.HasMore && !vm.IsLoadingMore && e.Delta.Y < 0)
+        {
+            var sv = this.FindDescendantOfType<ScrollViewer>();
+            if (sv is not null && sv.Extent.Height <= sv.Viewport.Height)
+            {
+                vm.LoadMore();
+            }
+        }
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

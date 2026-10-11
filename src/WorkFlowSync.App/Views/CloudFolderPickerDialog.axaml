@@ -47,7 +47,7 @@
 
     <DockPanel>
         <!-- Header -->
-        <Border DockPanel.Dock="Top" Padding="20,16" Background="{DynamicResource SurfaceRail}"
+        <Border DockPanel.Dock="Top" Padding="14,16" Background="{DynamicResource SurfaceRail}"
                 BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8"
@@ -63,7 +63,7 @@
         </Border>
 
         <!-- Tabs Bar -->
-        <Border DockPanel.Dock="Top" Padding="16,4,16,0" Background="{DynamicResource SurfaceRail}"
+        <Border DockPanel.Dock="Top" Padding="12,4,12,0" Background="{DynamicResource SurfaceRail}"
                 BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1">
             <StackPanel Orientation="Horizontal" Spacing="4">
                 <!-- Tab: My Drive -->
@@ -87,7 +87,7 @@
         </Border>
 
         <!-- Bottom Action Bar -->
-        <Border DockPanel.Dock="Bottom" Padding="20,14" Background="{DynamicResource SurfaceRail}"
+        <Border DockPanel.Dock="Bottom" Padding="14,14" Background="{DynamicResource SurfaceRail}"
                 BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                 <Button Grid.Column="0" Command="{Binding SelectCurrentFolderCommand}"
@@ -103,7 +103,7 @@
         </Border>
 
         <!-- Navigation Toolbar & Breadcrumbs -->
-        <Border DockPanel.Dock="Top" Padding="16,10" Background="{DynamicResource SurfaceSubtle}"
+        <Border DockPanel.Dock="Top" Padding="12,10" Background="{DynamicResource SurfaceSubtle}"
                 BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="Auto,Auto,*">
                 <Button Grid.Column="0" Command="{Binding GoUpCommand}" IsEnabled="{Binding CanGoUp}"
@@ -159,7 +159,7 @@
             <!-- Folders List -->
             <ListBox ItemsSource="{Binding Folders}" SelectedItem="{Binding SelectedFolder}"
                      DoubleTapped="OnFolderDoubleTapped"
-                     Background="Transparent" BorderThickness="0" Padding="8">
+                     Background="Transparent" BorderThickness="0" Padding="4">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:CloudFolderItemViewModel">
                         <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,6">

@@ -40,21 +40,47 @@ public sealed partial class MainViewModel : ObservableObject
         SelectedPage = 2;
     }
 
-    /// <summary>Which page the navigation rail shows: 0 folders, 1 activity, 2 accounts, 3 settings.</summary>
+    /// <summary>Which page the navigation rail shows: 0 folders, 1 activity, 2 accounts, 3 settings, 4 about.</summary>
     [ObservableProperty] private int _selectedPage;
 
     public bool IsFoldersPage => SelectedPage == 0;
     public bool IsActivityPage => SelectedPage == 1;
     public bool IsAccountsPage => SelectedPage == 2;
     public bool IsSettingsPage => SelectedPage == 3;
+    public bool IsAboutPage => SelectedPage == 4;
 
     public string PageTitle => SelectedPage switch
     {
         0 => I18n.T("nav.tasks"),
         1 => I18n.T("nav.events"),
         2 => I18n.T("nav.accounts"),
-        _ => I18n.T("nav.settings"),
+        3 => I18n.T("nav.settings"),
+        _ => I18n.T("nav.about"),
     };
+
+    [RelayCommand]
+    private void OpenGitHub() => OpenBrowser(WorkFlowSyncInfo.GitHubRepo);
+
+    [RelayCommand]
+    private void OpenAuthorProfile() => OpenBrowser(WorkFlowSyncInfo.GitHubAuthor);
+
+    [RelayCommand]
+    private void OpenReleases() => OpenBrowser($"{WorkFlowSyncInfo.GitHubRepo}/releases");
+
+    [RelayCommand]
+    private void ContactAuthor() => OpenBrowser($"mailto:{WorkFlowSyncInfo.AuthorEmail}");
+
+    public static void OpenBrowser(string url)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch
+        {
+            // Ignored if default browser cannot launch
+        }
+    }
 
     public IReadOnlyList<CpuLoad> CpuLoads { get; } = new[] { CpuLoad.Balanced, CpuLoad.Full, CpuLoad.Low };
 
@@ -86,6 +112,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Whether to check GitHub for newer versions on startup.</summary>
     [ObservableProperty] private bool _autoUpdate = true;
+
+    /// <summary>True while an explicit manual update check is in progress.</summary>
+    [ObservableProperty] private bool _isCheckingUpdate;
 
     /// <summary>Release version the user chose to skip (written to config, read by the checker).</summary>
     public string? SkippedVersion { get; set; }
@@ -515,7 +544,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Any edited setting lands in config.json immediately.</summary>
     private void MarkDirty() => SaveNow();
 
-    private void SetStatus(string text, bool error)
+    public void SetStatus(string text, bool error)
     {
         StatusText = text;
         StatusIsError = error;
@@ -527,6 +556,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsActivityPage));
         OnPropertyChanged(nameof(IsAccountsPage));
         OnPropertyChanged(nameof(IsSettingsPage));
+        OnPropertyChanged(nameof(IsAboutPage));
         OnPropertyChanged(nameof(PageTitle));
         if (IsActivityPage) Run.RefreshSummary();
     }

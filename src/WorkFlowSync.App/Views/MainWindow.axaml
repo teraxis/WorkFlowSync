@@ -87,6 +87,12 @@
                             <TextBlock Grid.Column="1" Text="{loc:Loc nav.settings}" VerticalAlignment="Center" />
                         </Grid>
                     </ListBoxItem>
+                    <ListBoxItem>
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Path Grid.Column="0" Classes="ico" Data="{StaticResource IconInfo}" Width="18" Height="18" Margin="0,0,12,0" />
+                            <TextBlock Grid.Column="1" Text="{loc:Loc nav.about}" VerticalAlignment="Center" />
+                        </Grid>
+                    </ListBoxItem>
                 </ListBox>
             </DockPanel>
         </Border>
@@ -95,7 +101,7 @@
         <DockPanel Grid.Column="1">
 
             <!-- page header -->
-            <Border DockPanel.Dock="Top" Padding="24,20,24,14">
+            <Border DockPanel.Dock="Top" Padding="16,20,16,14">
                 <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock Classes="display" Text="{Binding PageTitle}" FontSize="26" FontWeight="Bold" />
@@ -120,6 +126,16 @@
                             </StackPanel>
                         </Button>
                     </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                                IsVisible="{Binding IsAboutPage}">
+                        <Button Classes="secondary" Click="OnCheckForUpdates" IsEnabled="{Binding !IsCheckingUpdate}" CornerRadius="10" Padding="14,10">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="14" Height="14"
+                                      Stroke="{DynamicResource TextPrimary}" StrokeThickness="2" />
+                                <TextBlock Text="{loc:Loc about.check_updates}" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -132,7 +148,7 @@
                            Foreground="{Binding StatusIsError, Converter={x:Static app:Converters.StatusText}}" />
             </Border>
 
-            <Panel Margin="24,0,24,16">
+            <Panel Margin="16,0,16,16">
 
                 <!-- ────────────────────────── page: folders ────────────────────────── -->
                 <Panel IsVisible="{Binding IsFoldersPage}">
@@ -549,12 +565,28 @@
                                                        Foreground="{Binding StatusIsError, Converter={x:Static app:Converters.StatusText}}" />
                                         </StackPanel>
 
-                                        <!-- Actions -->
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                            <Button Content="{loc:Loc accounts.btn_test}" Command="{Binding TestConnectionCommand}"
-                                                    IsEnabled="{Binding !IsBusy}" Padding="14,7" />
-                                            <Button Classes="danger" Content="{loc:Loc accounts.btn_delete}" Command="{Binding RemoveCommand}"
-                                                    Padding="14,7" />
+                                        <!-- Actions button (same style as Tasks block) -->
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <Button Classes="icon" ToolTip.Tip="{loc:Loc accounts.menu_tooltip}"
+                                                    Width="36" Height="24" CornerRadius="6" Padding="0"
+                                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Background="{DynamicResource AccentSoft}" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1">
+                                                <Path Classes="icof" Data="{StaticResource IconMoreVertical}" Width="13" Height="13"
+                                                      Fill="{DynamicResource Accent}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                <Button.Flyout>
+                                                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                                        <MenuItem Header="{loc:Loc accounts.btn_test}" Click="OnTestAccount" IsEnabled="{Binding !IsBusy}">
+                                                            <MenuItem.Icon><Path Classes="ico" Data="{StaticResource IconRefresh}" /></MenuItem.Icon>
+                                                        </MenuItem>
+                                                        <Separator />
+                                                        <MenuItem Header="{loc:Loc accounts.btn_delete}" Click="OnDeleteAccount" Classes="danger">
+                                                            <MenuItem.Icon><Path Classes="ico" Data="{StaticResource IconTrash}" /></MenuItem.Icon>
+                                                        </MenuItem>
+                                                    </MenuFlyout>
+                                                </Button.Flyout>
+                                            </Button>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -595,7 +627,7 @@
                               HorizontalScrollBarVisibility="Disabled">
                     <!-- pinned to the viewport: a wrapped line that ends exactly at the edge otherwise
                          reports a few extra pixels and its card grows wider than the others -->
-                    <Border Padding="0,0,12,0" Width="{Binding $parent[ScrollViewer].Viewport.Width}">
+                    <Border Padding="0,0,6,0" Width="{Binding $parent[ScrollViewer].Viewport.Width}">
                     <StackPanel Spacing="12" Margin="0,0,0,4">
 
                         <!-- The schedule lives on each pair now (docs F7): one number never fitted both a
@@ -620,19 +652,6 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Classes="card">
-                            <StackPanel Spacing="12">
-                                <TextBlock Classes="section" Text="{loc:Loc settings.cloud_section}" />
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                        <TextBlock Text="{loc:Loc settings.cloud_accounts_title}" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding CloudAccountsSummary}" Classes="secondary" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                    <Button Grid.Column="1" Content="{loc:Loc settings.cloud_manage_accounts}"
-                                            Command="{Binding GoToAccountsCommand}" Margin="12,0,0,0" VerticalAlignment="Center" />
-                                </Grid>
-                            </StackPanel>
-                        </Border>
 
                         <Border Classes="card">
                             <StackPanel Spacing="12">
@@ -741,6 +760,125 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
+                    </Border>
+                </ScrollViewer>
+
+                <!-- ────────────────────────── page: about ────────────────────────── -->
+                <ScrollViewer IsVisible="{Binding IsAboutPage}" AllowAutoHide="False"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <Border Padding="0,0,6,0" Width="{Binding $parent[ScrollViewer].Viewport.Width}">
+                        <StackPanel Spacing="12" Margin="0,0,0,4">
+
+                            <!-- Hero Identity Banner -->
+                            <Border Classes="card" Padding="20">
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                                    <Border Grid.Row="0" Grid.Column="0" Width="56" Height="56" CornerRadius="14"
+                                            Background="{DynamicResource Accent}" Margin="0,0,16,0"
+                                            VerticalAlignment="Center">
+                                        <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="28" Height="28"
+                                              Stroke="{DynamicResource TextOnAccent}" StrokeThickness="2.5"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+
+                                    <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                            <TextBlock Text="WorkFlowSync" FontSize="22" FontWeight="Bold" />
+                                            <Border Background="{DynamicResource AccentSoft}" CornerRadius="6" Padding="8,2" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Version}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" />
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,14,0,0"
+                                               Text="{loc:Loc about.description}" Classes="secondary" />
+                                </Grid>
+                            </Border>
+
+                            <!-- Author & Team Card -->
+                            <Border Classes="card">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Classes="section" Text="{loc:Loc about.author_section}" />
+
+                                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                        <Border Grid.Column="0" Width="42" Height="42" CornerRadius="21"
+                                                Background="{DynamicResource AccentSoft}" Margin="0,0,14,0">
+                                            <Path Classes="ico" Data="{StaticResource IconUsers}" Width="20" Height="20"
+                                                  Stroke="{DynamicResource Accent}" StrokeThickness="2"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="{loc:Loc about.author_name}" FontWeight="Bold" FontSize="15" />
+                                            <TextBlock Text="{loc:Loc about.author_role}" Classes="secondary" FontSize="12" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <Button Classes="secondary small" Command="{Binding ContactAuthorCommand}"
+                                                    ToolTip.Tip="teraxis@gmail.com">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <Path Classes="ico" Data="{StaticResource IconMail}" Width="13" Height="13"
+                                                          Stroke="{DynamicResource TextPrimary}" StrokeThickness="1.8" />
+                                                    <TextBlock Text="{loc:Loc about.contact_author}" FontSize="12" />
+                                                </StackPanel>
+                                            </Button>
+
+                                            <Button Classes="secondary small" Command="{Binding OpenAuthorProfileCommand}"
+                                                    ToolTip.Tip="https://github.com/teraxis">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <Path Classes="ico" Data="{StaticResource IconGithub}" Width="13" Height="13"
+                                                          Stroke="{DynamicResource TextPrimary}" StrokeThickness="1.8" />
+                                                    <TextBlock Text="GitHub" FontSize="12" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Border Classes="divider" />
+
+                                    <!-- Project repository line -->
+                                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <Path Classes="ico" Data="{StaticResource IconGithub}" Width="16" Height="16"
+                                                  Stroke="{DynamicResource TextSecondary}" StrokeThickness="1.8" Margin="0,0,4,0" />
+                                            <TextBlock Text="{loc:Loc about.github_repo}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="1" Text="https://github.com/teraxis/WorkFlowSync"
+                                                   Classes="secondary mono" FontSize="12" Margin="14,0" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" />
+
+                                        <Button Grid.Column="2" Classes="ghost small" Command="{Binding OpenGitHubCommand}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Path Classes="ico" Data="{StaticResource IconExternalLink}" Width="12" Height="12"
+                                                      Stroke="{DynamicResource TextPrimary}" StrokeThickness="1.8" />
+                                                <TextBlock Text="{loc:Loc about.open_github}" FontSize="12" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+
+                            <!-- License & Copyright Card -->
+                            <Border Classes="card">
+                                <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <TextBlock Classes="section" Text="{loc:Loc about.license_section}" />
+                                        <TextBlock Text="{loc:Loc about.license_name}" FontWeight="SemiBold" FontSize="13" />
+                                        <TextBlock Text="{loc:Loc about.copyright}" Classes="secondary" FontSize="12" />
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1" Classes="ghost small" Command="{Binding OpenReleasesCommand}" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Path Classes="ico" Data="{StaticResource IconExternalLink}" Width="12" Height="12"
+                                                  Stroke="{DynamicResource TextPrimary}" StrokeThickness="1.8" />
+                                            <TextBlock Text="{loc:Loc about.releases}" FontSize="12" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                            </Border>
+
+                        </StackPanel>
                     </Border>
                 </ScrollViewer>
             </Panel>

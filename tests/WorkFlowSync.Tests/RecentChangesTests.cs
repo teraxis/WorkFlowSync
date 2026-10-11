@@ -100,6 +100,24 @@ public class RecentChangesTests : IDisposable
     }
 
     [Fact]
+    public void Offset_allows_reading_older_items_page_by_page()
+    {
+        _store.Upsert(Enumerable.Range(0, 50).Select(i => Row("vrp", $"файл{i:D2}.docx", _now.AddMinutes(-i))));
+
+        var page1 = _store.RecentlyAdded(limit: 20, offset: 0);
+        var page2 = _store.RecentlyAdded(limit: 20, offset: 20);
+        var page3 = _store.RecentlyAdded(limit: 20, offset: 40);
+
+        Assert.Equal(20, page1.Count);
+        Assert.Equal(20, page2.Count);
+        Assert.Equal(10, page3.Count);
+
+        Assert.Equal("файл00.docx", page1[0].RelativePath);
+        Assert.Equal("файл20.docx", page2[0].RelativePath);
+        Assert.Equal("файл40.docx", page3[0].RelativePath);
+    }
+
+    [Fact]
     public void Only_what_appeared_after_a_given_moment_is_counted()
     {
         _store.Upsert(new[]

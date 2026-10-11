@@ -5,7 +5,7 @@
         Background="{DynamicResource SurfaceCanvas}"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
-    <StackPanel Margin="24" Spacing="10">
+    <StackPanel Margin="16,24" Spacing="10">
         <TextBlock x:Name="TitleText" Classes="title" />
         <TextBlock x:Name="BodyText" Classes="secondary" />
         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">

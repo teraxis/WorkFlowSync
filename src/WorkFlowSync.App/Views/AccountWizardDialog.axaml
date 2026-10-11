@@ -48,7 +48,7 @@
         </Style>
     </Window.Styles>
 
-    <Border Padding="28,24">
+    <Border Padding="18,24">
         <StackPanel Spacing="18">
 
             <!-- ═════════════════════ Step 0: Select Provider ═════════════════════ -->

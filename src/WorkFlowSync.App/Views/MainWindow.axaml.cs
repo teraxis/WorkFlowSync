@@ -131,4 +131,32 @@ public partial class MainWindow : Window
         }
     }
 
+    private static AccountItemViewModel? AccountOf(object? sender) => (sender as Control)?.DataContext as AccountItemViewModel;
+
+    private async void OnTestAccount(object? sender, RoutedEventArgs e)
+    {
+        if (AccountOf(sender) is not { } account) return;
+        if (account.TestConnectionCommand.CanExecute(null))
+        {
+            await account.TestConnectionCommand.ExecuteAsync(null);
+        }
+    }
+
+    private async void OnDeleteAccount(object? sender, RoutedEventArgs e)
+    {
+        if (AccountOf(sender) is not { } account) return;
+        var ok = await ConfirmDialog.ShowAsync(this,
+            "Видалити обліковий запис?",
+            $"Обліковий запис «{account.Name}» ({account.Email}) буде відключено від програми.",
+            "Видалити");
+        if (ok) account.RemoveCommand.Execute(null);
+    }
+
+    private async void OnCheckForUpdates(object? sender, RoutedEventArgs e)
+    {
+        if (Application.Current is App app)
+        {
+            await app.CheckForUpdatesManualAsync();
+        }
+    }
 }

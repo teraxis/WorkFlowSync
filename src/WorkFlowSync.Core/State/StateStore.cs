@@ -327,17 +327,18 @@ public sealed class StateStore : IDisposable
     /// is exact and no second copy of the truth has to be kept in step. Directories are left out — nobody
     /// wants "a folder appeared" in a list of new documents.
     /// </summary>
-    public IReadOnlyList<RecentItem> RecentlyAdded(int limit = 50, DateTimeOffset? since = null)
+    public IReadOnlyList<RecentItem> RecentlyAdded(int limit = 50, DateTimeOffset? since = null, int offset = 0)
     {
         var items = new List<RecentItem>();
         using var cmd = _conn.CreateCommand();
         cmd.CommandText =
             "SELECT pair, path, first_seen, src_size FROM entries " +
             "WHERE kind = $file AND status = $active" + (since is null ? "" : " AND first_seen >= $since") +
-            " ORDER BY first_seen DESC, path LIMIT $limit";
+            " ORDER BY first_seen DESC, path LIMIT $limit OFFSET $offset";
         cmd.Parameters.AddWithValue("$file", (int)EntryKind.File);
         cmd.Parameters.AddWithValue("$active", (int)EntryStatus.Active);
         cmd.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 1000));
+        cmd.Parameters.AddWithValue("$offset", Math.Max(0, offset));
         if (since is { } s) cmd.Parameters.AddWithValue("$since", ToUnixMs(s));
 
         using var r = cmd.ExecuteReader();

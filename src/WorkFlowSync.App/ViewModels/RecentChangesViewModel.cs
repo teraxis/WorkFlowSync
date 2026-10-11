@@ -74,6 +74,9 @@ public sealed partial class RecentChangesViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(PendingBannerText))]
     private int _pendingCount;
 
+    [ObservableProperty] private bool _hasMore = true;
+    [ObservableProperty] private bool _isLoadingMore;
+
     public bool HasPending => PendingCount > 0;
     public string PendingBannerText => I18n.T("recent.banner_pending");
     public Action? OpenApprovalAction { get; set; }
@@ -84,13 +87,17 @@ public sealed partial class RecentChangesViewModel : ObservableObject
     public void Load()
     {
         Items.Clear();
+        HasMore = true;
+        IsLoadingMore = false;
         try
         {
             var targets = _pairTargets();
             using var store = new StateStore(_statePath());
             PendingCount = store.Pending.CountOpen();
             var limit = Math.Clamp(_limit(), 5, 500);
-            foreach (var item in store.RecentlyAdded(limit))
+            var batch = store.RecentlyAdded(limit + 1, offset: 0);
+            var toAdd = batch.Take(limit).ToList();
+            foreach (var item in toAdd)
             {
                 var folder = Path.GetDirectoryName(item.RelativePath);
                 var name = Path.GetFileName(item.RelativePath);
@@ -106,9 +113,10 @@ public sealed partial class RecentChangesViewModel : ObservableObject
                     FullPath = targets.TryGetValue(item.Pair, out var root) ? Path.Combine(root, item.RelativePath) : null,
                 });
             }
+            HasMore = batch.Count > limit;
             Summary = Items.Count == 0
                 ? I18n.T("recent.summary_empty")
-                : (Items.Count == limit
+                : (HasMore
                     ? I18n.T("recent.summary_count_more", Items.Count)
                     : I18n.T("recent.summary_count", Items.Count));
         }
@@ -118,6 +126,51 @@ public sealed partial class RecentChangesViewModel : ObservableObject
             Summary = I18n.T("recent.read_error", ex.Message);
         }
         OnPropertyChanged(nameof(IsEmpty));
+    }
+
+    /// <summary>Loads the next batch of older items when the user scrolls near the bottom.</summary>
+    public bool LoadMore()
+    {
+        if (IsLoadingMore || !HasMore) return false;
+        IsLoadingMore = true;
+        try
+        {
+            var targets = _pairTargets();
+            using var store = new StateStore(_statePath());
+            var limit = Math.Clamp(_limit(), 5, 500);
+            var batch = store.RecentlyAdded(limit + 1, offset: Items.Count);
+            var toAdd = batch.Take(limit).ToList();
+            foreach (var item in toAdd)
+            {
+                var folder = Path.GetDirectoryName(item.RelativePath);
+                var name = Path.GetFileName(item.RelativePath);
+                Items.Add(new RecentItemViewModel
+                {
+                    Name = name,
+                    Kind = FileKinds.Of(name),
+                    Badge = FileKinds.Badge(name),
+                    Icon = Views.SystemFileIcons.For(name),
+                    Where = string.IsNullOrEmpty(folder) ? item.Pair : $"{item.Pair} · {folder}",
+                    When = Humanise(item.FirstSeenUtc),
+                    SizeText = item.Size is { } size ? SyncExecutor.FormatSize(size) : "",
+                    FullPath = targets.TryGetValue(item.Pair, out var root) ? Path.Combine(root, item.RelativePath) : null,
+                });
+            }
+            HasMore = batch.Count > limit;
+            Summary = HasMore
+                ? I18n.T("recent.summary_count_more", Items.Count)
+                : I18n.T("recent.summary_count", Items.Count);
+            return toAdd.Count > 0;
+        }
+        catch (Exception ex)
+        {
+            Summary = I18n.T("recent.read_error", ex.Message);
+            return false;
+        }
+        finally
+        {
+            IsLoadingMore = false;
+        }
     }
 
     /// <summary>«щойно» / «14 хв тому» / «вчора, 09:12» — a time a person reads without doing arithmetic.</summary>

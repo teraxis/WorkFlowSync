@@ -121,6 +121,39 @@ public class RecentChangesViewModelTests : IDisposable
         Assert.Contains("і більше", vm.Summary, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void LoadMore_fetches_older_files_incrementally_and_stops_when_exhausted()
+    {
+        Given(Enumerable.Range(0, 50)
+            .Select(i => ("vrp", $"файл{i:D3}.docx", _now.AddMinutes(-i))).ToArray());
+
+        var vm = new RecentChangesViewModel(
+            () => Path.Combine(_dir, "state.db"),
+            () => new Dictionary<string, string> { ["vrp"] = @"D:\Дзеркало" },
+            () => 20);
+
+        vm.Load();
+
+        Assert.Equal(20, vm.Items.Count);
+        Assert.True(vm.HasMore);
+        Assert.Contains("і більше", vm.Summary, StringComparison.Ordinal);
+
+        var loadedMore = vm.LoadMore();
+        Assert.True(loadedMore);
+        Assert.Equal(40, vm.Items.Count);
+        Assert.True(vm.HasMore);
+
+        loadedMore = vm.LoadMore();
+        Assert.True(loadedMore);
+        Assert.Equal(50, vm.Items.Count);
+        Assert.False(vm.HasMore);
+        Assert.DoesNotContain("і більше", vm.Summary, StringComparison.Ordinal);
+
+        loadedMore = vm.LoadMore();
+        Assert.False(loadedMore);
+        Assert.Equal(50, vm.Items.Count);
+    }
+
     [Theory]
     [InlineData(0, "щойно")]
     [InlineData(30, "щойно")]

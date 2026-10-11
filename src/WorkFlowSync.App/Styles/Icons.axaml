@@ -64,6 +64,10 @@
     <StreamGeometry x:Key="IconNextcloud">M12 2a4 4 0 0 0-4 4 4 4 0 0 0 1 2.6A6 6 0 0 0 5 14a6 6 0 0 0 6 6 6 6 0 0 0 5.6-3.9A4 4 0 0 0 20 14a4 4 0 0 0-4-4 4 4 0 0 0-1-2.6A4 4 0 0 0 12 2z</StreamGeometry>
     <StreamGeometry x:Key="IconAmazonS3">M4 4h16l-2 15a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L4 4zm4 0V2h8v2</StreamGeometry>
     <StreamGeometry x:Key="IconSftp">M4 4h16v12H4z M2 20h20 M8 8l3 3-3 3 M13 14h3</StreamGeometry>
+    <StreamGeometry x:Key="IconInfo">M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 16v-4 M12 8h.01</StreamGeometry>
+    <StreamGeometry x:Key="IconExternalLink">M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6 M15 3h6v6 M10 14L21 3</StreamGeometry>
+    <StreamGeometry x:Key="IconMail">M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6</StreamGeometry>
+    <StreamGeometry x:Key="IconGithub">M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22</StreamGeometry>
 
     <!-- ── solid ── -->
     <StreamGeometry x:Key="IconMoreVertical">M0 0 M24 24 M12 3.5a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6z M12 10.2a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6z M12 16.9a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6z</StreamGeometry>

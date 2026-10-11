@@ -95,4 +95,9 @@
     <x:Double x:Key="FontBody">13.5</x:Double>
     <x:Double x:Key="FontCaption">12</x:Double>
     <x:Double x:Key="FontMono">12.5</x:Double>
+
+    <!-- Unified slim scrollbar dimensions -->
+    <x:Double x:Key="ScrollBarSize">5</x:Double>
+    <x:Double x:Key="ScrollBarThumbThickness">5</x:Double>
+    <x:Double x:Key="ScrollBarTrackThickness">5</x:Double>
 </ResourceDictionary>

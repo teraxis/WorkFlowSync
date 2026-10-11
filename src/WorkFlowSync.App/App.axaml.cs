@@ -328,16 +328,76 @@ public partial class App : Application
     {
         _updateWindow ??= new UpdateNotificationWindow();
 
+        _updateWindow.UpdateRequested -= OnUpdateRequested;
         _updateWindow.UpdateRequested += OnUpdateRequested;
-        _updateWindow.LaterRequested += () => { /* window hides itself; next launch will check again */ };
-        _updateWindow.SkipRequested += version =>
-        {
-            if (_vm is null) return;
-            _vm.SkippedVersion = version;
-            _vm.SaveNow();
-        };
+        _updateWindow.LaterRequested -= OnUpdateLater;
+        _updateWindow.LaterRequested += OnUpdateLater;
+        _updateWindow.SkipRequested -= OnUpdateSkip;
+        _updateWindow.SkipRequested += OnUpdateSkip;
 
         _updateWindow.ShowUpdate(info);
+    }
+
+    private void OnUpdateLater()
+    {
+        // Window hides itself; next launch will check again
+    }
+
+    private void OnUpdateSkip(string version)
+    {
+        if (_vm is null) return;
+        _vm.SkippedVersion = version;
+        _vm.SaveNow();
+    }
+
+    /// <summary>
+    /// Explicit update check triggered by the user (e.g. from the About page button).
+    /// Ignores skipped version and autoUpdate setting, updates the status message,
+    /// and shows the exact same notification window near the tray if an update is found.
+    /// </summary>
+    public async Task CheckForUpdatesManualAsync()
+    {
+        if (_vm is null || _vm.IsCheckingUpdate) return;
+
+        _vm.IsCheckingUpdate = true;
+        _vm.SetStatus(I18n.T("update.checking"), error: false);
+
+        try
+        {
+            var info = await UpdateChecker.CheckAsync(
+                WorkFlowSyncInfo.Version,
+                skippedVersion: null).ConfigureAwait(false);
+
+            if (info is not null)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _vm.SetStatus(string.Format(I18n.T("update.available_body"), info.Version), error: false);
+                    ShowUpdateNotification(info);
+                });
+            }
+            else
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _vm.SetStatus(string.Format(I18n.T("update.up_to_date"), WorkFlowSyncInfo.Version), error: false);
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                _vm.SetStatus(string.Format(I18n.T("update.failed"), ex.Message), error: true);
+            });
+        }
+        finally
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                _vm.IsCheckingUpdate = false;
+            });
+        }
     }
 
     private void OnUpdateRequested(UpdateInfo info)

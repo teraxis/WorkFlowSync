@@ -341,14 +341,41 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceSelected}" />
     </Style>
 
-    <!-- scrollbars: a slim rail in its own lane, no arrow buttons, thumb from the palette -->
+    <!-- scrollbars: a slim rail in its own lane, uniform size across all windows, no arrow buttons -->
+    <Style Selector="ScrollViewer">
+        <Setter Property="AllowAutoHide" Value="False" />
+    </Style>
     <Style Selector="ScrollBar:vertical">
-        <Setter Property="Width" Value="10" />
+        <Setter Property="Width" Value="5" />
+        <Setter Property="MinWidth" Value="5" />
+        <Setter Property="MaxWidth" Value="5" />
         <Setter Property="Background" Value="Transparent" />
     </Style>
+    <Style Selector="ScrollBar:vertical:pointerover">
+        <Setter Property="Width" Value="5" />
+        <Setter Property="MinWidth" Value="5" />
+        <Setter Property="MaxWidth" Value="5" />
+    </Style>
+    <Style Selector="ScrollBar:vertical:expanded">
+        <Setter Property="Width" Value="5" />
+        <Setter Property="MinWidth" Value="5" />
+        <Setter Property="MaxWidth" Value="5" />
+    </Style>
     <Style Selector="ScrollBar:horizontal">
-        <Setter Property="Height" Value="10" />
+        <Setter Property="Height" Value="5" />
+        <Setter Property="MinHeight" Value="5" />
+        <Setter Property="MaxHeight" Value="5" />
         <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal:pointerover">
+        <Setter Property="Height" Value="5" />
+        <Setter Property="MinHeight" Value="5" />
+        <Setter Property="MaxHeight" Value="5" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal:expanded">
+        <Setter Property="Height" Value="5" />
+        <Setter Property="MinHeight" Value="5" />
+        <Setter Property="MaxHeight" Value="5" />
     </Style>
     <Style Selector="ScrollBar /template/ RepeatButton">
         <Setter Property="IsVisible" Value="False" />
@@ -357,17 +384,20 @@
         <Setter Property="IsVisible" Value="False" />
     </Style>
     <Style Selector="ScrollBar Thumb">
-        <Setter Property="Background" Value="{DynamicResource BorderStrong}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
-        <Setter Property="MinWidth" Value="6" />
-        <Setter Property="MinHeight" Value="6" />
+        <Setter Property="Background" Value="{DynamicResource TextMuted}" />
+        <Setter Property="CornerRadius" Value="2.5" />
+        <Setter Property="Opacity" Value="0.45" />
+        <Setter Property="MinWidth" Value="5" />
+        <Setter Property="MinHeight" Value="20" />
     </Style>
     <Style Selector="ScrollBar Thumb /template/ Border">
-        <Setter Property="Background" Value="{DynamicResource BorderStrong}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}" />
+        <Setter Property="Background" Value="{DynamicResource TextMuted}" />
+        <Setter Property="CornerRadius" Value="2.5" />
+        <Setter Property="Opacity" Value="0.45" />
     </Style>
     <Style Selector="ScrollBar Thumb:pointerover /template/ Border">
-        <Setter Property="Background" Value="{DynamicResource Neutral}" />
+        <Setter Property="Background" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="Opacity" Value="0.85" />
     </Style>
 
     <!-- read-only single-line box (paths) -->
@@ -597,41 +627,6 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
     </Style>
 
-    <!-- ============================================================ badges -->
-
-    <!-- scrollbars: a slim rail in its own lane, no arrow buttons, thumb from the palette -->
-    <Style Selector="ScrollBar:vertical">
-        <Setter Property="Width" Value="6" />
-        <Setter Property="Margin" Value="2,0,0,0" />
-        <Setter Property="Background" Value="Transparent" />
-    </Style>
-    <Style Selector="ScrollBar:horizontal">
-        <Setter Property="Height" Value="6" />
-        <Setter Property="Margin" Value="0,2,0,0" />
-        <Setter Property="Background" Value="Transparent" />
-    </Style>
-    <Style Selector="ScrollBar /template/ RepeatButton">
-        <Setter Property="IsVisible" Value="False" />
-    </Style>
-    <Style Selector="ScrollBar /template/ Border#TrackRect, ScrollBar /template/ Rectangle#TrackRect">
-        <Setter Property="IsVisible" Value="False" />
-    </Style>
-    <Style Selector="ScrollBar Thumb">
-        <Setter Property="Background" Value="{DynamicResource TextMuted}" />
-        <Setter Property="CornerRadius" Value="3" />
-        <Setter Property="Opacity" Value="0.4" />
-        <Setter Property="MinWidth" Value="4" />
-        <Setter Property="MinHeight" Value="20" />
-    </Style>
-    <Style Selector="ScrollBar Thumb /template/ Border">
-        <Setter Property="Background" Value="{DynamicResource TextMuted}" />
-        <Setter Property="CornerRadius" Value="3" />
-        <Setter Property="Opacity" Value="0.4" />
-    </Style>
-    <Style Selector="ScrollBar Thumb:pointerover /template/ Border">
-        <Setter Property="Background" Value="{DynamicResource TextSecondary}" />
-        <Setter Property="Opacity" Value="0.85" />
-    </Style>
 
     <!-- ============================================================ badges -->
 

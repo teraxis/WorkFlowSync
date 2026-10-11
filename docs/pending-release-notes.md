@@ -6,7 +6,7 @@ commits, or agent attribution.
 
 ## Added
 
-<!-- Add user-visible additions here for the next release -->
+<!-- Add new features here for the next release -->
 
 ## Changed
 

@@ -14,13 +14,13 @@
 
     <DockPanel>
 
-        <Border DockPanel.Dock="Top" Padding="24,20,24,14">
+        <Border DockPanel.Dock="Top" Padding="16,20,16,14">
             <StackPanel Spacing="3">
                 <TextBlock x:Name="HeaderText" Classes="display" Text="Нове завдання" />
             </StackPanel>
         </Border>
 
-        <Border DockPanel.Dock="Bottom" Padding="24,14" Background="{DynamicResource SurfaceRail}"
+        <Border DockPanel.Dock="Bottom" Padding="16,14" Background="{DynamicResource SurfaceRail}"
                 BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0">
             <Grid ColumnDefinitions="*,Auto">
                 <TextBlock Grid.Column="0" x:Name="ErrorText" Classes="danger" VerticalAlignment="Center" Margin="0,0,16,0" />
@@ -31,9 +31,9 @@
             </Grid>
         </Border>
 
-        <ScrollViewer Margin="24,0,12,8" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Margin="16,0,6,8" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
             <!-- width pinned to the viewport so no card can grow past the others (see MainWindow settings) -->
-            <Border Padding="0,8,16,8" Width="{Binding $parent[ScrollViewer].Viewport.Width}">
+            <Border Padding="0,8,8,8" Width="{Binding $parent[ScrollViewer].Viewport.Width}">
             <StackPanel Spacing="12">
 
                 <Border Classes="card">
