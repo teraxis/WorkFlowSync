@@ -105,12 +105,60 @@ public sealed class SyncRunner
         }
         if (planScope is not null) _log.Info($"pass is limited to \\{planScope.RelativeDir}: additions and updates only");
 
-        using var store = new StateStore(StatePath);
-        foreach (var pair in selected)
+        var maxConcurrency = Math.Max(1, _config.MaxConcurrentPairs);
+        if (maxConcurrency <= 1 || selected.Count <= 1)
         {
-            ct.ThrowIfCancellationRequested();
-            var r = RunPair(pair, store, dryRun, forceBackfill, ct, planScope);
-            pass.Pairs.Add(r);
+            using var store = new StateStore(StatePath);
+            foreach (var pair in selected)
+            {
+                ct.ThrowIfCancellationRequested();
+                var r = RunPair(pair, store, dryRun, forceBackfill, ct, planScope);
+                pass.Pairs.Add(r);
+            }
+        }
+        else
+        {
+            var results = new PairRunResult[selected.Count];
+            var tasks = new List<Task>();
+            var semaphore = new SemaphoreSlim(maxConcurrency);
+
+            for (var i = 0; i < selected.Count; i++)
+            {
+                var idx = i;
+                var pair = selected[i];
+                tasks.Add(Task.Run(async () =>
+                {
+                    await semaphore.WaitAsync(ct);
+                    try
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        using var store = new StateStore(StatePath);
+                        var r = RunPair(pair, store, dryRun, forceBackfill, ct, planScope);
+                        results[idx] = r;
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                }, ct));
+            }
+
+            try
+            {
+                Task.WhenAll(tasks).GetAwaiter().GetResult();
+            }
+            finally
+            {
+                semaphore.Dispose();
+            }
+
+            for (var i = 0; i < results.Length; i++)
+            {
+                if (results[i] is not null)
+                {
+                    pass.Pairs.Add(results[i]);
+                }
+            }
         }
 
         pass.Elapsed = sw.Elapsed;
@@ -120,8 +168,9 @@ public sealed class SyncRunner
         pass.WorkingSet = proc.WorkingSet64;
         if (!dryRun)
         {
-            store.SetMeta("last_run", StateStore.Fmt(DateTimeOffset.UtcNow));
-            store.SetMeta("last_run_result", pass.Errors == 0 ? (pass.AllSkipped ? "skipped" : "ok") : $"errors={pass.Errors}");
+            using var metaStore = new StateStore(StatePath);
+            metaStore.SetMeta("last_run", StateStore.Fmt(DateTimeOffset.UtcNow));
+            metaStore.SetMeta("last_run_result", pass.Errors == 0 ? (pass.AllSkipped ? "skipped" : "ok") : $"errors={pass.Errors}");
         }
         _log.Info($"pass end  result={(pass.Errors == 0 ? "ok" : $"errors={pass.Errors}")}  took={pass.Elapsed.TotalSeconds:0.0}s" +
                   $"  cpu={pass.Cpu.TotalSeconds:0.0}s ({pass.CpuShare * 100:0}%)  rss={SyncExecutor.FormatSize(pass.WorkingSet)}  alloc={SyncExecutor.FormatSize(pass.Allocated)}");

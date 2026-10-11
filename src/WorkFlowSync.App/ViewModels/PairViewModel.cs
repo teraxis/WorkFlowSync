@@ -143,7 +143,7 @@ public sealed partial class PairViewModel : ObservableObject
 
     public bool IsPaused => !Enabled;
     public bool IsActiveAndIdle => Enabled && !IsBusy;
-    public bool IsUpToDate => Enabled && !IsBusy && LastSyncErrors == 0;
+    public bool IsUpToDate => Enabled && !IsBusy && LastSyncTime is not null && LastSyncErrors == 0;
     public bool HasError => Enabled && !IsBusy && LastSyncErrors > 0;
 
     public string StatusBadgeText => IsBusy
@@ -161,6 +161,7 @@ public sealed partial class PairViewModel : ObservableObject
             if (IsBusy) return I18n.T("tasks.status_syncing");
             if (!Enabled) return I18n.T("tasks.status_paused");
             if (LastSyncErrors > 0) return I18n.T("tasks.status_error");
+            if (LastSyncTime is null) return I18n.T("tasks.status_not_synced");
             return I18n.T("tasks.status_up_to_date");
         }
     }

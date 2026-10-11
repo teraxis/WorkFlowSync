@@ -69,6 +69,9 @@ public sealed class SyncConfig
     /// <summary>Concurrent directory listings per pass (upper bound; <see cref="CpuLoad"/> may lower it).</summary>
     public int ScanParallelism { get; set; } = 8;
 
+    /// <summary>Maximum number of folder pairs that may be synchronized concurrently (default: 2).</summary>
+    public int MaxConcurrentPairs { get; set; } = 2;
+
     /// <summary>How much of the machine a pass may take: balanced (default), full speed, or low.</summary>
     public CpuLoad CpuLoad { get; set; } = CpuLoad.Balanced;
 
@@ -120,6 +123,7 @@ public sealed class SyncConfig
         }
         if (Interval < TimeSpan.FromMinutes(1)) problems.Add("Interval must be at least 1 minute.");
         if (ScanParallelism is < 1 or > 64) problems.Add("ScanParallelism must be within 1..64.");
+        if (MaxConcurrentPairs is < 1 or > 32) problems.Add("MaxConcurrentPairs must be within 1..32.");
         if (ScanBufferSize < 4096) problems.Add("ScanBufferSize must be at least 4096.");
         if (LogKeepDays is < 1 or > 3650) problems.Add("LogKeepDays must be within 1..3650.");
         if (RecentLimit is < 5 or > 500) problems.Add("RecentLimit must be within 5..500.");

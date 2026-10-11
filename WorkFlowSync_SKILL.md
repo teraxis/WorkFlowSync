@@ -108,7 +108,7 @@ WorkFlowSync is fully bilingual (Ukrainian and English) with dynamic runtime lan
 - A scan reports CHILDREN, never the directory it starts from. Harmless for a full pass (the pair root has no state
   row), but a scoped scan starts at a folder that DOES have one — without `TreeScanner` adding that entry back, every
   scoped pass reads as "the watched folder vanished". Found by running it, not by tests.
-- Two named locks, do not confuse them: `PassLock` (`Local\WorkFlowSync.<hash>`) is held only while a pass runs;
+- Two named locks, do not confuse them: `PassLock` (`Local\WorkFlowSync.<configHash>` for global passes or `Local\WorkFlowSync.<configHash>.<pairHash>` for per-pair runs) is held only while a pass runs;
   `SingleInstance` (`Local\WorkFlowSync.app.<hash>`) is held for the whole life of the GUI process. Same names would
   make an open window look like a pass in progress and the scheduler would skip every pass. A test asserts they differ.
 - Single instance is checked in `App/Program.cs` BEFORE `StartWithClassicDesktopLifetime`, so a second launch paints

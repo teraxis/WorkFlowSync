@@ -154,6 +154,15 @@ public class PairViewModelTests
         }
     }
 
+    [Fact]
+    public void Unsynced_pair_shows_pending_status_and_not_up_to_date()
+    {
+        var vm = new PairViewModel { Name = "new", Source = "src", Target = "tgt", Enabled = true, LastSyncTime = null };
+        Assert.False(vm.IsUpToDate);
+        Assert.Equal("Очікує синхронізації", vm.SyncStatusTitle);
+        Assert.Equal("Ще не синхронізувалося", vm.SyncStatusSubtext);
+    }
+
     private sealed class FixedCloudPlatform(bool isSyncRoot) : ICloudFilePlatform
     {
         public bool IsSyncRoot(string path) => isSyncRoot;

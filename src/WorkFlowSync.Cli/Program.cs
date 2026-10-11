@@ -152,10 +152,12 @@ internal static class Program
             return 0;
         }
 
-        using var gate = PassLock.TryAcquire(opts.ConfigPath);
+        using var gate = PassLock.TryAcquire(opts.ConfigPath, opts.PairName);
         if (!gate.Acquired)
         {
-            Console.Error.WriteLine("another WorkFlowSync pass is running for this config");
+            Console.Error.WriteLine(opts.PairName is null
+                ? "another WorkFlowSync pass is running for this config"
+                : $"another WorkFlowSync pass is running for pair «{opts.PairName}»");
             return 4;
         }
         var pass = new SyncRunner(cfg, opts.ConfigPath, log).Run(opts.DryRun, opts.Backfill, cts.Token, opts.PairName, opts.Scope);

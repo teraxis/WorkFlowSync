@@ -729,11 +729,13 @@
                                         </ComboBox.ItemTemplate>
                                     </ComboBox>
                                 </Grid>
-                                <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,10,Auto">
+                                <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,10,Auto,10,Auto">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc settings.parallel_scans}" VerticalAlignment="Center" />
                                     <ctl:Stepper Grid.Row="0" Grid.Column="1" Value="{Binding ScanParallelism}" Minimum="1" Maximum="64" Width="130" HorizontalAlignment="Left" />
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Loc settings.scan_buffer}" VerticalAlignment="Center" />
-                                    <ctl:Stepper Grid.Row="2" Grid.Column="1" Value="{Binding ScanBufferKb}" Minimum="4" Maximum="4096" Increment="64" Width="130" HorizontalAlignment="Left" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Loc settings.max_concurrent_pairs}" VerticalAlignment="Center" />
+                                    <ctl:Stepper Grid.Row="2" Grid.Column="1" Value="{Binding MaxConcurrentPairs}" Minimum="1" Maximum="32" Width="130" HorizontalAlignment="Left" />
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Loc settings.scan_buffer}" VerticalAlignment="Center" />
+                                    <ctl:Stepper Grid.Row="4" Grid.Column="1" Value="{Binding ScanBufferKb}" Minimum="4" Maximum="4096" Increment="64" Width="130" HorizontalAlignment="Left" />
                                 </Grid>
                             </StackPanel>
                         </Border>

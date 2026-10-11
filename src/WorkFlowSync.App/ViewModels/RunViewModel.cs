@@ -131,20 +131,20 @@ public sealed partial class RunViewModel : ObservableObject
     private Task RunNowAsync() => RunAsync(dryRun: false);
 
     /// <summary>Runs a single pair now, even if it is paused (the row buttons on the «Папки» tab).</summary>
-    public Task RunPairAsync(string pairName) => RunAsync(dryRun: false, onlyPair: pairName);
+    public Task<bool> RunPairAsync(string pairName) => RunAsync(dryRun: false, onlyPair: pairName);
 
     [RelayCommand]
     private void Stop() => _cts?.Cancel();
 
-    private async Task RunAsync(bool dryRun, string? onlyPair = null)
+    private async Task<bool> RunAsync(bool dryRun, string? onlyPair = null)
     {
-        if (IsRunning) return;
+        if (IsRunning) return false;
         var cfg = _configProvider();
         var problems = cfg.Validate();
         if (problems.Count > 0)
         {
             LastResult = "Конфігурація має помилки: " + string.Join("; ", problems);
-            return;
+            return false;
         }
 
         var configPath = _configPathProvider();
@@ -164,8 +164,11 @@ public sealed partial class RunViewModel : ObservableObject
             var result = await CpuBudget.For(cfg).RunAsync(() =>
             {
                 // Same cross-process lock as wfs.exe: never overlap with a scheduled or resident pass.
-                using var gate = PassLock.TryAcquire(configPath);
-                if (!gate.Acquired) throw new InvalidOperationException("Інший прохід уже виконується для цього конфігу (Планувальник або резидентний режим). Спробуйте пізніше.");
+                using var gate = PassLock.TryAcquire(configPath, onlyPair);
+                if (!gate.Acquired) throw new InvalidOperationException(
+                    onlyPair is null
+                        ? "Інший прохід уже виконується для цього конфігу (Планувальник або резидентний режим). Спробуйте пізніше."
+                        : $"Завдання «{onlyPair}» уже виконується іншим процесом або фоновим режимом. Спробуйте пізніше.");
                 using var log = new FileSyncLog(logDir, (_, line) => AppendLog(line), keepDays: cfg.LogKeepDays);
                 return new SyncRunner(cfg, configPath, log).Run(dryRun, forceBackfill: false, token, onlyPair);
             }, token);
@@ -176,14 +179,17 @@ public sealed partial class RunViewModel : ObservableObject
             LastResult = dryRun
                 ? $"План готовий: {planned:N0} файлів/тек до копіювання, пропущено завдань: {skipped}. Нічого не змінено."
                 : $"Готово за {result.Elapsed.TotalSeconds:0.0} с: скопійовано/оновлено {copied:N0}, помилок {result.Errors}, пропущено завдань: {skipped}.";
+            return result.Errors == 0;
         }
         catch (OperationCanceledException)
         {
             LastResult = "Перервано користувачем. Стан цього проходу не записано.";
+            return false;
         }
         catch (Exception ex)
         {
             LastResult = $"Помилка: {ex.Message}";
+            return false;
         }
         finally
         {

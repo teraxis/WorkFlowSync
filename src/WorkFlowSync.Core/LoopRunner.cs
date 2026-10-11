@@ -21,7 +21,8 @@ public sealed class LoopRunner
     /// <summary>Stop after this many passes (tests); null = forever.</summary>
     public int? MaxPasses { get; init; }
 
-    public int PassesRun { get; private set; }
+    private int _passesRun;
+    public int PassesRun => _passesRun;
 
     /// <summary>The config as last read by the loop (for callers that want e.g. the log rotation setting).</summary>
     public SyncConfig? LastConfig { get; private set; }
@@ -89,8 +90,7 @@ public sealed class LoopRunner
                     }
                     else
                     {
-                        using var gate = PassLock.TryAcquire(_configPath);
-                        if (!gate.Acquired)
+                        if (PassLock.IsGlobalHeld(_configPath))
                         {
                             _log.Warn("loop: another pass is running for this config, skipped");
                         }
@@ -107,23 +107,60 @@ public sealed class LoopRunner
                             if (due.Count == enabled)
                             {
                                 var result = runner.Run(_dryRun, forceBackfill: false, ct);
-                                PassesRun++;
+                                Interlocked.Increment(ref _passesRun);
                                 PassCompleted?.Invoke(result);
+                                var completed = DateTimeOffset.UtcNow;
+                                foreach (var pair in due) _nextDue[pair.Name] = completed + IntervalFor(cfg, pair);
                             }
                             else
                             {
                                 _log.Info($"loop: due now — {string.Join(", ", due.Select(p => p.Name))}");
-                                foreach (var pair in due)
+                                var maxConcurrency = Math.Max(1, cfg.MaxConcurrentPairs);
+                                if (maxConcurrency <= 1 || due.Count <= 1)
                                 {
-                                    ct.ThrowIfCancellationRequested();
-                                    var result = runner.Run(_dryRun, forceBackfill: false, ct, pair.Name);
-                                    PassesRun++;
-                                    PassCompleted?.Invoke(result);
+                                    foreach (var pair in due)
+                                    {
+                                        ct.ThrowIfCancellationRequested();
+                                        using var gate = PassLock.TryAcquire(_configPath, pair.Name);
+                                        if (!gate.Acquired)
+                                        {
+                                            _log.Warn($"loop: another pass is running for pair «{pair.Name}», skipped");
+                                            continue;
+                                        }
+                                        var result = runner.Run(_dryRun, forceBackfill: false, ct, pair.Name);
+                                        Interlocked.Increment(ref _passesRun);
+                                        PassCompleted?.Invoke(result);
+                                        _nextDue[pair.Name] = DateTimeOffset.UtcNow + IntervalFor(cfg, pair);
+                                    }
+                                }
+                                else
+                                {
+                                    var sem = new SemaphoreSlim(maxConcurrency);
+                                    var tasks = due.Select(async pair =>
+                                    {
+                                        await sem.WaitAsync(ct);
+                                        try
+                                        {
+                                            ct.ThrowIfCancellationRequested();
+                                            using var gate = PassLock.TryAcquire(_configPath, pair.Name);
+                                            if (!gate.Acquired)
+                                            {
+                                                _log.Warn($"loop: another pass is running for pair «{pair.Name}», skipped");
+                                                return;
+                                            }
+                                            var result = runner.Run(_dryRun, forceBackfill: false, ct, pair.Name);
+                                            Interlocked.Increment(ref _passesRun);
+                                            PassCompleted?.Invoke(result);
+                                            _nextDue[pair.Name] = DateTimeOffset.UtcNow + IntervalFor(cfg, pair);
+                                        }
+                                        finally
+                                        {
+                                            sem.Release();
+                                        }
+                                    });
+                                    Task.WhenAll(tasks).GetAwaiter().GetResult();
                                 }
                             }
-
-                            var completed = DateTimeOffset.UtcNow;
-                            foreach (var pair in due) _nextDue[pair.Name] = completed + IntervalFor(cfg, pair);
                         }
                     }
 
@@ -267,7 +304,7 @@ public sealed class LoopRunner
             try
             {
                 // The same lock as every other pass: a partial pass must never overlap a scheduled one.
-                using var gate = PassLock.TryAcquire(_configPath);
+                using var gate = PassLock.TryAcquire(_configPath, pair.Name);
                 if (!gate.Acquired)
                 {
                     _log.Debug($"[{pair.Name}] a pass is already running; \\{dir} will be picked up by it");

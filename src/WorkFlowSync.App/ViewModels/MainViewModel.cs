@@ -98,6 +98,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _statePath = "state.db";
     [ObservableProperty] private string _logPath = "logs";
     [ObservableProperty] private int _scanParallelism = 8;
+    [ObservableProperty] private int _maxConcurrentPairs = 2;
 
     /// <summary>How much of the machine a pass may take (docs F5).</summary>
     [ObservableProperty] private CpuLoad _cpuLoad = CpuLoad.Balanced;
@@ -306,6 +307,7 @@ public sealed partial class MainViewModel : ObservableObject
         StatePath = cfg.StatePath;
         LogPath = cfg.LogPath;
         ScanParallelism = cfg.ScanParallelism;
+        MaxConcurrentPairs = cfg.MaxConcurrentPairs;
         CpuLoad = cfg.CpuLoad;
         ScanBufferKb = Math.Max(4, cfg.ScanBufferSize / 1024);
         LogKeepDays = cfg.LogKeepDays;
@@ -346,7 +348,7 @@ public sealed partial class MainViewModel : ObservableObject
                 }
                 foreach (var pair in Pairs)
                 {
-                    var pTime = store.GetMeta($"last_run_{pair.Name}") ?? last;
+                    var pTime = store.GetMeta($"last_run_{pair.Name}");
                     if (pTime is not null && DateTimeOffset.TryParse(pTime, out var pt))
                     {
                         pair.LastSyncTime = pt;
@@ -393,6 +395,7 @@ public sealed partial class MainViewModel : ObservableObject
         StatePath = StatePath.Trim(),
         LogPath = LogPath.Trim(),
         ScanParallelism = ScanParallelism,
+        MaxConcurrentPairs = MaxConcurrentPairs,
         CpuLoad = CpuLoad,
         ScanBufferSize = ScanBufferKb * 1024,
         LogKeepDays = LogKeepDays,
@@ -528,12 +531,15 @@ public sealed partial class MainViewModel : ObservableObject
         pair.IsBusy = true;
         try
         {
-            await Run.RunPairAsync(pair.Name);
-            pair.LastSyncTime = DateTimeOffset.UtcNow;
-            LastCheckTime = DateTimeOffset.UtcNow;
+            var success = await Run.RunPairAsync(pair.Name);
+            if (success)
+            {
+                pair.LastSyncTime = DateTimeOffset.UtcNow;
+                LastCheckTime = DateTimeOffset.UtcNow;
+            }
             pair.RaiseSyncState();
             RaiseLastCheckSummary();
-            SetStatus(Run.LastResult, error: false);
+            SetStatus(Run.LastResult, error: !success);
         }
         finally
         {
@@ -581,6 +587,7 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnStatePathChanged(string value) { MarkDirty(); RaiseFolderPaths(); }
     partial void OnLogPathChanged(string value) { MarkDirty(); RaiseFolderPaths(); }
     partial void OnScanParallelismChanged(int value) => MarkDirty();
+    partial void OnMaxConcurrentPairsChanged(int value) => MarkDirty();
 
     partial void OnCpuLoadChanged(CpuLoad value)
     {
