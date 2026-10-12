@@ -316,34 +316,38 @@ public sealed partial class MainViewModel : ObservableObject
             RaiseLastCheckSummary();
         };
         Background = new BackgroundLoop(ConfigPath, ResolveLogDir, () => LogKeepDays);
-        Background.PassCompleted += r =>
-        {
-            OnUi(() =>
-            {
-                LastCheckTime = DateTimeOffset.UtcNow;
-                foreach (var pr in r.Pairs)
-                {
-                    var pairVm = Pairs.FirstOrDefault(p => string.Equals(p.Name, pr.Pair, StringComparison.OrdinalIgnoreCase));
-                    if (pairVm != null)
-                    {
-                        pairVm.LastSyncTime = DateTimeOffset.UtcNow;
-                        if (pr.Execution is { } ex)
-                        {
-                            pairVm.LastSyncFilesCount = ex.FilesCopied + ex.FilesUpdated;
-                            pairVm.LastSyncErrors = ex.Errors;
-                        }
-                        pairVm.RaiseSyncState();
-                    }
-                }
-                RaiseLastCheckSummary();
-                RefreshPendingApprovals();
-            });
-        };
+        Background.PassCompleted += r => OnUi(() => UpdatePairsFromPassResult(r));
         Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => false);
+        Run.PassCompleted += r => OnUi(() => UpdatePairsFromPassResult(r));
         Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
         Load();
         RefreshPendingApprovals();
         Run.RefreshSummary();
+    }
+
+    private void UpdatePairsFromPassResult(PassResult r)
+    {
+        LastCheckTime = DateTimeOffset.UtcNow;
+        foreach (var pr in r.Pairs)
+        {
+            var pairVm = Pairs.FirstOrDefault(p => string.Equals(p.Name, pr.Pair, StringComparison.OrdinalIgnoreCase));
+            if (pairVm != null)
+            {
+                pairVm.LastSyncTime = DateTimeOffset.UtcNow;
+                if (pr.Execution is { } ex)
+                {
+                    pairVm.LastSyncFilesCount = ex.FilesCopied + ex.FilesUpdated;
+                    pairVm.LastSyncErrors = ex.Errors;
+                }
+                else if (!pr.Skipped)
+                {
+                    pairVm.LastSyncErrors = 0;
+                }
+                pairVm.RaiseSyncState();
+            }
+        }
+        RaiseLastCheckSummary();
+        RefreshPendingApprovals();
     }
 
     /// <summary>Updates pending approvals counts for the main window and all pairs.</summary>
@@ -669,6 +673,27 @@ public sealed partial class MainViewModel : ObservableObject
         try
         {
             var success = await Run.RunPairAsync(pair.Name);
+            try
+            {
+                if (File.Exists(StateFullPath))
+                {
+                    using var store = new StateStore(StateFullPath);
+                    var pErrors = store.GetMeta($"last_errors_{pair.Name}");
+                    pair.LastSyncErrors = (pErrors is not null && int.TryParse(pErrors, out var e)) ? e : (success ? 0 : 1);
+                    var pFiles = store.GetMeta($"last_files_{pair.Name}");
+                    if (pFiles is not null && int.TryParse(pFiles, out var f))
+                        pair.LastSyncFilesCount = f;
+                }
+                else
+                {
+                    pair.LastSyncErrors = success ? 0 : 1;
+                }
+            }
+            catch
+            {
+                if (success) pair.LastSyncErrors = 0;
+            }
+
             if (success)
             {
                 pair.LastSyncTime = DateTimeOffset.UtcNow;

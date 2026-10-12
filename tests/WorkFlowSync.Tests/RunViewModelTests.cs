@@ -44,4 +44,32 @@ public sealed class RunViewModelTests : IDisposable
         Assert.Contains("дзеркалюється: 1", run.Summary);
         Assert.Contains("Останній прохід:", run.Summary);
     }
+
+    [Fact]
+    public async Task RunPairAsync_clears_stale_errors_and_updates_pair_sync_state()
+    {
+        var src = Path.Combine(_root, "src-pair");
+        var dst = Path.Combine(_root, "dst-pair");
+        Directory.CreateDirectory(src);
+        File.WriteAllText(Path.Combine(src, "doc.txt"), "hello");
+        var configPath = Path.Combine(_root, "config-pair.json");
+        ConfigFile.Save(new SyncConfig { Pairs = { new FolderPair { Name = "test-pair", Source = src, Target = dst, Enabled = true } } }, configPath);
+
+        var main = new MainViewModel(configPath);
+        main.Background.Pause();
+        main.Background.Stop();
+
+        var pair = main.Pairs[0];
+        // Simulate previous error state
+        pair.LastSyncErrors = 5;
+        pair.RaiseSyncState();
+        Assert.True(pair.HasError);
+
+        await main.RunPairAsync(pair);
+
+        Assert.Equal(0, pair.LastSyncErrors);
+        Assert.False(pair.HasError);
+        Assert.True(pair.IsUpToDate);
+        Assert.NotNull(pair.LastSyncTime);
+    }
 }

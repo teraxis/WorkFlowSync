@@ -4,6 +4,12 @@ This is the immutable archive of published user-facing changes. During a release
 entries from `docs/pending-release-notes.md` under a new `vX.Y.Z (YYYY-MM-DD)` heading, omit empty
 sections, and reset the pending file for the next cycle.
 
+## v0.3.8 (2026-10-12)
+
+### Fixed
+
+- **Оновлення стану помилки в картках завдань**: виправлено помилку в інтерфейсі, через яку після збою на попередньому проході (наприклад, тимчасової недоступності хмарного провайдера OneDrive) успішна ручна або повторна синхронізація з 0 помилок залишала червоний індикатор «Помилка» на картці завдання. Тепер успішний прохід миттєво очищує лічильник помилок та повертає статус «Актуально».
+
 ## v0.3.7 (2026-10-12)
 
 ### Added

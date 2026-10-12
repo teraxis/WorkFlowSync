@@ -42,6 +42,9 @@ public sealed partial class RunViewModel : ObservableObject
     [ObservableProperty] private string _logText = "";
     [ObservableProperty] private string _lastResult = "";
 
+    /// <summary>Fired when a real run completes (allows MainViewModel to update pair cards).</summary>
+    public event Action<WorkFlowSync.Core.PassResult>? PassCompleted;
+
     public bool CanRun => !IsRunning;
 
     public RunViewModel(Func<SyncConfig> configProvider, Func<string> configPathProvider, BackgroundLoop background, Func<bool> isDirty)
@@ -179,6 +182,7 @@ public sealed partial class RunViewModel : ObservableObject
             LastResult = dryRun
                 ? $"План готовий: {planned:N0} файлів/тек до копіювання, пропущено завдань: {skipped}. Нічого не змінено."
                 : $"Готово за {result.Elapsed.TotalSeconds:0.0} с: скопійовано/оновлено {copied:N0}, помилок {result.Errors}, пропущено завдань: {skipped}.";
+            if (!dryRun) PassCompleted?.Invoke(result);
             return result.Errors == 0;
         }
         catch (OperationCanceledException)
