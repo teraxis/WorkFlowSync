@@ -32,6 +32,12 @@
   "tasks.facts_format": "{0} файлів ({1})",
   "tasks.delete_title": "Видалити завдання?",
   "tasks.delete_message": "Видалити завдання «{0}»? Файли на диску залишаться недоторканими.",
+  "tasks.filter_tooltip": "Фільтр завдань",
+  "tasks.filter_all": "Усі завдання",
+  "tasks.filter_active_only": "Лише активні",
+  "tasks.filter_empty_title": "Немає активних завдань",
+  "tasks.filter_empty_desc": "Усі налаштовані завдання призупинено. Виберіть «Усі завдання» у фільтрі, щоб побачити їх.",
+  "tasks.show_all_button": "Показати всі завдання",
 
   "log.title": "Журнал подій",
   "log.empty": "Журнал поки що порожній",

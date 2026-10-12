@@ -163,6 +163,69 @@ public class PairViewModelTests
         Assert.Equal("Ще не синхронізувалося", vm.SyncStatusSubtext);
     }
 
+    [Fact]
+    public void MainViewModel_TaskFilter_DefaultsToActiveOnly_AndHidesInactiveTasks()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"wfs-filter-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "config.json");
+        try
+        {
+            var vm = new MainViewModel(path);
+            vm.Background.Stop();
+
+            // Default: ShowActiveTasksOnly == true
+            Assert.True(vm.ShowActiveTasksOnly);
+            Assert.False(vm.ShowAllTasks);
+
+            var p1 = new PairViewModel { Name = "active-task", Source = @"C:\s1", Target = @"C:\t1", Enabled = true };
+            var p2 = new PairViewModel { Name = "paused-task", Source = @"C:\s2", Target = @"C:\t2", Enabled = false };
+
+            vm.AddPair(p1);
+            vm.AddPair(p2);
+
+            Assert.Equal(2, vm.Pairs.Count);
+            Assert.Single(vm.VisiblePairs);
+            Assert.Equal("active-task", vm.VisiblePairs[0].Name);
+            Assert.True(vm.HasVisiblePairs);
+            Assert.False(vm.ShowEmptyFilteredState);
+
+            // Switch to All tasks
+            vm.ShowAllTasks = true;
+            Assert.False(vm.ShowActiveTasksOnly);
+            Assert.Equal(2, vm.VisiblePairs.Count);
+
+            // Switch back to Active only
+            vm.ShowActiveTasksOnly = true;
+            Assert.Single(vm.VisiblePairs);
+            Assert.Equal("active-task", vm.VisiblePairs[0].Name);
+
+            // Disabling the active task makes it disappear immediately from VisiblePairs
+            p1.Enabled = false;
+            Assert.Empty(vm.VisiblePairs);
+            Assert.False(vm.HasVisiblePairs);
+            Assert.True(vm.ShowEmptyFilteredState);
+
+            // Re-enabling makes it reappear immediately
+            p1.Enabled = true;
+            Assert.Single(vm.VisiblePairs);
+            Assert.Equal("active-task", vm.VisiblePairs[0].Name);
+            Assert.False(vm.ShowEmptyFilteredState);
+
+            // ShowAllTasksActionCommand resets filter
+            p1.Enabled = false;
+            Assert.True(vm.ShowEmptyFilteredState);
+            vm.ShowAllTasksActionCommand.Execute(null);
+            Assert.True(vm.ShowAllTasks);
+            Assert.Equal(2, vm.VisiblePairs.Count);
+            Assert.False(vm.ShowEmptyFilteredState);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
     private sealed class FixedCloudPlatform(bool isSyncRoot) : ICloudFilePlatform
     {
         public bool IsSyncRoot(string path) => isSyncRoot;

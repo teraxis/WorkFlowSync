@@ -21,6 +21,35 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<PairViewModel> Pairs { get; } = new();
 
+    /// <summary>
+    /// Filtered projection of <see cref="Pairs"/> for the UI list. Controlled by <see cref="ShowActiveTasksOnly"/>.
+    /// </summary>
+    public ObservableCollection<PairViewModel> VisiblePairs { get; } = new();
+
+    /// <summary>
+    /// Filter mode for task list. Inactive tasks are hidden by default (true).
+    /// </summary>
+    [ObservableProperty] private bool _showActiveTasksOnly = true;
+
+    public bool ShowAllTasks
+    {
+        get => !ShowActiveTasksOnly;
+        set
+        {
+            if (value && ShowActiveTasksOnly)
+                ShowActiveTasksOnly = false;
+        }
+    }
+
+    partial void OnShowActiveTasksOnlyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowAllTasks));
+        RefreshVisiblePairs();
+    }
+
+    [RelayCommand]
+    private void ShowAllTasksAction() => ShowAllTasks = true;
+
     [ObservableProperty] private PairViewModel? _selectedPair;
 
     public ObservableCollection<AccountItemViewModel> Accounts { get; } = new();
@@ -144,7 +173,59 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _statusIsError;
 
     public bool HasPairs => Pairs.Count > 0;
+    public bool HasVisiblePairs => VisiblePairs.Count > 0;
+    public bool ShowEmptyFilteredState => HasPairs && VisiblePairs.Count == 0;
     public bool HasSelection => SelectedPair is not null;
+
+    public void RefreshVisiblePairs()
+    {
+        var desired = Pairs.Where(p => !ShowActiveTasksOnly || p.Enabled).ToList();
+
+        // Remove items that are no longer in desired
+        for (var i = VisiblePairs.Count - 1; i >= 0; i--)
+        {
+            if (!desired.Contains(VisiblePairs[i]))
+            {
+                if (ReferenceEquals(SelectedPair, VisiblePairs[i]))
+                    SelectedPair = null;
+                VisiblePairs.RemoveAt(i);
+            }
+        }
+
+        // Insert or position items to match desired order
+        for (var i = 0; i < desired.Count; i++)
+        {
+            var item = desired[i];
+            if (i >= VisiblePairs.Count)
+            {
+                VisiblePairs.Add(item);
+            }
+            else if (!ReferenceEquals(VisiblePairs[i], item))
+            {
+                var existingIndex = VisiblePairs.IndexOf(item);
+                if (existingIndex >= 0)
+                    VisiblePairs.Move(existingIndex, i);
+                else
+                    VisiblePairs.Insert(i, item);
+            }
+        }
+
+        OnPropertyChanged(nameof(HasVisiblePairs));
+        OnPropertyChanged(nameof(ShowEmptyFilteredState));
+    }
+
+    private void OnPairPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        MarkDirty();
+        if (e.PropertyName == nameof(PairViewModel.Enabled))
+        {
+            FollowPairStates();
+            if (ShowActiveTasksOnly)
+            {
+                RefreshVisiblePairs();
+            }
+        }
+    }
 
     [ObservableProperty] private DateTimeOffset? _lastCheckTime;
 
@@ -197,6 +278,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(HasPairs));
             RaiseLastCheckSummary();
+            RefreshVisiblePairs();
         };
         Accounts.CollectionChanged += (_, _) =>
         {
@@ -293,6 +375,8 @@ public sealed partial class MainViewModel : ObservableObject
     private void Apply(SyncConfig cfg)
     {
         _loading = true;
+        foreach (var p in Pairs)
+            p.PropertyChanged -= OnPairPropertyChanged;
         Pairs.Clear();
         foreach (var p in cfg.Pairs)
         {
@@ -300,7 +384,7 @@ public sealed partial class MainViewModel : ObservableObject
             // A config written before schedules moved onto the pairs has none of its own: carry the old
             // shared value over, so nothing silently starts checking at a different rate.
             if (p.Interval is null) vm.IntervalMinutes = Math.Max(1, (int)Math.Round(cfg.Interval.TotalMinutes));
-            vm.PropertyChanged += (_, _) => MarkDirty();
+            vm.PropertyChanged += OnPairPropertyChanged;
             Pairs.Add(vm);
         }
         IntervalMinutes = Math.Max(1, (int)Math.Round(cfg.Interval.TotalMinutes));
@@ -332,6 +416,7 @@ public sealed partial class MainViewModel : ObservableObject
         _loading = false;
         FollowPairStates();
         LoadSyncStates();
+        RefreshVisiblePairs();
     }
 
     public void LoadSyncStates()
@@ -453,24 +538,28 @@ public sealed partial class MainViewModel : ObservableObject
     public void AddPair(PairViewModel pair)
     {
         pair.RaiseSummaries();
-        pair.PropertyChanged += (_, _) => MarkDirty();
+        pair.PropertyChanged += OnPairPropertyChanged;
         Pairs.Add(pair);
         SelectedPair = pair;
         SaveNow();
+        RefreshVisiblePairs();
     }
 
     public void ReplacePair(PairViewModel target, PairViewModel edited)
     {
         target.CopyFrom(edited);
         SaveNow();
+        RefreshVisiblePairs();
     }
 
     /// <summary>Removes a pair from the list (its state rows stay, so re-adding it keeps the memory).</summary>
     public void RemovePair(PairViewModel pair)
     {
+        pair.PropertyChanged -= OnPairPropertyChanged;
         Pairs.Remove(pair);
         if (ReferenceEquals(SelectedPair, pair)) SelectedPair = null;
         SaveNow();
+        RefreshVisiblePairs();
         SetStatus($"Завдання «{pair.Name}» видалено зі списку.", error: false);
     }
 

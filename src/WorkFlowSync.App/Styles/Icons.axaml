@@ -18,6 +18,7 @@
     <StreamGeometry x:Key="IconRefresh">M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15</StreamGeometry>
 
     <StreamGeometry x:Key="IconPlus">M12 5v14 M5 12h14</StreamGeometry>
+    <StreamGeometry x:Key="IconFilter">M22 3H2l8 9.46V19l4 2v-8.54L22 3z</StreamGeometry>
 
     <StreamGeometry x:Key="IconPencil">M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z</StreamGeometry>
 

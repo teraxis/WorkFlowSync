@@ -30,6 +30,21 @@ Requires .NET SDK 8.0.x on PATH (`C:\Program Files\dotnet`). No other services.
 
 If a command cannot run, record the exact reason and the next step needed.
 
+## Current Status (2026-10-12, F25 — Tasks list filter: Active only vs All tasks)
+
+- `scripts\build.ps1`: OK, 0 warnings.
+- `dotnet build WorkFlowSync.sln -warnaserror`: OK, 0 warnings, 0 errors.
+- `scripts\test.ps1`: **518 passed, 0 failed** (42 s).
+- `PairViewModelTests`: Task filter default to active-only, hiding inactive tasks, immediate removal when disabling an active task, restore on show all, and empty filtered state card.
+- `LocalizationTests`: 100% key parity verified for task filter keys across uk.json and en.json.
+
+## Current Status (2026-10-12, Fix — Google Drive virtual stubs: .gvid and .gscript handling)
+
+- `scripts\build.ps1`: OK, 0 warnings.
+- `dotnet build WorkFlowSync.sln -warnaserror`: OK, 0 warnings, 0 errors.
+- `scripts\test.ps1`: **517 passed, 0 failed** (54 s).
+- `GoogleDriveTests` (28): identification of Google Drive web pointer stubs (.gvid, .gscript), verification that they are safely skipped without error in planning and execution.
+
 ## Current Status (2026-10-10, F24 — Accounts management & Google OAuth wizard)
 
 - `scripts\build.ps1`: OK, 0 warnings.

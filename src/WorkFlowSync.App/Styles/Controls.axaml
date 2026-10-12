@@ -406,14 +406,13 @@
         <Setter Property="AcceptsReturn" Value="False" />
     </Style>
 
-    <!-- context menu (the ⋯ button on a pair) -->
-    <Style Selector="MenuFlyoutPresenter">
+    <!-- context menu (the ⋯ button on a pair) & flyouts -->
+    <Style Selector="MenuFlyoutPresenter, FlyoutPresenter">
         <Setter Property="Background" Value="{DynamicResource SurfaceCard}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
-        <Setter Property="Padding" Value="6" />
-        <Setter Property="MinWidth" Value="200" />
+        <Setter Property="Padding" Value="10" />
     </Style>
     <Style Selector="MenuItem">
         <Setter Property="Padding" Value="10,8" />

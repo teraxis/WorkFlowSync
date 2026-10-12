@@ -32,6 +32,12 @@
   "tasks.facts_format": "{0} files ({1})",
   "tasks.delete_title": "Delete task?",
   "tasks.delete_message": "Delete task '{0}'? Existing files on your disk will not be touched.",
+  "tasks.filter_tooltip": "Filter tasks",
+  "tasks.filter_all": "All tasks",
+  "tasks.filter_active_only": "Active only",
+  "tasks.filter_empty_title": "No active tasks",
+  "tasks.filter_empty_desc": "All configured tasks are paused. Select 'All tasks' in the filter to view them.",
+  "tasks.show_all_button": "Show all tasks",
 
   "log.title": "Event Log",
   "log.empty": "Event log is empty",

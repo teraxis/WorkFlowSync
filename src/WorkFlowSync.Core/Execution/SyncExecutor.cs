@@ -178,10 +178,10 @@ public sealed class SyncExecutor
                             break;
                         }
 
-                        // Native Google documents (.gdoc/.gsheet/...) without conversion mapping cannot be read as binary files.
+                        // Native Google documents (.gdoc/.gsheet/.gvid/...) without conversion mapping cannot be read as binary files.
                         if (!isGoogleDocExport && GoogleDrive.IsGoogleDoc(action.RelativePath))
                         {
-                            _log.Warn($"{pairTag} skip  \\{action.RelativePath}: native Google document (.gdoc/.gsheet) cannot be read as a binary file; skipped");
+                            _log.Warn($"{pairTag} skip  \\{action.RelativePath}: native Google document without binary file content; skipped");
                             result.Skipped++;
                             break;
                         }

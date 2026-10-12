@@ -25,6 +25,8 @@ public sealed class GoogleDriveTests
     [InlineData("map.gmap", true)]
     [InlineData("site.gsite", true)]
     [InlineData("shortcut.gshortcut", true)]
+    [InlineData("recording.gvid", true)]
+    [InlineData("script.gscript", true)]
     [InlineData("UPPER.GDOC", true)]
     [InlineData(@"subfolder\nested\file.GSHEET", true)]
     [InlineData("report.docx", false)]
@@ -47,6 +49,8 @@ public sealed class GoogleDriveTests
     [InlineData("form.gform", false)]
     [InlineData("site.gsite", false)]
     [InlineData("shortcut.gshortcut", false)]
+    [InlineData("recording.gvid", false)]
+    [InlineData("script.gscript", false)]
     [InlineData("file.txt", false)]
     public void CanExport_IdentifiesExportableDocuments(string path, bool expected)
     {
@@ -153,6 +157,28 @@ public sealed class GoogleDriveTests
 
         Assert.Contains(plan.Warnings, w => w.Contains("doc.gdoc") && w.Contains("native Google document"));
         Assert.Contains("doc.gdoc", plan.Forget);
+    }
+
+    [Fact]
+    public void SyncPlanner_SkipsGoogleVid_EvenInOfficeMode()
+    {
+        var src = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"meeting\Recording.gvid"] = new ScanEntry { RelativePath = @"meeting\Recording.gvid", Kind = EntryKind.File, Size = 231, MtimeUtc = T1, CtimeUtc = T1 },
+            ["normal.txt"] = new ScanEntry { RelativePath = "normal.txt", Kind = EntryKind.File, Size = 100, MtimeUtc = T1, CtimeUtc = T1 }
+        };
+        var dst = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
+
+        var planner = new SyncPlanner("p", Now, backfillFirstSeen: false, googleDocExport: GoogleDocExportMode.Office);
+        var plan = planner.Plan(src, dst, state);
+
+        var action = Assert.Single(plan.Actions);
+        Assert.Equal("normal.txt", action.RelativePath);
+        Assert.Equal(SyncActionKind.CopyFile, action.Kind);
+
+        Assert.Contains(plan.Warnings, w => w.Contains(@"meeting\Recording.gvid") && w.Contains("native Google document"));
+        Assert.DoesNotContain(plan.Actions, a => a.RelativePath.Contains("Recording.gvid"));
     }
 
     [Fact]

@@ -4,6 +4,16 @@ This is the immutable archive of published user-facing changes. During a release
 entries from `docs/pending-release-notes.md` under a new `vX.Y.Z (YYYY-MM-DD)` heading, omit empty
 sections, and reset the pending file for the next cycle.
 
+## v0.3.6 (2026-10-12)
+
+### Added
+
+- Кнопка фільтрації завдань поруч із «Додати завдання» з випадаючим меню вибору («Усі завдання» або «Лише активні»). За замовчуванням неактивні завдання приховуються, а при вимкненні завдання у режимі активних воно автоматично зникає зі списку.
+
+### Fixed
+
+- Усунено збій синхронізації («IOException: Incorrect function») при обробці покажчиків відеозаписів та скриптів Google Drive (.gvid, .gscript): тепер вони розпізнаються як веб-покажчики Google без бінарного вмісту та безпечно пропускаються із попередженням у журналі замість помилки копіювання.
+
 ## v0.3.5 (2026-10-11)
 
 ### Added

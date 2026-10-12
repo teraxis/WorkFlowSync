@@ -20,6 +20,8 @@ public static class GoogleDrive
         ".gmap",
         ".gsite",
         ".gshortcut",
+        ".gvid",
+        ".gscript",
     };
 
     /// <summary>
