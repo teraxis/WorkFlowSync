@@ -697,6 +697,9 @@
     <Style Selector="TextBlock.status-title.error">
         <Setter Property="Foreground" Value="{DynamicResource Danger}" />
     </Style>
+    <Style Selector="TextBlock.status-title.warning">
+        <Setter Property="Foreground" Value="{DynamicResource Warning}" />
+    </Style>
 
     <!-- ToggleSwitch: off state styled solid gray matching on state -->
     <Style Selector="ToggleSwitch">

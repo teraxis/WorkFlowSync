@@ -112,4 +112,16 @@ public class NotificationPolicyTests
         Assert.Equal(NotifyMode.All, cfg.Notifications);
         Assert.False(NotificationPolicy.InQuietHours(cfg, Midnight));
     }
+
+    [Fact]
+    public void Awaiting_approval_notifies_user_even_during_quiet_hours_and_errors_only()
+    {
+        var night = Config(mode: NotifyMode.ErrorsOnly, from: 22, to: 8);
+
+        var note = NotificationPolicy.ForPass(night, added: 0, errors: 0, heldBack: 0, Midnight, awaitingApproval: 3);
+
+        Assert.NotNull(note);
+        Assert.False(note!.IsProblem);
+        Assert.Contains("3 зміни, які потребують погодження", note.Body, StringComparison.Ordinal);
+    }
 }

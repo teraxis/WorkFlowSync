@@ -50,4 +50,152 @@ public class ApprovalPlannerTests
         Assert.Equal(2, plan.Stats.AwaitingApproval); // frozen_dir and frozen_dir\child.txt
         Assert.Equal(1, plan.Stats.New); // other_dir\file.txt
     }
+
+    [Fact]
+    public void RequireApproval_new_folder_and_file_in_target_adds_to_PendingUpdates_and_no_source_actions()
+    {
+        var planner = new TwoWayPlanner("pair1", T0, requireApproval: true);
+
+        var sideA = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
+        var sideB = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"ВКЗ"] = new ScanEntry { RelativePath = @"ВКЗ", Kind = EntryKind.Directory, MtimeUtc = T0 },
+            [@"ВКЗ\audit.docx"] = new ScanEntry { RelativePath = @"ВКЗ\audit.docx", Kind = EntryKind.File, Size = 1024, MtimeUtc = T0 },
+        };
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
+
+        var plan = planner.Plan(sideA, sideB, state);
+
+        Assert.Equal(2, plan.Stats.AwaitingApproval);
+        Assert.Equal(2, plan.PendingUpdates.Count);
+
+        var dirPending = plan.PendingUpdates.First(p => p.Path == @"ВКЗ");
+        Assert.Equal(PendingChange.Added, dirPending.Change);
+        Assert.Equal(EntryKind.Directory, dirPending.Kind);
+
+        var filePending = plan.PendingUpdates.First(p => p.Path == @"ВКЗ\audit.docx");
+        Assert.Equal(PendingChange.Added, filePending.Change);
+        Assert.Equal(EntryKind.File, filePending.Kind);
+        Assert.Equal(1024, filePending.DstSize);
+
+        // Crucial invariant: no actions writing to Source (Side A) without human approval!
+        Assert.DoesNotContain(plan.Actions, a => a.Side == SyncSide.Source);
+    }
+
+    [Fact]
+    public void RequireApproval_modified_file_in_target_adds_to_PendingUpdates()
+    {
+        var planner = new TwoWayPlanner("pair1", T0, requireApproval: true);
+
+        var sideA = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"file.txt"] = new ScanEntry { RelativePath = @"file.txt", Kind = EntryKind.File, Size = 100, MtimeUtc = T0 },
+        };
+        var sideB = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"file.txt"] = new ScanEntry { RelativePath = @"file.txt", Kind = EntryKind.File, Size = 200, MtimeUtc = T0.AddHours(1) },
+        };
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"file.txt"] = new StateEntry
+            {
+                PairName = "pair1",
+                RelativePath = @"file.txt",
+                Kind = EntryKind.File,
+                FirstSeenUtc = T0,
+                Status = EntryStatus.Active,
+                SourceSize = 100,
+                SourceMtimeUtc = T0,
+                CopiedSize = 100,
+                CopiedMtimeUtc = T0,
+            },
+        };
+
+        var plan = planner.Plan(sideA, sideB, state);
+
+        Assert.Equal(1, plan.Stats.AwaitingApproval);
+        Assert.Single(plan.PendingUpdates);
+        var pending = plan.PendingUpdates[0];
+        Assert.Equal(@"file.txt", pending.Path);
+        Assert.Equal(PendingChange.Modified, pending.Change);
+        Assert.Equal(100, pending.SrcSize);
+        Assert.Equal(200, pending.DstSize);
+        Assert.DoesNotContain(plan.Actions, a => a.Side == SyncSide.Source);
+    }
+
+    [Fact]
+    public void RequireApproval_deleted_file_in_target_adds_to_PendingUpdates()
+    {
+        var planner = new TwoWayPlanner("pair1", T0, requireApproval: true);
+
+        var sideA = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"file.txt"] = new ScanEntry { RelativePath = @"file.txt", Kind = EntryKind.File, Size = 100, MtimeUtc = T0 },
+        };
+        var sideB = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"file.txt"] = new StateEntry
+            {
+                PairName = "pair1",
+                RelativePath = @"file.txt",
+                Kind = EntryKind.File,
+                FirstSeenUtc = T0,
+                Status = EntryStatus.Active,
+                SourceSize = 100,
+                SourceMtimeUtc = T0,
+                CopiedSize = 100,
+                CopiedMtimeUtc = T0,
+            },
+        };
+
+        var plan = planner.Plan(sideA, sideB, state);
+
+        Assert.Equal(1, plan.Stats.AwaitingApproval);
+        Assert.Single(plan.PendingUpdates);
+        var pending = plan.PendingUpdates[0];
+        Assert.Equal(@"file.txt", pending.Path);
+        Assert.Equal(PendingChange.Deleted, pending.Change);
+        Assert.DoesNotContain(plan.Actions, a => a.Side == SyncSide.Source);
+    }
+
+    [Fact]
+    public void RequireApproval_renamed_file_in_target_detects_rename()
+    {
+        var planner = new TwoWayPlanner("pair1", T0, requireApproval: true);
+
+        var sideA = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"old.txt"] = new ScanEntry { RelativePath = @"old.txt", Kind = EntryKind.File, Size = 100, MtimeUtc = T0 },
+        };
+        var sideB = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"renamed.txt"] = new ScanEntry { RelativePath = @"renamed.txt", Kind = EntryKind.File, Size = 100, MtimeUtc = T0 },
+        };
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"old.txt"] = new StateEntry
+            {
+                PairName = "pair1",
+                RelativePath = @"old.txt",
+                Kind = EntryKind.File,
+                FirstSeenUtc = T0,
+                Status = EntryStatus.Active,
+                SourceSize = 100,
+                SourceMtimeUtc = T0,
+                CopiedSize = 100,
+                CopiedMtimeUtc = T0,
+            },
+        };
+
+        var plan = planner.Plan(sideA, sideB, state);
+
+        Assert.True(plan.Stats.AwaitingApproval >= 1);
+        Assert.Single(plan.PendingUpdates);
+        var pending = plan.PendingUpdates[0];
+        Assert.Equal(@"renamed.txt", pending.Path);
+        Assert.Equal(@"old.txt", pending.FromPath);
+        Assert.Equal(PendingChange.Renamed, pending.Change);
+        Assert.DoesNotContain(plan.Actions, a => a.Side == SyncSide.Source);
+    }
 }

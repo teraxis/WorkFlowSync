@@ -27,6 +27,7 @@ public sealed class PairRunResult
     public int HeldBackRemovals { get; set; }
     public int RotatedFiles { get; set; }
     public long RotatedBytes { get; set; }
+    public int PendingNew { get; set; }
     public TimeSpan Elapsed { get; set; }
 }
 
@@ -299,10 +300,19 @@ public sealed class SyncRunner
         }
 
         var plan = twoWay
-            ? new TwoWayPlanner(pair.Name, now, scope, frozen, pair.GoogleDocExport, pair.UploadConvertedDocs).Plan(source.Entries, target.Entries, state)
-            : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, scope, pair.GoogleDocExport).Plan(source.Entries, target.Entries, state);
+            ? new TwoWayPlanner(pair.Name, now, scope, frozen, pair.GoogleDocExport, pair.ConvertGoogleRecordings, pair.UploadConvertedDocs, pair.RequireApproval).Plan(source.Entries, target.Entries, state)
+            : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, scope, pair.GoogleDocExport, pair.ConvertGoogleRecordings).Plan(source.Entries, target.Entries, state);
         foreach (var w in plan.Warnings) _log.Warn($"{tag} plan: {w}");
         result.Plan = plan.Stats;
+        result.PendingNew = plan.PendingUpdates.Count;
+        if (!dryRun && plan.PendingUpdates.Count > 0)
+        {
+            foreach (var pending in plan.PendingUpdates)
+            {
+                store.Pending.Upsert(pending);
+            }
+            _log.Info($"{tag} pending approvals registered: {plan.PendingUpdates.Count}");
+        }
         _log.Info($"{tag} plan  {plan.Stats}");
         foreach (var u in plan.StateUpdates)
             // too_old is deliberately not listed: a first pass over an old archive produces one row per file,

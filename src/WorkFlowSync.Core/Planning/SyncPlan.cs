@@ -83,5 +83,8 @@ public sealed class SyncPlan
 
     public List<string> Warnings { get; } = new();
 
+    /// <summary>New changes detected in the moderated folder awaiting human decision.</summary>
+    public List<PendingEntry> PendingUpdates { get; } = new();
+
     public PlanStats Stats { get; } = new();
 }

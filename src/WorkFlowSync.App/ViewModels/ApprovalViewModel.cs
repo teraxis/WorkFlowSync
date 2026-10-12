@@ -237,6 +237,8 @@ public sealed partial class ApprovalViewModel : ObservableObject
 
     public int SelectedTypeIndex => TypeOptions.IndexOf(SelectedType);
 
+    public event Action? Resolved;
+
     public ObservableCollection<ApprovalItemViewModel> Items { get; } = new();
     public ObservableCollection<ApprovalItemViewModel> FilteredItems { get; } = new();
     public ObservableCollection<ApprovalGroupViewModel> FilteredGroups { get; } = new();
@@ -738,6 +740,7 @@ public sealed partial class ApprovalViewModel : ObservableObject
         {
             IsBusy = false;
             Load();
+            Resolved?.Invoke();
         }
 
         return totalResult;

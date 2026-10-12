@@ -168,11 +168,14 @@ public static class GoogleDrive
     /// <summary>
     /// Checks whether the Google web document can be converted and exported to standard formats.
     /// Docs, Sheets, Slides, and Drawings have standard export formats; Forms, Sites, Maps, and Shortcuts do not.
+    /// Google Vids (.gvid) recordings can be converted to MP4 when convertRecordings is enabled.
     /// </summary>
-    public static bool CanExport(string? pathOrName)
+    public static bool CanExport(string? pathOrName, bool convertRecordings = true)
     {
         if (string.IsNullOrWhiteSpace(pathOrName)) return false;
         var ext = Path.GetExtension(pathOrName);
+        if (convertRecordings && ext.Equals(".gvid", StringComparison.OrdinalIgnoreCase))
+            return true;
         return ext.Equals(".gdoc", StringComparison.OrdinalIgnoreCase)
             || ext.Equals(".gsheet", StringComparison.OrdinalIgnoreCase)
             || ext.Equals(".gslides", StringComparison.OrdinalIgnoreCase)
@@ -182,13 +185,20 @@ public static class GoogleDrive
     /// <summary>
     /// Translates source relative path (e.g. "Reports\doc.gdoc") to target destination path (e.g. "Reports\doc.docx").
     /// In Skip mode or for non-exportable types, returns the original path unchanged.
+    /// Google Vids (.gvid) translate to .mp4 when convertRecordings is enabled.
     /// </summary>
-    public static string GetTargetRelativePath(string relPath, WorkFlowSync.Core.Config.GoogleDocExportMode mode)
+    public static string GetTargetRelativePath(string relPath, WorkFlowSync.Core.Config.GoogleDocExportMode mode, bool convertRecordings = true)
     {
-        if (string.IsNullOrWhiteSpace(relPath) || mode == WorkFlowSync.Core.Config.GoogleDocExportMode.Skip || !CanExport(relPath))
+        if (string.IsNullOrWhiteSpace(relPath) || !CanExport(relPath, convertRecordings))
             return relPath;
 
         var ext = Path.GetExtension(relPath);
+        if (convertRecordings && ext.Equals(".gvid", StringComparison.OrdinalIgnoreCase))
+            return Path.ChangeExtension(relPath, ".mp4");
+
+        if (mode == WorkFlowSync.Core.Config.GoogleDocExportMode.Skip)
+            return relPath;
+
         if (mode == WorkFlowSync.Core.Config.GoogleDocExportMode.Pdf)
             return Path.ChangeExtension(relPath, ".pdf");
 
@@ -206,10 +216,13 @@ public static class GoogleDrive
     /// </summary>
     public static string GetExportMimeType(string relPath, WorkFlowSync.Core.Config.GoogleDocExportMode mode)
     {
+        var ext = Path.GetExtension(relPath);
+        if (ext.Equals(".gvid", StringComparison.OrdinalIgnoreCase))
+            return "video/mp4";
+
         if (mode == WorkFlowSync.Core.Config.GoogleDocExportMode.Pdf)
             return "application/pdf";
 
-        var ext = Path.GetExtension(relPath);
         if (ext.Equals(".gdoc", StringComparison.OrdinalIgnoreCase))
             return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         if (ext.Equals(".gsheet", StringComparison.OrdinalIgnoreCase))
@@ -224,24 +237,47 @@ public static class GoogleDrive
 
     /// <summary>
     /// Projects source directory entries so exportable Google web documents are represented by their
-    /// target export relative paths (.docx, .xlsx, .pptx, .png, or .pdf) for one-way export to destination.
+    /// target export relative paths (.docx, .xlsx, .pptx, .png, .pdf, or .mp4) for one-way export to destination.
     /// Produces a target-to-source mapping dictionary for the planner and executor.
     /// </summary>
     public static IReadOnlyDictionary<string, WorkFlowSync.Core.Scanning.ScanEntry> MapGoogleDocsForExport(
         IReadOnlyDictionary<string, WorkFlowSync.Core.Scanning.ScanEntry> source,
         WorkFlowSync.Core.Config.GoogleDocExportMode mode,
+        out Dictionary<string, string> targetToSourceMap) =>
+        MapGoogleDocsForExport(source, mode, convertRecordings: true, out targetToSourceMap);
+
+    /// <summary>
+    /// Projects source directory entries so exportable Google web documents are represented by their
+    /// target export relative paths (.docx, .xlsx, .pptx, .png, .pdf, or .mp4) for one-way export to destination.
+    /// </summary>
+    public static IReadOnlyDictionary<string, WorkFlowSync.Core.Scanning.ScanEntry> MapGoogleDocsForExport(
+        IReadOnlyDictionary<string, WorkFlowSync.Core.Scanning.ScanEntry> source,
+        WorkFlowSync.Core.Config.GoogleDocExportMode mode,
+        bool convertRecordings,
         out Dictionary<string, string> targetToSourceMap)
     {
         targetToSourceMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (mode == WorkFlowSync.Core.Config.GoogleDocExportMode.Skip || source.Count == 0)
+        if (source.Count == 0 || (mode == WorkFlowSync.Core.Config.GoogleDocExportMode.Skip && !convertRecordings))
             return source;
 
         var result = new Dictionary<string, WorkFlowSync.Core.Scanning.ScanEntry>(source.Count, StringComparer.OrdinalIgnoreCase);
         foreach (var (path, entry) in source)
         {
-            if (entry.Kind == WorkFlowSync.Core.Model.EntryKind.File && IsGoogleDoc(path) && CanExport(path))
+            if (entry.Kind == WorkFlowSync.Core.Model.EntryKind.File && IsGoogleDoc(path) && CanExport(path, convertRecordings))
             {
-                var targetRel = GetTargetRelativePath(path, mode);
+                var isVid = Path.GetExtension(path).Equals(".gvid", StringComparison.OrdinalIgnoreCase);
+                if (isVid && !convertRecordings)
+                {
+                    result[path] = entry;
+                    continue;
+                }
+                if (!isVid && mode == WorkFlowSync.Core.Config.GoogleDocExportMode.Skip)
+                {
+                    result[path] = entry;
+                    continue;
+                }
+
+                var targetRel = GetTargetRelativePath(path, mode, convertRecordings);
                 if (!source.ContainsKey(targetRel) && !result.ContainsKey(targetRel))
                 {
                     targetToSourceMap[targetRel] = path;

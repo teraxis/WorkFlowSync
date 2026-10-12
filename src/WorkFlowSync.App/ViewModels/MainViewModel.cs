@@ -50,6 +50,23 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ShowAllTasksAction() => ShowAllTasks = true;
 
+    [ObservableProperty] private int _pendingApprovalsCount;
+    public bool HasPendingApprovals => PendingApprovalsCount > 0;
+    public string PendingApprovalsBannerTitle =>
+        WorkFlowSync.Core.Notifications.NotificationPolicy.Plural(PendingApprovalsCount,
+            "Виявлено зміну, яка потребує погодження",
+            "Виявлено {0} зміни, які потребують погодження",
+            "Виявлено {0} змін, які потребують погодження");
+    public string PendingApprovalsBannerSubtitle =>
+        "Зміни у кінцевій теці очікують вашого підтвердження для перенесення.";
+
+    partial void OnPendingApprovalsCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasPendingApprovals));
+        OnPropertyChanged(nameof(PendingApprovalsBannerTitle));
+        OnPropertyChanged(nameof(PendingApprovalsBannerSubtitle));
+    }
+
     [ObservableProperty] private PairViewModel? _selectedPair;
 
     public ObservableCollection<AccountItemViewModel> Accounts { get; } = new();
@@ -319,12 +336,43 @@ public sealed partial class MainViewModel : ObservableObject
                     }
                 }
                 RaiseLastCheckSummary();
+                RefreshPendingApprovals();
             });
         };
         Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => false);
         Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
         Load();
+        RefreshPendingApprovals();
         Run.RefreshSummary();
+    }
+
+    /// <summary>Updates pending approvals counts for the main window and all pairs.</summary>
+    public void RefreshPendingApprovals()
+    {
+        try
+        {
+            if (!File.Exists(StateFullPath))
+            {
+                PendingApprovalsCount = 0;
+                foreach (var pair in Pairs) pair.PendingApprovalsCount = 0;
+                return;
+            }
+
+            using var store = new StateStore(StateFullPath);
+            var open = store.Pending.GetOpen();
+            PendingApprovalsCount = open.Count;
+
+            var byPair = open.GroupBy(p => p.Pair, StringComparer.OrdinalIgnoreCase)
+                             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in Pairs)
+            {
+                pair.PendingApprovalsCount = byPair.TryGetValue(pair.Name, out var c) ? c : 0;
+            }
+        }
+        catch
+        {
+            // Ignore during startup or when db is busy
+        }
     }
 
     /// <summary>Folder that holds config.json, state.db and logs — next to the executable by default.</summary>
@@ -628,6 +676,7 @@ public sealed partial class MainViewModel : ObservableObject
             }
             pair.RaiseSyncState();
             RaiseLastCheckSummary();
+            RefreshPendingApprovals();
             SetStatus(Run.LastResult, error: !success);
         }
         finally

@@ -168,9 +168,12 @@ public partial class App : Application
     {
         if (_vm is null) return;
 
+        Dispatcher.UIThread.Post(() => _vm.RefreshPendingApprovals());
+
         var added = result.Pairs.Sum(p => p.Execution?.FilesCopied ?? 0);
         var heldBack = result.Pairs.Sum(p => p.HeldBackRemovals);
-        var note = NotificationPolicy.ForPass(_vm.ToConfig(), added, result.Errors, heldBack, DateTimeOffset.Now);
+        var awaitingApproval = result.Pairs.Sum(p => p.Plan?.AwaitingApproval ?? 0);
+        var note = NotificationPolicy.ForPass(_vm.ToConfig(), added, result.Errors, heldBack, DateTimeOffset.Now, awaitingApproval);
         if (note is null) return;
 
         Dispatcher.UIThread.Post(() =>
@@ -178,7 +181,11 @@ public partial class App : Application
             if (_notification is null)
             {
                 _notification = new NotificationWindow();
-                _notification.Clicked += ShowRecentChanges;
+                _notification.Clicked += () =>
+                {
+                    if (_vm?.HasPendingApprovals == true) ShowApprovalWindow();
+                    else ShowRecentChanges();
+                };
             }
             _notification.Show(note);
         });
@@ -216,15 +223,23 @@ public partial class App : Application
         Dispatcher.UIThread.Post(() =>
         {
             if (_vm is null) return;
-            _approvalModel ??= new ApprovalViewModel(
-                () => _vm.StateFullPath,
-                () => _vm.Pairs.ToDictionary(p => p.Name, p => (p.Source, p.Target), StringComparer.OrdinalIgnoreCase),
-                msg => _vm?.Run.AppendLog(msg));
+            if (_approvalModel is null)
+            {
+                _approvalModel = new ApprovalViewModel(
+                    () => _vm.StateFullPath,
+                    () => _vm.Pairs.ToDictionary(p => p.Name, p => (p.Source, p.Target), StringComparer.OrdinalIgnoreCase),
+                    msg => _vm?.Run.AppendLog(msg));
+                _approvalModel.Resolved += () => _vm?.RefreshPendingApprovals();
+            }
 
             if (_approvalWindow is null)
             {
                 _approvalWindow = new ApprovalWindow();
-                _approvalWindow.Closed += (_, _) => _approvalWindow = null;
+                _approvalWindow.Closed += (_, _) =>
+                {
+                    _approvalWindow = null;
+                    _vm?.RefreshPendingApprovals();
+                };
             }
             _approvalWindow.DataContext = _approvalModel;
             _approvalModel.Load();

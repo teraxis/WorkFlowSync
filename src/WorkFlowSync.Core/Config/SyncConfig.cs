@@ -259,6 +259,12 @@ public sealed class FolderPair
     public bool UploadConvertedDocs { get; set; }
 
     /// <summary>
+    /// When true (default), native Google Meet recordings and Google Vids (.gvid) are downloaded
+    /// and converted via Google Drive API into standard .mp4 video files in the destination folder.
+    /// </summary>
+    public bool ConvertGoogleRecordings { get; set; } = true;
+
+    /// <summary>
     /// Cloud-only files (OneDrive Files On-Demand) when this pair has to copy one out: leave it alone
     /// (default) or download it. Only relevant in two-way mode — a mirror never reads its target.
     /// </summary>

@@ -49,12 +49,20 @@ public sealed class GoogleDriveTests
     [InlineData("form.gform", false)]
     [InlineData("site.gsite", false)]
     [InlineData("shortcut.gshortcut", false)]
-    [InlineData("recording.gvid", false)]
+    [InlineData("recording.gvid", true)]
     [InlineData("script.gscript", false)]
     [InlineData("file.txt", false)]
     public void CanExport_IdentifiesExportableDocuments(string path, bool expected)
     {
         Assert.Equal(expected, GoogleDrive.CanExport(path));
+    }
+
+    [Fact]
+    public void CanExport_RespectsConvertRecordingsParameter()
+    {
+        Assert.False(GoogleDrive.CanExport("recording.gvid", convertRecordings: false));
+        Assert.True(GoogleDrive.CanExport("recording.gvid", convertRecordings: true));
+        Assert.True(GoogleDrive.CanExport("doc.gdoc", convertRecordings: false));
     }
 
     [Fact]
@@ -65,13 +73,18 @@ public sealed class GoogleDriveTests
         Assert.Equal(@"data.xlsx", GoogleDrive.GetTargetRelativePath(@"data.gsheet", GoogleDocExportMode.Office));
         Assert.Equal(@"slides.pptx", GoogleDrive.GetTargetRelativePath(@"slides.gslides", GoogleDocExportMode.Office));
         Assert.Equal(@"diagram.png", GoogleDrive.GetTargetRelativePath(@"diagram.gdraw", GoogleDocExportMode.Office));
+        Assert.Equal(@"sub\rec.mp4", GoogleDrive.GetTargetRelativePath(@"sub\rec.gvid", GoogleDocExportMode.Office));
+        Assert.Equal(@"sub\rec.gvid", GoogleDrive.GetTargetRelativePath(@"sub\rec.gvid", GoogleDocExportMode.Office, convertRecordings: false));
 
         // Pdf mode
         Assert.Equal(@"sub\doc.pdf", GoogleDrive.GetTargetRelativePath(@"sub\doc.gdoc", GoogleDocExportMode.Pdf));
         Assert.Equal(@"data.pdf", GoogleDrive.GetTargetRelativePath(@"data.gsheet", GoogleDocExportMode.Pdf));
+        Assert.Equal(@"sub\rec.mp4", GoogleDrive.GetTargetRelativePath(@"sub\rec.gvid", GoogleDocExportMode.Pdf));
 
         // Skip mode
         Assert.Equal(@"sub\doc.gdoc", GoogleDrive.GetTargetRelativePath(@"sub\doc.gdoc", GoogleDocExportMode.Skip));
+        Assert.Equal(@"sub\rec.mp4", GoogleDrive.GetTargetRelativePath(@"sub\rec.gvid", GoogleDocExportMode.Skip));
+        Assert.Equal(@"sub\rec.gvid", GoogleDrive.GetTargetRelativePath(@"sub\rec.gvid", GoogleDocExportMode.Skip, convertRecordings: false));
 
         // Non-exportable types remain unchanged
         Assert.Equal(@"form.gform", GoogleDrive.GetTargetRelativePath(@"form.gform", GoogleDocExportMode.Office));
@@ -90,6 +103,8 @@ public sealed class GoogleDriveTests
             GoogleDrive.GetExportMimeType("drawing.gdraw", GoogleDocExportMode.Office));
         Assert.Equal("application/pdf",
             GoogleDrive.GetExportMimeType("doc.gdoc", GoogleDocExportMode.Pdf));
+        Assert.Equal("video/mp4",
+            GoogleDrive.GetExportMimeType("recording.gvid", GoogleDocExportMode.Office));
     }
 
     [Fact]
@@ -160,7 +175,7 @@ public sealed class GoogleDriveTests
     }
 
     [Fact]
-    public void SyncPlanner_SkipsGoogleVid_EvenInOfficeMode()
+    public void SyncPlanner_ExportsGoogleVid_WhenConvertRecordingsIsTrue()
     {
         var src = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
         {
@@ -170,7 +185,28 @@ public sealed class GoogleDriveTests
         var dst = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
         var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
 
-        var planner = new SyncPlanner("p", Now, backfillFirstSeen: false, googleDocExport: GoogleDocExportMode.Office);
+        var planner = new SyncPlanner("p", Now, backfillFirstSeen: false, googleDocExport: GoogleDocExportMode.Office, convertGoogleRecordings: true);
+        var plan = planner.Plan(src, dst, state);
+
+        Assert.Equal(2, plan.Actions.Count);
+        var vidAction = Assert.Single(plan.Actions, a => a.RelativePath == @"meeting\Recording.mp4");
+        Assert.Equal(SyncActionKind.CopyFile, vidAction.Kind);
+        Assert.Equal(@"meeting\Recording.gvid", vidAction.SourceRelativePath);
+        Assert.Equal(SyncSide.Target, vidAction.Side);
+    }
+
+    [Fact]
+    public void SyncPlanner_SkipsGoogleVid_WhenConvertRecordingsIsFalse()
+    {
+        var src = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"meeting\Recording.gvid"] = new ScanEntry { RelativePath = @"meeting\Recording.gvid", Kind = EntryKind.File, Size = 231, MtimeUtc = T1, CtimeUtc = T1 },
+            ["normal.txt"] = new ScanEntry { RelativePath = "normal.txt", Kind = EntryKind.File, Size = 100, MtimeUtc = T1, CtimeUtc = T1 }
+        };
+        var dst = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
+
+        var planner = new SyncPlanner("p", Now, backfillFirstSeen: false, googleDocExport: GoogleDocExportMode.Office, convertGoogleRecordings: false);
         var plan = planner.Plan(src, dst, state);
 
         var action = Assert.Single(plan.Actions);
@@ -253,6 +289,48 @@ public sealed class GoogleDriveTests
         Assert.Equal(SyncActionKind.CopyFile, sheetAction.Kind);
         Assert.Equal("sheet.gsheet", sheetAction.SourceRelativePath);
         Assert.Equal(SyncSide.Target, sheetAction.Side);
+    }
+
+    [Fact]
+    public void TwoWayPlanner_ExportsGoogleVid_WhenConvertRecordingsIsTrue()
+    {
+        var a = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"meeting\Recording.gvid"] = new ScanEntry { RelativePath = @"meeting\Recording.gvid", Kind = EntryKind.File, Size = 231, MtimeUtc = T1, CtimeUtc = T1 },
+            ["normal.txt"] = new ScanEntry { RelativePath = "normal.txt", Kind = EntryKind.File, Size = 100, MtimeUtc = T1, CtimeUtc = T1 }
+        };
+        var b = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
+
+        var planner = new TwoWayPlanner("p", Now, googleDocExport: GoogleDocExportMode.Office, convertGoogleRecordings: true);
+        var plan = planner.Plan(a, b, state);
+
+        Assert.Equal(2, plan.Actions.Count);
+        var vidAction = Assert.Single(plan.Actions, a => a.RelativePath == @"meeting\Recording.mp4");
+        Assert.Equal(SyncActionKind.CopyFile, vidAction.Kind);
+        Assert.Equal(@"meeting\Recording.gvid", vidAction.SourceRelativePath);
+        Assert.Equal(SyncSide.Target, vidAction.Side);
+    }
+
+    [Fact]
+    public void TwoWayPlanner_SkipsGoogleVid_WhenConvertRecordingsIsFalse()
+    {
+        var a = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"meeting\Recording.gvid"] = new ScanEntry { RelativePath = @"meeting\Recording.gvid", Kind = EntryKind.File, Size = 231, MtimeUtc = T1, CtimeUtc = T1 },
+            ["normal.txt"] = new ScanEntry { RelativePath = "normal.txt", Kind = EntryKind.File, Size = 100, MtimeUtc = T1, CtimeUtc = T1 }
+        };
+        var b = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
+
+        var planner = new TwoWayPlanner("p", Now, googleDocExport: GoogleDocExportMode.Office, convertGoogleRecordings: false);
+        var plan = planner.Plan(a, b, state);
+
+        var action = Assert.Single(plan.Actions);
+        Assert.Equal("normal.txt", action.RelativePath);
+
+        Assert.Contains(plan.Warnings, w => w.Contains(@"meeting\Recording.gvid") && w.Contains("native Google document"));
+        Assert.DoesNotContain(plan.Actions, a => a.RelativePath.Contains("Recording.gvid"));
     }
 
     [Fact]

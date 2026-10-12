@@ -170,8 +170,31 @@
             <Panel Margin="16,0,16,16">
 
                 <!-- ────────────────────────── page: folders ────────────────────────── -->
-                <Panel IsVisible="{Binding IsFoldersPage}">
-                    <ListBox Classes="rows" ItemsSource="{Binding VisiblePairs}" SelectedItem="{Binding SelectedPair}"
+                <DockPanel IsVisible="{Binding IsFoldersPage}">
+
+                    <!-- Pending Approvals Banner -->
+                    <Border DockPanel.Dock="Top" Margin="0,0,0,14" Padding="14,10" CornerRadius="{DynamicResource RadiusMd}"
+                            Background="{DynamicResource WarningSoft}" BorderBrush="{DynamicResource Warning}" BorderThickness="1"
+                            IsVisible="{Binding HasPendingApprovals}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                            <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8"
+                                    Background="{DynamicResource Warning}" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <Path Classes="ico" Data="{StaticResource IconShield}" Width="18" Height="18"
+                                      Stroke="#0F141C" StrokeThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="{Binding PendingApprovalsBannerTitle}" FontWeight="Bold" FontSize="13.5"
+                                           Foreground="{DynamicResource TextPrimary}" />
+                                <TextBlock Text="{Binding PendingApprovalsBannerSubtitle}" FontSize="12"
+                                           Foreground="{DynamicResource TextMuted}" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Classes="primary" Click="OnOpenApproval" VerticalAlignment="Center"
+                                    Content="{loc:Loc approval.open_button}" Padding="14,7" />
+                        </Grid>
+                    </Border>
+
+                    <Panel>
+                        <ListBox Classes="rows" ItemsSource="{Binding VisiblePairs}" SelectedItem="{Binding SelectedPair}"
                              Padding="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -428,6 +451,17 @@
                                                               Stroke="{DynamicResource Danger}" StrokeThickness="2"
                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
+
+                                                    <!-- Awaiting approval indicator -->
+                                                    <Border Width="48" Height="48" CornerRadius="24"
+                                                            BorderBrush="{DynamicResource Warning}" BorderThickness="2"
+                                                            Background="Transparent"
+                                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                            IsVisible="{Binding HasPendingApprovals}">
+                                                        <Path Classes="ico" Data="{StaticResource IconShield}" Width="20" Height="20"
+                                                              Stroke="{DynamicResource Warning}" StrokeThickness="2"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    </Border>
                                                 </Panel>
 
                                                 <!-- Status Title & Subtext -->
@@ -437,6 +471,7 @@
                                                                Classes.busy="{Binding IsBusy}"
                                                                Classes.paused="{Binding IsPaused}"
                                                                Classes.error="{Binding HasError}"
+                                                               Classes.warning="{Binding HasPendingApprovals}"
                                                                Text="{Binding SyncStatusTitle}" />
                                                     <TextBlock Text="{Binding SyncStatusSubtext}" FontSize="11"
                                                                Foreground="{DynamicResource TextMuted}"
@@ -444,8 +479,20 @@
                                                                MaxWidth="160" Classes="oneline" />
                                                 </StackPanel>
 
-                                                <!-- Action Button: Sync now OR View details -->
-                                                <Panel Margin="0,4,0,0">
+                                                <!-- Action Button: Approve OR Sync now OR View details -->
+                                                <StackPanel Margin="0,4,0,0" Spacing="4">
+                                                    <!-- Approve button when pending changes exist -->
+                                                    <Button Classes="primary" Click="OnOpenApproval"
+                                                            CornerRadius="8" Padding="12,6" MinHeight="30"
+                                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                                            IsVisible="{Binding HasPendingApprovals}">
+                                                        <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center">
+                                                            <Path Classes="ico" Data="{StaticResource IconShield}" Width="13" Height="13"
+                                                                  Stroke="#0F141C" StrokeThickness="2" VerticalAlignment="Center" />
+                                                            <TextBlock Text="{loc:Loc approval.open_button}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </Button>
+
                                                     <!-- Sync now button (when not busy) -->
                                                     <Button Classes="accentsoft" Click="OnRunPair"
                                                             CornerRadius="8" Padding="14,7" MinHeight="32"
@@ -471,7 +518,7 @@
                                                                        Foreground="{DynamicResource AccentText}" />
                                                         </StackPanel>
                                                     </Button>
-                                                </Panel>
+                                                </StackPanel>
                                             </StackPanel>
                                         </Grid>
                                     </Grid>
@@ -515,6 +562,7 @@
                         </StackPanel>
                     </Border>
                 </Panel>
+            </DockPanel>
 
                 <!-- ────────────────────────── page: activity ────────────────────────── -->
                 <Panel IsVisible="{Binding IsActivityPage}" Margin="0,0,12,0">

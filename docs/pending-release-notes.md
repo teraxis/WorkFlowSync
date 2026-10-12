@@ -6,7 +6,7 @@ commits, or agent attribution.
 
 ## Added
 
-<!-- Add features here for the next release -->
+<!-- Add additions here for the next release -->
 
 ## Changed
 
@@ -14,7 +14,7 @@ commits, or agent attribution.
 
 ## Fixed
 
-<!-- Add bug fixes here for the next release -->
+<!-- Add fixes here for the next release -->
 
 ## Removed
 

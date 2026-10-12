@@ -23,9 +23,10 @@ public static class NotificationPolicy
     /// <param name="errors">Failures the pass logged.</param>
     /// <param name="heldBack">Removals a safeguard refused to carry out — always worth saying.</param>
     /// <param name="localNow">The user's wall clock, for the quiet-hours check.</param>
-    public static Notification? ForPass(SyncConfig config, int added, int errors, int heldBack, DateTimeOffset localNow)
+    /// <param name="awaitingApproval">Changes observed in moderated folders that require human decision.</param>
+    public static Notification? ForPass(SyncConfig config, int added, int errors, int heldBack, DateTimeOffset localNow, int awaitingApproval = 0)
     {
-        if (config.Notifications == NotifyMode.Off) return null;
+        if (config.Notifications == NotifyMode.Off && awaitingApproval == 0) return null;
 
         if (errors > 0)
             return new Notification("WorkFlowSync", Plural(errors,
@@ -36,6 +37,12 @@ public static class NotificationPolicy
             return new Notification("WorkFlowSync",
                 $"Видалення ({heldBack}) не перенесено: схоже на збій доступу, а не на ваші дії. Перевірка повториться.",
                 IsProblem: true);
+
+        if (awaitingApproval > 0)
+            return new Notification("WorkFlowSync", Plural(awaitingApproval,
+                "Виявлено зміну, яка потребує погодження. Натисніть для перегляду.",
+                "Виявлено {0} зміни, які потребують погодження. Натисніть для перегляду.",
+                "Виявлено {0} змін, які потребують погодження. Натисніть для перегляду."), IsProblem: false);
 
         if (config.Notifications == NotifyMode.ErrorsOnly) return null;
         if (added <= 0) return null;                       // a pass that changed nothing has nothing to say
@@ -61,7 +68,7 @@ public static class NotificationPolicy
     private static int Normalise(int hour) => hour is >= 0 and <= 23 ? hour : 0;
 
     /// <summary>Ukrainian counts need three forms: 1 файл, 2 файли, 5 файлів.</summary>
-    internal static string Plural(int count, string one, string few, string many)
+    public static string Plural(int count, string one, string few, string many)
     {
         var mod100 = count % 100;
         var mod10 = count % 10;

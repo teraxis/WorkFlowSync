@@ -60,6 +60,9 @@ public sealed partial class PairViewModel : ObservableObject
     /// <summary>Export mode for native Google web documents (.gdoc, .gsheet, etc.) into destination.</summary>
     [ObservableProperty] private GoogleDocExportMode _googleDocExport = GoogleDocExportMode.Office;
 
+    /// <summary>Convert native Google Meet and Google Vids recordings (.gvid) to MP4.</summary>
+    [ObservableProperty] private bool _convertGoogleRecordings = true;
+
     /// <summary>Sync/upload locally modified converted documents back to Google Drive.</summary>
     [ObservableProperty] private bool _uploadConvertedDocs;
 
@@ -127,6 +130,16 @@ public sealed partial class PairViewModel : ObservableObject
     [ObservableProperty] private DateTimeOffset? _lastSyncTime;
     [ObservableProperty] private int _lastSyncFilesCount;
     [ObservableProperty] private int _lastSyncErrors;
+    [ObservableProperty] private int _pendingApprovalsCount;
+    public bool HasPendingApprovals => PendingApprovalsCount > 0;
+
+    partial void OnPendingApprovalsCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasPendingApprovals));
+        OnPropertyChanged(nameof(IsUpToDate));
+        OnPropertyChanged(nameof(SyncStatusTitle));
+        OnPropertyChanged(nameof(SyncStatusSubtext));
+    }
 
     public string FolderName
     {
@@ -143,7 +156,7 @@ public sealed partial class PairViewModel : ObservableObject
 
     public bool IsPaused => !Enabled;
     public bool IsActiveAndIdle => Enabled && !IsBusy;
-    public bool IsUpToDate => Enabled && !IsBusy && LastSyncTime is not null && LastSyncErrors == 0;
+    public bool IsUpToDate => Enabled && !IsBusy && !HasPendingApprovals && LastSyncTime is not null && LastSyncErrors == 0;
     public bool HasError => Enabled && !IsBusy && LastSyncErrors > 0;
 
     public string StatusBadgeText => IsBusy
@@ -160,6 +173,7 @@ public sealed partial class PairViewModel : ObservableObject
         {
             if (IsBusy) return I18n.T("tasks.status_syncing");
             if (!Enabled) return I18n.T("tasks.status_paused");
+            if (HasPendingApprovals) return I18n.T("tasks.status_pending_approval");
             if (LastSyncErrors > 0) return I18n.T("tasks.status_error");
             if (LastSyncTime is null) return I18n.T("tasks.status_not_synced");
             return I18n.T("tasks.status_up_to_date");
@@ -177,6 +191,13 @@ public sealed partial class PairViewModel : ObservableObject
                     : I18n.T("tasks.status_processing");
             }
             if (!Enabled) return I18n.T("tasks.status_auto_disabled");
+            if (HasPendingApprovals)
+            {
+                return WorkFlowSync.Core.Notifications.NotificationPolicy.Plural(PendingApprovalsCount,
+                    "Потрібне підтвердження 1 зміни",
+                    "Потрібне підтвердження {0} змін",
+                    "Потрібне підтвердження {0} змін");
+            }
             if (LastSyncTime is null) return I18n.T("tasks.status_never_synced");
             return I18n.T("tasks.last_sync_prefix", LastSyncSummary);
         }
@@ -385,11 +406,23 @@ public sealed partial class PairViewModel : ObservableObject
             if (DiskQuotaEnabled) parts.Add(I18n.T("pair.facts_disk_quota", MinFreeSpaceGb));
             if (FreeUpSpaceAfterCopy) parts.Add(I18n.T("pair.facts_cloud_offload"));
             if (RotateOnLowSpace) parts.Add(I18n.T("pair.facts_rotation"));
-            if (GoogleDocExportApplies && GoogleDocExport != GoogleDocExportMode.Skip)
+            if (GoogleDocExportApplies)
             {
-                var exportFact = GoogleDocExportSummary;
-                if (!IsMirror && UploadConvertedDocs) exportFact += $" + {I18n.T("pair.facts_upload_converted")}";
-                parts.Add(I18n.T("pair.facts_gdoc_export", exportFact));
+                var exportParts = new List<string>();
+                if (GoogleDocExport != GoogleDocExportMode.Skip)
+                {
+                    var exportFact = GoogleDocExportSummary;
+                    if (!IsMirror && UploadConvertedDocs) exportFact += $" + {I18n.T("pair.facts_upload_converted")}";
+                    exportParts.Add(exportFact);
+                }
+                if (ConvertGoogleRecordings)
+                {
+                    exportParts.Add("MP4");
+                }
+                if (exportParts.Count > 0)
+                {
+                    parts.Add(I18n.T("pair.facts_gdoc_export", string.Join(" + ", exportParts)));
+                }
             }
             if (ExcludeCount > 0) parts.Add(I18n.T("pair.facts_excludes", ExcludeCount));
             // Auto is the default and needs no explanation; the other two are choices worth showing.
@@ -440,6 +473,7 @@ public sealed partial class PairViewModel : ObservableObject
         VersionsKeepDays = p.VersionsKeepDays < 1 ? 30 : p.VersionsKeepDays,
         VersionsMaxGb = p.VersionsMaxGb < 1 ? 5 : p.VersionsMaxGb,
         GoogleDocExport = p.GoogleDocExport,
+        ConvertGoogleRecordings = p.ConvertGoogleRecordings,
         UploadConvertedDocs = p.UploadConvertedDocs,
         SourceAccountId = p.SourceAccountId,
         SourceFolderId = p.SourceFolderId,
@@ -475,6 +509,7 @@ public sealed partial class PairViewModel : ObservableObject
         VersionsKeepDays = Math.Clamp(VersionsKeepDays, 1, 3650),
         VersionsMaxGb = Math.Clamp(VersionsMaxGb, 1, 1000),
         GoogleDocExport = GoogleDocExport,
+        ConvertGoogleRecordings = ConvertGoogleRecordings,
         UploadConvertedDocs = UploadConvertedDocs,
     };
 
@@ -509,6 +544,7 @@ public sealed partial class PairViewModel : ObservableObject
         VersionsKeepDays = other.VersionsKeepDays;
         VersionsMaxGb = other.VersionsMaxGb;
         GoogleDocExport = other.GoogleDocExport;
+        ConvertGoogleRecordings = other.ConvertGoogleRecordings;
         UploadConvertedDocs = other.UploadConvertedDocs;
         RaiseSummaries();
     }
@@ -638,6 +674,8 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(CanUploadConvertedDocs));
         OnPropertyChanged(nameof(SyncConvertedDocsHint));
     }
+
+    partial void OnConvertGoogleRecordingsChanged(bool value) => RaiseFacts(nameof(Facts));
 
     partial void OnUploadConvertedDocsChanged(bool value) => RaiseFacts(nameof(Facts));
 

@@ -21,7 +21,9 @@ public sealed class TwoWayPlanner
     private readonly PlanScope? _scope;
     private readonly FrozenPaths? _frozenPaths;
     private readonly WorkFlowSync.Core.Config.GoogleDocExportMode _googleDocExport;
+    private readonly bool _convertGoogleRecordings;
     private readonly bool _uploadConvertedDocs;
+    private readonly bool _requireApproval;
 
     /// <param name="scope">
     /// Limits the pass to one directory. Deletions do not travel in a scoped pass: they are inferred from
@@ -34,26 +36,36 @@ public sealed class TwoWayPlanner
     /// Export mode for native Google web documents (.gdoc, .gsheet, etc.): Office, Pdf, or Skip.
     /// Converted files strictly travel towards destination (Side B); reverse sync to Side A is suppressed unless <paramref name="uploadConvertedDocs"/> is true.
     /// </param>
+    /// <param name="convertGoogleRecordings">
+    /// Whether to convert native Google recordings (.gvid) to MP4.
+    /// </param>
     /// <param name="uploadConvertedDocs">
     /// When true, locally modified converted documents are uploaded to Google Drive as regular binary files.
     /// </param>
+    /// <param name="requireApproval">
+    /// When true, changes in the moderated folder (Side B) are placed in the pending approval queue rather than copied automatically to Side A.
+    /// </param>
     public TwoWayPlanner(string pair, DateTimeOffset now, PlanScope? scope = null, FrozenPaths? frozenPaths = null,
         WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office,
-        bool uploadConvertedDocs = false)
+        bool convertGoogleRecordings = true,
+        bool uploadConvertedDocs = false,
+        bool requireApproval = false)
     {
         _pair = pair;
         _now = now;
         _scope = scope;
         _frozenPaths = frozenPaths;
         _googleDocExport = googleDocExport;
+        _convertGoogleRecordings = convertGoogleRecordings;
         _uploadConvertedDocs = uploadConvertedDocs;
+        _requireApproval = requireApproval;
     }
 
     public SyncPlan Plan(IReadOnlyDictionary<string, ScanEntry> a, IReadOnlyDictionary<string, ScanEntry> b,
         IReadOnlyDictionary<string, StateEntry> state)
     {
         var plan = new SyncPlan();
-        var mappedA = GoogleDrive.MapGoogleDocsForExport(a, _googleDocExport, out var targetToSourceMap);
+        var mappedA = GoogleDrive.MapGoogleDocsForExport(a, _googleDocExport, _convertGoogleRecordings, out var targetToSourceMap);
         var deletions = new List<SyncAction>();
 
         var all = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -62,11 +74,74 @@ public sealed class TwoWayPlanner
         all.UnionWith(state.Keys);
         if (_scope is { } scope) all.RemoveWhere(p => !scope.Contains(p));
 
+        var matchedMoves = new Dictionary<string, MoveMatch>(StringComparer.OrdinalIgnoreCase);
+        var matchedOldPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (_requireApproval)
+        {
+            var missingInB = new List<ScanEntry>();
+            var appearedInB = new List<ScanEntry>();
+
+            foreach (var path in all)
+            {
+                if (_frozenPaths is not null && _frozenPaths.IsFrozen(path)) continue;
+                if (GoogleDrive.IsGoogleDoc(path)) continue;
+
+                mappedA.TryGetValue(path, out var sa);
+                b.TryGetValue(path, out var sb);
+                state.TryGetValue(path, out var db);
+
+                if (db?.Status == EntryStatus.Tombstone) continue;
+
+                if (sb is null && sa is not null && db is not null && !Changed(sa, db, true))
+                {
+                    missingInB.Add(sa);
+                }
+                else if (sb is not null && sa is null && db is null)
+                {
+                    appearedInB.Add(sb);
+                }
+            }
+
+            var (matches, _, _) = MoveDetector.Detect(missingInB, appearedInB);
+            foreach (var m in matches)
+            {
+                matchedMoves[m.NewItem.RelativePath] = m;
+                matchedOldPaths.Add(m.OldItem.RelativePath);
+            }
+        }
+
         // Parents before children, so a folder exists before its content is copied into it.
         foreach (var path in all.OrderBy(Depth).ThenBy(p => p, StringComparer.OrdinalIgnoreCase))
         {
             if (_frozenPaths is not null && _frozenPaths.IsFrozen(path))
             {
+                plan.Stats.AwaitingApproval++;
+                continue;
+            }
+
+            if (matchedOldPaths.Contains(path))
+            {
+                plan.Stats.AwaitingApproval++;
+                continue;
+            }
+
+            if (matchedMoves.TryGetValue(path, out var moveMatch))
+            {
+                plan.PendingUpdates.Add(new PendingEntry
+                {
+                    Pair = _pair,
+                    Path = moveMatch.NewItem.RelativePath,
+                    FromPath = moveMatch.OldItem.RelativePath,
+                    Change = moveMatch.ChangeType,
+                    Kind = moveMatch.NewItem.Kind,
+                    SrcSize = moveMatch.OldItem.Kind == EntryKind.File ? moveMatch.OldItem.Size : null,
+                    SrcMtimeUtc = moveMatch.OldItem.MtimeUtc,
+                    DstSize = moveMatch.NewItem.Kind == EntryKind.File ? moveMatch.NewItem.Size : null,
+                    DstMtimeUtc = moveMatch.NewItem.MtimeUtc,
+                    DetectedUtc = _now,
+                    Status = PendingStatus.Pending,
+                });
                 plan.Stats.AwaitingApproval++;
                 continue;
             }
@@ -86,6 +161,26 @@ public sealed class TwoWayPlanner
             // Rotation is target-only even in two-way mode. Its tombstone is a final suppression marker:
             // do not restore the target from A and, crucially, do not propagate the target removal to A.
             if (db?.Status == EntryStatus.Tombstone) continue;
+
+            if (db?.Status == EntryStatus.LocalOnly)
+            {
+                if (sb is not null && SyncPlanner.Same(sb, db.CopiedSize, db.CopiedMtimeUtc))
+                {
+                    plan.Stats.Unchanged++;
+                    continue;
+                }
+            }
+
+            if (db?.Status == EntryStatus.Diverged)
+            {
+                var bSame = sb is not null && SyncPlanner.Same(sb, db.CopiedSize, db.CopiedMtimeUtc);
+                var aSame = sa is not null && SyncPlanner.Same(sa, db.SourceSize, db.SourceMtimeUtc);
+                if (aSame && bSame)
+                {
+                    plan.Stats.Unchanged++;
+                    continue;
+                }
+            }
 
             if (sa is null && sb is null)
             {
@@ -111,6 +206,23 @@ public sealed class TwoWayPlanner
 
             if (db is null)
             {
+                if (_requireApproval && missingSide == SyncSide.Source)
+                {
+                    plan.PendingUpdates.Add(new PendingEntry
+                    {
+                        Pair = _pair,
+                        Path = path,
+                        Change = PendingChange.Added,
+                        Kind = sb!.Kind,
+                        DstSize = sb.Kind == EntryKind.File ? sb.Size : null,
+                        DstMtimeUtc = sb.MtimeUtc,
+                        DetectedUtc = _now,
+                        Status = PendingStatus.Pending,
+                    });
+                    plan.Stats.AwaitingApproval++;
+                    continue;
+                }
+
                 if (sourceDocPath is not null && missingSide == SyncSide.Source)
                 {
                     if (!_uploadConvertedDocs)
@@ -127,6 +239,27 @@ public sealed class TwoWayPlanner
 
             if (Changed(present, db, sa is not null))
             {
+                if (_requireApproval && missingSide == SyncSide.Source)
+                {
+                    plan.Warnings.Add($"{path}: deleted on source, changed on target; requires approval");
+                    plan.Stats.Conflicts++;
+                    plan.Stats.AwaitingApproval++;
+                    plan.PendingUpdates.Add(new PendingEntry
+                    {
+                        Pair = _pair,
+                        Path = path,
+                        Change = PendingChange.Conflict,
+                        Kind = sb!.Kind,
+                        SrcSize = db.SourceSize,
+                        SrcMtimeUtc = db.SourceMtimeUtc,
+                        DstSize = sb.Kind == EntryKind.File ? sb.Size : null,
+                        DstMtimeUtc = sb.MtimeUtc,
+                        DetectedUtc = _now,
+                        Status = PendingStatus.Pending,
+                    });
+                    continue;
+                }
+
                 if (sourceDocPath is not null && missingSide == SyncSide.Source)
                 {
                     if (!_uploadConvertedDocs)
@@ -153,6 +286,24 @@ public sealed class TwoWayPlanner
             }
 
             var side = sa is null ? SyncSide.Target : SyncSide.Source;   // where the surviving copy lives
+
+            if (_requireApproval && side == SyncSide.Source)
+            {
+                plan.PendingUpdates.Add(new PendingEntry
+                {
+                    Pair = _pair,
+                    Path = path,
+                    Change = PendingChange.Deleted,
+                    Kind = sa!.Kind,
+                    SrcSize = sa.Kind == EntryKind.File ? sa.Size : null,
+                    SrcMtimeUtc = sa.MtimeUtc,
+                    DetectedUtc = _now,
+                    Status = PendingStatus.Pending,
+                });
+                plan.Stats.AwaitingApproval++;
+                continue;
+            }
+
             if (side == SyncSide.Source && sourceDocPath is not null)
             {
                 plan.Warnings.Add($"{path}: deletion of Google Doc on Google Drive because of destination deletion is suppressed (destination-only export)");
@@ -193,6 +344,69 @@ public sealed class TwoWayPlanner
             else if (aChanged || bChanged) plan.StateUpdates.Add(Row(sa, sb, db));
             else plan.Stats.Unchanged++;
             return;
+        }
+
+        if (_requireApproval)
+        {
+            if (db is not null && aChanged && bChanged)
+            {
+                plan.Warnings.Add($"{path}: changed on both sides; requires approval (conflict)");
+                plan.Stats.Conflicts++;
+                plan.Stats.AwaitingApproval++;
+                plan.PendingUpdates.Add(new PendingEntry
+                {
+                    Pair = _pair,
+                    Path = path,
+                    Change = PendingChange.Conflict,
+                    Kind = sb.Kind,
+                    SrcSize = sa.Kind == EntryKind.File ? sa.Size : null,
+                    SrcMtimeUtc = sa.MtimeUtc,
+                    DstSize = sb.Kind == EntryKind.File ? sb.Size : null,
+                    DstMtimeUtc = sb.MtimeUtc,
+                    DetectedUtc = _now,
+                    Status = PendingStatus.Pending
+                });
+                return;
+            }
+
+            if (bChanged && !aChanged)
+            {
+                plan.Stats.AwaitingApproval++;
+                plan.PendingUpdates.Add(new PendingEntry
+                {
+                    Pair = _pair,
+                    Path = path,
+                    Change = PendingChange.Modified,
+                    Kind = sb.Kind,
+                    SrcSize = sa.Kind == EntryKind.File ? sa.Size : null,
+                    SrcMtimeUtc = sa.MtimeUtc,
+                    DstSize = sb.Kind == EntryKind.File ? sb.Size : null,
+                    DstMtimeUtc = sb.MtimeUtc,
+                    DetectedUtc = _now,
+                    Status = PendingStatus.Pending
+                });
+                return;
+            }
+
+            if (db is null)
+            {
+                plan.Stats.Conflicts++;
+                plan.Stats.AwaitingApproval++;
+                plan.PendingUpdates.Add(new PendingEntry
+                {
+                    Pair = _pair,
+                    Path = path,
+                    Change = PendingChange.Conflict,
+                    Kind = sb.Kind,
+                    SrcSize = sa.Kind == EntryKind.File ? sa.Size : null,
+                    SrcMtimeUtc = sa.MtimeUtc,
+                    DstSize = sb.Kind == EntryKind.File ? sb.Size : null,
+                    DstMtimeUtc = sb.MtimeUtc,
+                    DetectedUtc = _now,
+                    Status = PendingStatus.Pending
+                });
+                return;
+            }
         }
 
         if (db is not null && aChanged && bChanged)

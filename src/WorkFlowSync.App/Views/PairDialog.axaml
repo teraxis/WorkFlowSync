@@ -201,6 +201,13 @@
                         </Grid>
 
                         <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto" IsVisible="{Binding GoogleDocExportApplies}">
+                            <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding ConvertGoogleRecordings}"
+                                      Content="{loc:Loc pair.convert_google_recordings_checkbox}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
+                                       Text="{loc:Loc pair.convert_google_recordings_hint}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto" IsVisible="{Binding GoogleDocExportApplies}">
                             <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding UploadConvertedDocs}"
                                       IsEnabled="{Binding CanUploadConvertedDocs}" Content="{loc:Loc pair.sync_converted_docs_checkbox}" />
                             <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"

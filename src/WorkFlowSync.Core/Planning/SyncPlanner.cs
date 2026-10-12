@@ -19,6 +19,7 @@ public sealed class SyncPlanner
     private readonly TimeSpan? _autoClean;
     private readonly PlanScope? _scope;
     private readonly WorkFlowSync.Core.Config.GoogleDocExportMode _googleDocExport;
+    private readonly bool _convertGoogleRecordings;
 
     /// <param name="backfillFirstSeen">First pass: use min(ctime, mtime) of the source item as first_seen (docs F3).</param>
     /// <param name="maxAge">
@@ -33,9 +34,13 @@ public sealed class SyncPlanner
     /// <param name="googleDocExport">
     /// Export mode for native Google web documents (.gdoc, .gsheet, etc.): Office, Pdf, or Skip.
     /// </param>
+    /// <param name="convertGoogleRecordings">
+    /// Whether to convert native Google recordings (.gvid) to MP4.
+    /// </param>
     public SyncPlanner(string pair, DateTimeOffset now, bool backfillFirstSeen, TimeSpan? maxAge = null,
         TimeSpan? autoClean = null, PlanScope? scope = null,
-        WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office)
+        WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office,
+        bool convertGoogleRecordings = true)
     {
         _pair = pair;
         _now = now;
@@ -44,6 +49,7 @@ public sealed class SyncPlanner
         _autoClean = autoClean;
         _scope = scope;
         _googleDocExport = googleDocExport;
+        _convertGoogleRecordings = convertGoogleRecordings;
     }
 
     /// <summary>True while planning only part of the tree; destructive rules are off.</summary>
@@ -53,7 +59,7 @@ public sealed class SyncPlanner
         IReadOnlyDictionary<string, StateEntry> state)
     {
         var plan = new SyncPlan();
-        var mappedSource = GoogleDrive.MapGoogleDocsForExport(source, _googleDocExport, out var targetToSourceMap);
+        var mappedSource = GoogleDrive.MapGoogleDocsForExport(source, _googleDocExport, _convertGoogleRecordings, out var targetToSourceMap);
         var tombstoneDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var e in state.Values)
             if (e.Kind == EntryKind.Directory && e.Status == EntryStatus.Tombstone)
