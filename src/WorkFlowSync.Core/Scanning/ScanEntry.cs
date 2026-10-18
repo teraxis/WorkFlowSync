@@ -20,6 +20,9 @@ public sealed record ScanEntry
 
     /// <summary>Reached through a followed symlink/junction.</summary>
     public bool ViaLink { get; init; }
+
+    /// <summary>Raw file-system attributes observed during directory enumeration.</summary>
+    public FileAttributes Attributes { get; init; }
 }
 
 /// <summary>Result of scanning one root.</summary>

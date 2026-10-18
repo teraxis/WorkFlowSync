@@ -18,6 +18,8 @@ public enum SyncActionKind
     DeleteFile,
     /// <summary>Two-way: the directory is gone on the other side — move it to the Recycle Bin and forget the row.</summary>
     DeleteDirectory,
+    /// <summary>Cloud offload: request online-only (Files On-Demand dehydration) for a verified source file.</summary>
+    FreeUpSourceFile,
 }
 
 /// <summary>Which of the pair's two roots an action writes to. Mirror mode only ever writes to the target.</summary>
@@ -60,14 +62,13 @@ public sealed class PlanStats
     /// <summary>Two-way: items frozen awaiting human approval in the pending queue.</summary>
     public int AwaitingApproval { get; set; }
 
-    /// <summary>
-    /// Destructive decisions a scoped pass declined to make (tombstone, delete, expire). They are not lost:
-    /// the next full pass sees the same situation with the whole tree in front of it.
-    /// </summary>
     public int DeferredToFullPass { get; set; }
 
+    /// <summary>Source files already intact in target that were queued to free up space (online-only).</summary>
+    public int SourceFreed { get; set; }
+
     public override string ToString() =>
-        $"new={New} update={Updated} adopt={Adopted} tombstone={Tombstoned} local_modified={LocalModified} unchanged={Unchanged} local_only={IgnoredLocalOnly} expired={Expired} empty_dirs={EmptyDirs}{(TooOld > 0 ? $" too_old={TooOld}" : "")}{(Deleted > 0 || Conflicts > 0 ? $" deleted={Deleted} conflicts={Conflicts}" : "")}{(AwaitingApproval > 0 ? $" awaiting_approval={AwaitingApproval}" : "")}{(DeferredToFullPass > 0 ? $" deferred={DeferredToFullPass}" : "")} bytes={BytesToCopy}";
+        $"new={New} update={Updated} adopt={Adopted} tombstone={Tombstoned} local_modified={LocalModified} unchanged={Unchanged} local_only={IgnoredLocalOnly} expired={Expired} empty_dirs={EmptyDirs}{(TooOld > 0 ? $" too_old={TooOld}" : "")}{(Deleted > 0 || Conflicts > 0 ? $" deleted={Deleted} conflicts={Conflicts}" : "")}{(AwaitingApproval > 0 ? $" awaiting_approval={AwaitingApproval}" : "")}{(DeferredToFullPass > 0 ? $" deferred={DeferredToFullPass}" : "")}{(SourceFreed > 0 ? $" source_freed={SourceFreed}" : "")} bytes={BytesToCopy}";
 }
 
 public sealed class SyncPlan

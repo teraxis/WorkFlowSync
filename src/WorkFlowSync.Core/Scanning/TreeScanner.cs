@@ -155,6 +155,7 @@ public sealed class TreeScanner
                 Kind = EntryKind.Directory,
                 MtimeUtc = new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero),
                 CtimeUtc = new DateTimeOffset(info.CreationTimeUtc, TimeSpan.Zero),
+                Attributes = info.Attributes,
             };
             dirs++;
         }
@@ -199,7 +200,7 @@ public sealed class TreeScanner
 
             if (!r.IsDirectory)
             {
-                local.Add(new ScanEntry { RelativePath = rel, Kind = EntryKind.File, Size = r.Length, MtimeUtc = r.Mtime, CtimeUtc = r.Ctime, ViaLink = item.ViaLink });
+                local.Add(new ScanEntry { RelativePath = rel, Kind = EntryKind.File, Size = r.Length, MtimeUtc = r.Mtime, CtimeUtc = r.Ctime, ViaLink = item.ViaLink, Attributes = r.Attributes });
                 Interlocked.Increment(ref files);
                 continue;
             }
@@ -238,7 +239,7 @@ public sealed class TreeScanner
                 }
             }
 
-            local.Add(new ScanEntry { RelativePath = rel, Kind = EntryKind.Directory, MtimeUtc = r.Mtime, CtimeUtc = r.Ctime, ViaLink = viaLink });
+            local.Add(new ScanEntry { RelativePath = rel, Kind = EntryKind.Directory, MtimeUtc = r.Mtime, CtimeUtc = r.Ctime, ViaLink = viaLink, Attributes = r.Attributes });
             Interlocked.Increment(ref dirs);
             Interlocked.Increment(ref pending);
             // Enumerate through the logical path so children keep logical relative paths.

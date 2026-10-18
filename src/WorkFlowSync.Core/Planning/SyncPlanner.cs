@@ -23,6 +23,7 @@ public sealed class SyncPlanner
     private readonly PlanScope? _scope;
     private readonly WorkFlowSync.Core.Config.GoogleDocExportMode _googleDocExport;
     private readonly bool _convertGoogleRecordings;
+    private readonly bool _freeUpSourceSpaceAfterCopy;
 
     /// <param name="backfillFirstSeen">First pass: use min(ctime, mtime) of the source item as first_seen (docs F3).</param>
     /// <param name="maxAge">
@@ -47,7 +48,8 @@ public sealed class SyncPlanner
         TimeSpan? autoClean = null, int? keepLatestFiles = null, bool cleanExistingFiles = true,
         DateTimeOffset? cleanupFromUtc = null, PlanScope? scope = null,
         WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office,
-        bool convertGoogleRecordings = true)
+        bool convertGoogleRecordings = true,
+        bool freeUpSourceSpaceAfterCopy = false)
     {
         _pair = pair;
         _now = now;
@@ -60,6 +62,7 @@ public sealed class SyncPlanner
         _scope = scope;
         _googleDocExport = googleDocExport;
         _convertGoogleRecordings = convertGoogleRecordings;
+        _freeUpSourceSpaceAfterCopy = freeUpSourceSpaceAfterCopy;
     }
 
     /// <summary>True while planning only part of the tree; destructive rules are off.</summary>
@@ -194,6 +197,11 @@ public sealed class SyncPlanner
                         break;
                     }
                     plan.Stats.Unchanged++;
+                    if (_freeUpSourceSpaceAfterCopy && db.Kind == EntryKind.File && ShouldFreeUpSource(s))
+                    {
+                        plan.Actions.Add(new SyncAction(SyncActionKind.FreeUpSourceFile, path, db, SyncSide.Target, sourceRel));
+                        plan.Stats.SourceFreed++;
+                    }
                     break;
             }
         }
@@ -421,8 +429,22 @@ public sealed class SyncPlanner
         else
         {
             plan.Stats.Adopted++;
+            if (_freeUpSourceSpaceAfterCopy && s.Kind == EntryKind.File && ShouldFreeUpSource(s))
+            {
+                plan.Actions.Add(new SyncAction(SyncActionKind.FreeUpSourceFile, s.RelativePath, entry, SyncSide.Target));
+                plan.Stats.SourceFreed++;
+            }
         }
         plan.StateUpdates.Add(entry);
+    }
+
+    /// <summary>Checks whether a source file is still taking up local disk space and can be requested online-only.</summary>
+    public static bool ShouldFreeUpSource(ScanEntry s)
+    {
+        if (s.Kind != EntryKind.File) return false;
+        if ((s.Attributes & CloudFiles.Pinned) != 0) return false;
+        if (CloudFiles.IsPlaceholder(s.Attributes) || (s.Attributes & CloudFiles.Unpinned) != 0) return false;
+        return true;
     }
 
     private void Tombstone(SyncPlan plan, StateEntry db, HashSet<string> tombstoneDirs, string reason)

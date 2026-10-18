@@ -162,6 +162,7 @@ public sealed class SyncExecutor
             var src = Path.Combine(back ? _targetRoot : _sourceRoot, srcRel);
             var dst = Path.Combine(back ? _sourceRoot : _targetRoot, action.RelativePath);
             var where = back ? " <-" : "";
+            var manageSourceCloud = !back && !_dryRun && _freeUpSourceSpaceAfterCopy;
             // Noted before the write, not after: the notification can reach the watcher first.
             SelfWrites?.Record(dst);
             try
@@ -200,7 +201,6 @@ public sealed class SyncExecutor
                         // The setting is deliberately target-only. In a two-way pair a reverse action writes
                         // to the source, whose storage policy belongs to that side rather than to this target.
                         var manageCloud = !back && !_dryRun && _freeUpSpaceAfterCopy;
-                        var manageSourceCloud = !back && !_dryRun && _freeUpSourceSpaceAfterCopy;
                         var protectQuota = !back && !_dryRun && _diskQuotaEnabled;
                         if (manageCloud && !EnsureCloudTarget(pairTag, result))
                         {
@@ -323,7 +323,7 @@ public sealed class SyncExecutor
                                     {
                                         _cloudPlatform.RequestOnlineOnly(src);
                                         result.SourceOnlineOnlyRequested++;
-                                        _log.Debug($"{pairTag} source online-only requested  \\{srcRel}");
+                                        _log.Info($"{prefix}free-source  \\{srcRel}");
                                     }
                                 }
                                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
@@ -386,6 +386,28 @@ public sealed class SyncExecutor
                         if (!_dryRun && Directory.Exists(dst)) { WarnIfPermanent(pairTag, action.RelativePath, dst, back); RecycleBin.Send(dst); }
                         result.DirectoriesRecycled++;
                         result.Forgotten.Add(action.RelativePath);
+                        break;
+
+                    case SyncActionKind.FreeUpSourceFile:
+                        if (manageSourceCloud && EnsureCloudSource(pairTag))
+                        {
+                            try
+                            {
+                                var srcAttrs = File.GetAttributes(src);
+                                if ((srcAttrs & CloudFiles.Pinned) == 0 &&
+                                    !CloudFiles.IsPlaceholder(srcAttrs) &&
+                                    (srcAttrs & CloudFiles.Unpinned) == 0)
+                                {
+                                    _cloudPlatform.RequestOnlineOnly(src);
+                                    result.SourceOnlineOnlyRequested++;
+                                    _log.Info($"{prefix}free-source  \\{srcRel}");
+                                }
+                            }
+                            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+                            {
+                                _log.Warn($"{pairTag} cannot request online-only state for source \\{srcRel}: {ex.GetType().Name}: {ex.Message}");
+                            }
+                        }
                         break;
                 }
             }
@@ -516,10 +538,38 @@ public sealed class SyncExecutor
         var tmp = dst + ".wfs-tmp";
         try
         {
-            File.Copy(src, tmp, overwrite: true);
+            for (var attempt = 0; attempt < 6; attempt++)
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(dir) && attempt > 0) Directory.CreateDirectory(dir);
+                    File.Copy(src, tmp, overwrite: true);
+                    break;
+                }
+                catch (Exception ex) when (ex is IOException or DirectoryNotFoundException && attempt < 5)
+                {
+                    Thread.Sleep(50 * (attempt + 1));
+                }
+            }
+
             // File.Copy keeps the mtime on Windows; re-apply from the listing (no extra network stat) to be sure.
-            if (sourceMtime is { } mt) File.SetLastWriteTimeUtc(tmp, mt.UtcDateTime);
-            File.Move(tmp, dst, overwrite: true);
+            if (sourceMtime is { } mt)
+            {
+                try { File.SetLastWriteTimeUtc(tmp, mt.UtcDateTime); } catch { /* best effort */ }
+            }
+
+            for (var attempt = 0; attempt < 6; attempt++)
+            {
+                try
+                {
+                    File.Move(tmp, dst, overwrite: true);
+                    break;
+                }
+                catch (Exception ex) when (ex is IOException or FileNotFoundException && attempt < 5)
+                {
+                    Thread.Sleep(50 * (attempt + 1));
+                }
+            }
         }
         finally
         {

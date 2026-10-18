@@ -108,7 +108,7 @@ public sealed class GoogleDriveExporter : IGoogleDriveExporter
                     File.SetLastWriteTimeUtc(tmpPath, mt.UtcDateTime);
                 }
 
-                File.Move(tmpPath, targetPath, overwrite: true);
+                MoveWithRetry(tmpPath, targetPath);
 
                 var fi = new FileInfo(targetPath);
                 return new ExportResult(true, fi.Length, fi.LastWriteTimeUtc);
@@ -276,7 +276,7 @@ public sealed class GoogleDriveExporter : IGoogleDriveExporter
                 File.SetLastWriteTimeUtc(tmpPath, mt.UtcDateTime);
             }
 
-            File.Move(tmpPath, targetPath, overwrite: true);
+            MoveWithRetry(tmpPath, targetPath);
             var fi = new FileInfo(targetPath);
             return new ExportResult(true, fi.Length, fi.LastWriteTimeUtc);
         }
@@ -285,6 +285,22 @@ public sealed class GoogleDriveExporter : IGoogleDriveExporter
             if (File.Exists(tmpPath))
             {
                 try { File.Delete(tmpPath); } catch { /* best effort */ }
+            }
+        }
+    }
+
+    private static void MoveWithRetry(string source, string destination)
+    {
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            try
+            {
+                File.Move(source, destination, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or FileNotFoundException && attempt < 5)
+            {
+                Thread.Sleep(50 * (attempt + 1));
             }
         }
     }

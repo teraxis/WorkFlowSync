@@ -4,6 +4,7 @@ using WorkFlowSync.Core.Execution;
 using WorkFlowSync.Core.Logging;
 using WorkFlowSync.Core.Model;
 using WorkFlowSync.Core.Planning;
+using WorkFlowSync.Core.Scanning;
 
 namespace WorkFlowSync.Tests;
 
@@ -256,6 +257,91 @@ public sealed class CloudSpaceTests : IDisposable
         Assert.Equal(1, result.FilesCopied);
         Assert.Equal(1, result.OnlineOnlyRequested);
         Assert.Equal(0, result.CloudSpaceWaits);
+    }
+
+    [Fact]
+    public void FreeUpSourceSpace_plans_free_source_for_unchanged_hydrated_files()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var planner = new SyncPlanner("p", now, backfillFirstSeen: false, freeUpSourceSpaceAfterCopy: true);
+        var src = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["f.txt"] = new() { RelativePath = "f.txt", Kind = EntryKind.File, Size = 10, MtimeUtc = now.AddDays(-1), CtimeUtc = now.AddDays(-1), Attributes = FileAttributes.Archive }
+        };
+        var dst = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["f.txt"] = new() { RelativePath = "f.txt", Kind = EntryKind.File, Size = 10, MtimeUtc = now.AddDays(-1), CtimeUtc = now.AddDays(-1) }
+        };
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["f.txt"] = new()
+            {
+                PairName = "p", RelativePath = "f.txt", Kind = EntryKind.File, Status = EntryStatus.Active,
+                FirstSeenUtc = now.AddDays(-2), LastSeenUtc = now.AddDays(-1),
+                SourceSize = 10, SourceMtimeUtc = now.AddDays(-1),
+                CopiedSize = 10, CopiedMtimeUtc = now.AddDays(-1)
+            }
+        };
+
+        var plan = planner.Plan(src, dst, state);
+
+        Assert.Equal(1, plan.Stats.Unchanged);
+        Assert.Equal(1, plan.Stats.SourceFreed);
+        var action = Assert.Single(plan.Actions);
+        Assert.Equal(SyncActionKind.FreeUpSourceFile, action.Kind);
+        Assert.Equal("f.txt", action.RelativePath);
+    }
+
+    [Fact]
+    public void FreeUpSourceSpace_does_not_queue_already_offline_or_pinned_files()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var planner = new SyncPlanner("p", now, backfillFirstSeen: false, freeUpSourceSpaceAfterCopy: true);
+        var src = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["offline.txt"] = new() { RelativePath = "offline.txt", Kind = EntryKind.File, Size = 10, MtimeUtc = now.AddDays(-1), CtimeUtc = now.AddDays(-1), Attributes = FileAttributes.Offline },
+            ["pinned.txt"] = new() { RelativePath = "pinned.txt", Kind = EntryKind.File, Size = 10, MtimeUtc = now.AddDays(-1), CtimeUtc = now.AddDays(-1), Attributes = CloudFiles.Pinned },
+            ["unpinned.txt"] = new() { RelativePath = "unpinned.txt", Kind = EntryKind.File, Size = 10, MtimeUtc = now.AddDays(-1), CtimeUtc = now.AddDays(-1), Attributes = CloudFiles.Unpinned },
+        };
+        var dst = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["offline.txt"] = new() { RelativePath = "offline.txt", Kind = EntryKind.File, Size = 10, MtimeUtc = now.AddDays(-1), CtimeUtc = now.AddDays(-1) },
+            ["pinned.txt"] = new() { RelativePath = "pinned.txt", Kind = EntryKind.File, Size = 10, MtimeUtc = now.AddDays(-1), CtimeUtc = now.AddDays(-1) },
+            ["unpinned.txt"] = new() { RelativePath = "unpinned.txt", Kind = EntryKind.File, Size = 10, MtimeUtc = now.AddDays(-1), CtimeUtc = now.AddDays(-1) },
+        };
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["offline.txt"] = new() { PairName = "p", RelativePath = "offline.txt", Kind = EntryKind.File, Status = EntryStatus.Active, FirstSeenUtc = now.AddDays(-2), LastSeenUtc = now.AddDays(-1), SourceSize = 10, SourceMtimeUtc = now.AddDays(-1), CopiedSize = 10, CopiedMtimeUtc = now.AddDays(-1) },
+            ["pinned.txt"] = new() { PairName = "p", RelativePath = "pinned.txt", Kind = EntryKind.File, Status = EntryStatus.Active, FirstSeenUtc = now.AddDays(-2), LastSeenUtc = now.AddDays(-1), SourceSize = 10, SourceMtimeUtc = now.AddDays(-1), CopiedSize = 10, CopiedMtimeUtc = now.AddDays(-1) },
+            ["unpinned.txt"] = new() { PairName = "p", RelativePath = "unpinned.txt", Kind = EntryKind.File, Status = EntryStatus.Active, FirstSeenUtc = now.AddDays(-2), LastSeenUtc = now.AddDays(-1), SourceSize = 10, SourceMtimeUtc = now.AddDays(-1), CopiedSize = 10, CopiedMtimeUtc = now.AddDays(-1) },
+        };
+
+        var plan = planner.Plan(src, dst, state);
+
+        Assert.Equal(3, plan.Stats.Unchanged);
+        Assert.Equal(0, plan.Stats.SourceFreed);
+        Assert.Empty(plan.Actions);
+    }
+
+    [Fact]
+    public void FreeUpSourceFile_action_requests_online_only_for_source_file()
+    {
+        WriteSource("saved.txt");
+        var platform = new FakeCloudPlatform(new CloudDiskSpace(10 * Gb, 20 * Gb));
+        var executor = new SyncExecutor(_source, _target, new MemorySyncLog(), dryRun: false,
+            freeUpSourceSpaceAfterCopy: true, cloudPlatform: platform);
+
+        var plan = new SyncPlan();
+        plan.Actions.Add(new SyncAction(SyncActionKind.FreeUpSourceFile, "saved.txt", new StateEntry
+        {
+            PairName = "p", RelativePath = "saved.txt", Kind = EntryKind.File, Status = EntryStatus.Active,
+            FirstSeenUtc = DateTimeOffset.UtcNow, LastSeenUtc = DateTimeOffset.UtcNow, SourceSize = 1
+        }));
+
+        var result = executor.Execute(plan, "[p]");
+
+        Assert.Equal(1, result.SourceOnlineOnlyRequested);
+        Assert.Equal(Path.Combine(_source, "saved.txt"), Assert.Single(platform.Requests));
     }
 
     private SyncExecutor Executor(ICloudFilePlatform platform, TimeSpan? pollInterval = null) =>

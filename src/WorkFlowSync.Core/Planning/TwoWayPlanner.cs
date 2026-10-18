@@ -24,6 +24,7 @@ public sealed class TwoWayPlanner
     private readonly bool _convertGoogleRecordings;
     private readonly bool _uploadConvertedDocs;
     private readonly bool _requireApproval;
+    private readonly bool _freeUpSourceSpaceAfterCopy;
 
     /// <param name="scope">
     /// Limits the pass to one directory. Deletions do not travel in a scoped pass: they are inferred from
@@ -49,7 +50,8 @@ public sealed class TwoWayPlanner
         WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office,
         bool convertGoogleRecordings = true,
         bool uploadConvertedDocs = false,
-        bool requireApproval = false)
+        bool requireApproval = false,
+        bool freeUpSourceSpaceAfterCopy = false)
     {
         _pair = pair;
         _now = now;
@@ -59,6 +61,7 @@ public sealed class TwoWayPlanner
         _convertGoogleRecordings = convertGoogleRecordings;
         _uploadConvertedDocs = uploadConvertedDocs;
         _requireApproval = requireApproval;
+        _freeUpSourceSpaceAfterCopy = freeUpSourceSpaceAfterCopy;
     }
 
     public SyncPlan Plan(IReadOnlyDictionary<string, ScanEntry> a, IReadOnlyDictionary<string, ScanEntry> b,
@@ -343,6 +346,12 @@ public sealed class TwoWayPlanner
             if (db is null) { plan.StateUpdates.Add(Row(sa, sb)); plan.Stats.Adopted++; }
             else if (aChanged || bChanged) plan.StateUpdates.Add(Row(sa, sb, db));
             else plan.Stats.Unchanged++;
+
+            if (_freeUpSourceSpaceAfterCopy && sa.Kind == EntryKind.File && SyncPlanner.ShouldFreeUpSource(sa))
+            {
+                plan.Actions.Add(new SyncAction(SyncActionKind.FreeUpSourceFile, path, db ?? Row(sa, sb), SyncSide.Target, sourceDocPath));
+                plan.Stats.SourceFreed++;
+            }
             return;
         }
 

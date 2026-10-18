@@ -45,7 +45,7 @@ public class VersionStoreTests : IDisposable
     {
         var verRoot = Path.Combine(_dir, ".wfsversions");
         var oldSnap = Path.Combine(verRoot, "2020-01-01_120000");
-        var freshSnap = Path.Combine(verRoot, "2026-09-18_120000");
+        var freshSnap = Path.Combine(verRoot, DateTimeOffset.UtcNow.AddDays(-2).ToString("yyyy-MM-dd_HHmmss"));
 
         Directory.CreateDirectory(oldSnap);
         Directory.CreateDirectory(freshSnap);

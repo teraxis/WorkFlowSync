@@ -4,6 +4,17 @@ This is the immutable archive of published user-facing changes. During a release
 entries from `docs/pending-release-notes.md` under a new `vX.Y.Z (YYYY-MM-DD)` heading, omit empty
 sections, and reset the pending file for the next cycle.
 
+## v0.3.12 (2026-10-18)
+
+### Added
+
+- **Ретроспективне звільнення дискового простору джерела (Files On-Demand / OneDrive)**: опція «Звільняти місце джерела після копіювання» тепер автоматично перевіряє вже синхронізовані актуальні файли (`unchanged`, `adopted`) і вивантажує їх локальні копії, якщо вони досі займають місце на диску.
+
+### Changed
+
+- **Адаптивний цикл повторних спроб (Retry Loop) для хмарних дисків**: операції збереження та перейменування файлів на кінцевих дисках тепер використовують адаптивний цикл повторних спроб, що усуває збої через тимчасові блокування з боку клієнтів Google Drive for Desktop та антивірусів.
+- **Журналювання вивантаження джерела**: сповіщення про звільнення місця у вихідній теці переведено на рівень журналу `INFO` у форматі `free-source  \<шлях>`.
+
 ## v0.3.11 (2026-10-18)
 
 ### Added
