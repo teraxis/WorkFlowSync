@@ -289,9 +289,9 @@ public class PairViewModelTests
         Assert.Equal(3, vm.SyncCurrentFiles);
         Assert.Equal(10, vm.SyncTotalFiles);
         Assert.Equal(30, vm.SyncProgressPercent);
-        Assert.Equal("Синхронізація… (30%)", vm.SyncStatusTitle);
+        Assert.Equal("Синхронізація…", vm.SyncStatusTitle);
         Assert.Equal("Синхронізовано 3 з 10 (30%)", vm.SyncStatusSubtext);
-        Assert.Equal("Синхронізація 3/10 (30%)", vm.StatusBadgeText);
+        Assert.Equal("Синхронізація", vm.StatusBadgeText);
         Assert.Contains("3/10, 30%", vm.StateSummary);
 
         // Reset progress on finish

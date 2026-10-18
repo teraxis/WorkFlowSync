@@ -205,10 +205,7 @@ public sealed partial class PairViewModel : ObservableObject
         {
             if (IsBusy)
             {
-                var baseBadge = I18n.T("pair.badge_syncing");
-                return SyncTotalFiles > 0
-                    ? $"{baseBadge} {SyncCurrentFiles}/{SyncTotalFiles} ({SyncProgressPercent}%)"
-                    : baseBadge;
+                return I18n.T("pair.badge_syncing");
             }
             return Enabled
                 ? I18n.T("pair.badge_active")
@@ -222,13 +219,7 @@ public sealed partial class PairViewModel : ObservableObject
     {
         get
         {
-            if (IsBusy)
-            {
-                var baseTitle = I18n.T("tasks.status_syncing");
-                return SyncTotalFiles > 0
-                    ? $"{baseTitle} ({SyncProgressPercent}%)"
-                    : baseTitle;
-            }
+            if (IsBusy) return I18n.T("tasks.status_syncing");
             if (!Enabled) return I18n.T("tasks.status_paused");
             if (HasPendingApprovals) return I18n.T("tasks.status_pending_approval");
             if (LastSyncErrors > 0) return I18n.T("tasks.status_error");

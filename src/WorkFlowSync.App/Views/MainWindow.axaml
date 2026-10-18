@@ -420,15 +420,16 @@
                                                     </Border>
 
                                                     <!-- Syncing / busy indicator -->
-                                                    <Panel Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsBusy}">
-                                                        <Path Data="{StaticResource IconProgressRing}" Width="48" Height="48"
-                                                              Stroke="{DynamicResource Accent}" StrokeThickness="2.5"
-                                                              StrokeLineCap="Round" Stretch="Uniform"
+                                                    <Border Width="48" Height="48" CornerRadius="24"
+                                                            BorderBrush="{DynamicResource Accent}" BorderThickness="2"
+                                                            Background="Transparent"
+                                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                            IsVisible="{Binding IsBusy}">
+                                                        <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="20" Height="20"
+                                                              Stroke="{DynamicResource Accent}" StrokeThickness="2.2"
+                                                              StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform"
                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                        <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="18" Height="18"
-                                                              Stroke="{DynamicResource Accent}" StrokeThickness="2"
-                                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                    </Panel>
+                                                    </Border>
 
                                                     <!-- Paused indicator -->
                                                     <Border Width="48" Height="48" CornerRadius="24"
