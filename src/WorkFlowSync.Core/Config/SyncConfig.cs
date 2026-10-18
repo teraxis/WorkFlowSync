@@ -108,6 +108,9 @@ public sealed class SyncConfig
             if (pair.AutoClean is { } ac && ac <= TimeSpan.Zero) problems.Add($"Pair '{pair.Name}': autoClean must be positive.");
             if (pair.AutoClean is not null && pair.Mode == SyncMode.TwoWay)
                 problems.Add($"Pair '{pair.Name}': autoClean is a mirror-only setting; a two-way pair propagates real deletions instead.");
+            if (pair.KeepLatestFiles is { } klf && klf < 1) problems.Add($"Pair '{pair.Name}': keepLatestFiles must be at least 1.");
+            if (pair.KeepLatestFiles is not null && pair.Mode == SyncMode.TwoWay)
+                problems.Add($"Pair '{pair.Name}': keepLatestFiles is a mirror-only setting; a two-way pair propagates real deletions instead.");
             if (pair.RequireApproval && pair.Mode == SyncMode.Mirror)
                 problems.Add($"Pair '{pair.Name}': requireApproval is a twoWay-only setting; mirror source is read-only.");
             if (pair.VersionsKeepDays is < 1 or > 3650)
@@ -312,6 +315,24 @@ public sealed class FolderPair
     /// is never touched. Mirror mode only — a two-way pair propagates real deletions instead.
     /// </summary>
     public TimeSpan? AutoClean { get; set; }
+
+    /// <summary>
+    /// Configured cleanup: keep at most this number of the newest files in the target folder.
+    /// Older files are moved to the Recycle Bin. Mirror mode only.
+    /// </summary>
+    public int? KeepLatestFiles { get; set; }
+
+    /// <summary>
+    /// Configured cleanup: whether cleanup applies to files that already existed in the destination
+    /// before cleanup was enabled. If false, existing files are preserved and only files synchronized
+    /// after <see cref="CleanupFromUtc"/> are subject to cleanup. Mirror mode only.
+    /// </summary>
+    public bool CleanExistingFiles { get; set; } = true;
+
+    /// <summary>
+    /// Cutoff timestamp when cleanup was enabled with CleanExistingFiles = false.
+    /// </summary>
+    public DateTimeOffset? CleanupFromUtc { get; set; }
 
     /// <summary>
     /// Configs written before 2026-09-17 carried one <c>retention</c> window whose label promised an intake

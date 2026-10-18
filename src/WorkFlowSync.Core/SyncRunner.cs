@@ -74,6 +74,12 @@ public sealed class SyncRunner
     /// <summary>Set by the resident loop so the watcher can tell our writes from the user's.</summary>
     public Watching.SelfWriteLog? SelfWrites { get; init; }
 
+    /// <summary>Progress reporter for current pair execution (pairName, currentCopiedOrUpdated, totalToCopyOrUpdate).</summary>
+    public Action<string, int, int>? OnPairProgress { get; set; }
+
+    /// <summary>Notification fired when pair processing starts.</summary>
+    public Action<string>? OnPairStarting { get; set; }
+
     /// <param name="onlyPair">Run just this pair (by name), paused or not; null = every enabled pair.</param>
     /// <param name="scope">
     /// Limit the pass to one directory inside the pair (relative to its root). Such a pass only adds and
@@ -180,6 +186,7 @@ public sealed class SyncRunner
 
     private PairRunResult RunPair(FolderPair pair, StateStore store, bool dryRun, bool forceBackfill, CancellationToken ct, PlanScope? scope = null)
     {
+        OnPairStarting?.Invoke(pair.Name);
         var tag = $"[{pair.Name}]";
         var budget = CpuBudget.For(_config);
         var sw = Stopwatch.StartNew();
@@ -194,8 +201,8 @@ public sealed class SyncRunner
         var backfill = !twoWay && scope is null && (forceBackfill || state.Count == 0);
         if (twoWay) _log.Info($"{tag} mode=two-way: additions, edits and deletions travel both ways");
         if (backfill) _log.Info($"{tag} first pass for this pair: first_seen backfilled from min(ctime, mtime)");
-        if (twoWay && (pair.MaxAge is not null || pair.AutoClean is not null))
-            _log.Warn($"{tag} max_age/auto_clean are ignored in two-way mode");
+        if (twoWay && (pair.MaxAge is not null || pair.AutoClean is not null || pair.KeepLatestFiles is not null))
+            _log.Warn($"{tag} max_age/auto_clean/keep_latest_files are ignored in two-way mode");
 
         // 2. Source. Mirror opens it read-only; two-way may also write back. Unavailable root = skip,
         //    never a state change (rule: never mistake offline for deleted).
@@ -344,7 +351,7 @@ public sealed class SyncRunner
 
         var plan = twoWay
             ? new TwoWayPlanner(pair.Name, now, scope, frozen, pair.GoogleDocExport, pair.ConvertGoogleRecordings, pair.UploadConvertedDocs, pair.RequireApproval).Plan(source.Entries, target.Entries, state)
-            : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, scope, pair.GoogleDocExport, pair.ConvertGoogleRecordings).Plan(source.Entries, target.Entries, state);
+            : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, pair.KeepLatestFiles, pair.CleanExistingFiles, pair.CleanupFromUtc, scope, pair.GoogleDocExport, pair.ConvertGoogleRecordings).Plan(source.Entries, target.Entries, state);
         foreach (var w in plan.Warnings) _log.Warn($"{tag} plan: {w}");
         result.Plan = plan.Stats;
         result.PendingNew = plan.PendingUpdates.Count;
@@ -380,7 +387,8 @@ public sealed class SyncRunner
         var exec = new SyncExecutor(pair.Source, pair.Target, _log, dryRun, pair.CloudFiles,
             pair.DiskQuotaEnabled, pair.FreeUpSpaceAfterCopy, pair.FreeUpSourceSpaceAfterCopy, pair.MinFreeSpaceGb, _cloudPlatform,
             pair.GoogleDocExport, _config.GoogleAuth, _config.GetActiveGoogleAccount()) { SelfWrites = SelfWrites }
-            .Execute(plan, tag, ct, dryRun ? null : rows => store.Upsert(rows));
+            .Execute(plan, tag, ct, dryRun ? null : rows => store.Upsert(rows),
+                progress: (current, total) => OnPairProgress?.Invoke(pair.Name, current, total));
         result.Execution = exec;
 
         // 6. Persist: bookkeeping updates + successful actions, one transaction. Nothing on dry-run.

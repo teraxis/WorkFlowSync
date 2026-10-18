@@ -45,6 +45,12 @@ public sealed partial class RunViewModel : ObservableObject
     /// <summary>Fired when a real run completes (allows MainViewModel to update pair cards).</summary>
     public event Action<WorkFlowSync.Core.PassResult>? PassCompleted;
 
+    /// <summary>Progress reporter for current pair execution (pairName, current, total).</summary>
+    public event Action<string, int, int>? PairProgress;
+
+    /// <summary>Fired when pair processing starts.</summary>
+    public event Action<string>? PairStarting;
+
     public bool CanRun => !IsRunning;
 
     public RunViewModel(Func<SyncConfig> configProvider, Func<string> configPathProvider, BackgroundLoop background, Func<bool> isDirty)
@@ -173,7 +179,27 @@ public sealed partial class RunViewModel : ObservableObject
                         ? "Інший прохід уже виконується для цього конфігу (Планувальник або резидентний режим). Спробуйте пізніше."
                         : $"Завдання «{onlyPair}» уже виконується іншим процесом або фоновим режимом. Спробуйте пізніше.");
                 using var log = new FileSyncLog(logDir, (_, line) => AppendLog(line), keepDays: cfg.LogKeepDays);
-                return new SyncRunner(cfg, configPath, log).Run(dryRun, forceBackfill: false, token, onlyPair);
+                var runner = new SyncRunner(cfg, configPath, log)
+                {
+                    OnPairProgress = (pairName, current, total) =>
+                    {
+                        OnUi(() =>
+                        {
+                            var pct = total > 0 ? (int)Math.Round((double)current / total * 100) : 0;
+                            LastResult = $"Виконується «{pairName}»… {current} з {total} ({pct}%)";
+                            PairProgress?.Invoke(pairName, current, total);
+                        });
+                    },
+                    OnPairStarting = pairName =>
+                    {
+                        OnUi(() =>
+                        {
+                            LastResult = $"Виконується завдання «{pairName}»…";
+                            PairStarting?.Invoke(pairName);
+                        });
+                    }
+                };
+                return runner.Run(dryRun, forceBackfill: false, token, onlyPair);
             }, token);
 
             var copied = result.Pairs.Sum(p => (p.Execution?.FilesCopied ?? 0) + (p.Execution?.FilesUpdated ?? 0));

@@ -39,7 +39,7 @@
 
     <StreamGeometry x:Key="IconX">M18 6L6 18 M6 6l12 12</StreamGeometry>
 
-    <StreamGeometry x:Key="IconDismiss">M18.36 5.64A9 9 0 1 1 5.64 18.36 9 9 0 0 1 18.36 5.64z M4.93 4.93l14.14 14.14</StreamGeometry>
+    <StreamGeometry x:Key="IconDismiss">M18.36 5.64A9 9 0 1 1 5.64 18.36 9 9 0 0 1 18.36 5.64z M6.5 6.5l11 11</StreamGeometry>
 
     <StreamGeometry x:Key="IconFilePlus">M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M12 18v-6 M9 15h6</StreamGeometry>
 

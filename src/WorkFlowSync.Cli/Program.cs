@@ -105,8 +105,9 @@ internal static class Program
         {
             var maxAge = pair.MaxAge is { } ma ? $"{ma.TotalDays:0} days" : "any age";
             var autoClean = pair.AutoClean is { } ac ? $"{ac.TotalDays:0} days" : "off";
+            var keepFiles = pair.KeepLatestFiles is { } kf ? $"{kf} files" : "off";
             var every = pair.Interval is { } pi ? $"{pi.TotalMinutes:0} min" : "as configured";
-            Console.WriteLine($"  [{pair.Name}]{(pair.Enabled ? "" : " (paused)")} {pair.Source} -> {pair.Target}  every={every}  links={pair.Links}  watch={pair.Watch}  max_age={maxAge}  auto_clean={autoClean}  exclude={pair.Exclude.Count}");
+            Console.WriteLine($"  [{pair.Name}]{(pair.Enabled ? "" : " (paused)")} {pair.Source} -> {pair.Target}  every={every}  links={pair.Links}  watch={pair.Watch}  max_age={maxAge}  auto_clean={autoClean}  keep_files={keepFiles}  exclude={pair.Exclude.Count}");
         }
         Console.WriteLine($"  interval={cfg.Interval}  state={cfg.StatePath}  logs={cfg.LogPath}  parallelism={cfg.ScanParallelism}  buffer={cfg.ScanBufferSize}");
 

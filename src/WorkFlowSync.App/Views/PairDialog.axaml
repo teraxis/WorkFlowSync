@@ -127,18 +127,6 @@
                         </Grid>
 
                         <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.autoclean}" VerticalAlignment="Center" />
-                            <WrapPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" IsEnabled="{Binding IsMirror}">
-                                <CheckBox IsChecked="{Binding HasAutoClean}" Content="{loc:Loc pair.autoclean_checkbox}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <ctl:Stepper Value="{Binding AutoCleanDays}" Minimum="1" Maximum="36500" Increment="30" Width="110" IsEnabled="{Binding HasAutoClean}" />
-                                    <TextBlock Text="{loc:Loc common.days}" VerticalAlignment="Center" Classes="secondary" />
-                                </StackPanel>
-                            </WrapPanel>
-                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap" Text="{Binding AutoCleanHint}" />
-                        </Grid>
-
-                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.approval}" VerticalAlignment="Center" />
                             <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="10" IsEnabled="{Binding !IsMirror}">
                                 <CheckBox IsChecked="{Binding RequireApproval}" Content="{loc:Loc pair.approval_checkbox}" VerticalAlignment="Center" />
@@ -159,6 +147,45 @@
                                     <TextBlock Text="{loc:Loc common.gb}" VerticalAlignment="Center" Classes="secondary" />
                                 </StackPanel>
                             </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="12">
+                        <TextBlock Classes="section" Text="{loc:Loc pair.section_cleanup}" />
+
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.autoclean}" VerticalAlignment="Center" />
+                            <WrapPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" IsEnabled="{Binding IsMirror}">
+                                <CheckBox IsChecked="{Binding HasAutoClean}" Click="OnAutoCleanClick"
+                                          Content="{loc:Loc pair.autoclean_checkbox}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <ctl:Stepper Value="{Binding AutoCleanDays}" Minimum="1" Maximum="36500" Increment="30" Width="110" IsEnabled="{Binding HasAutoClean}" />
+                                    <TextBlock Text="{loc:Loc common.days}" VerticalAlignment="Center" Classes="secondary" />
+                                </StackPanel>
+                            </WrapPanel>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap" Text="{Binding AutoCleanHint}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.keep_latest_files}" VerticalAlignment="Center" />
+                            <WrapPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" IsEnabled="{Binding IsMirror}">
+                                <CheckBox IsChecked="{Binding HasKeepLatestFiles}" Click="OnKeepLatestFilesClick"
+                                          Content="{loc:Loc pair.keep_latest_files_checkbox}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <ctl:Stepper Value="{Binding KeepLatestFilesCount}" Minimum="1" Maximum="100000" Increment="10" Width="110" IsEnabled="{Binding HasKeepLatestFiles}" />
+                                    <TextBlock Text="{loc:Loc pair.keep_latest_files_unit}" VerticalAlignment="Center" Classes="secondary" />
+                                </StackPanel>
+                            </WrapPanel>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap" Text="{Binding KeepLatestFilesHint}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto" IsVisible="{Binding HasAnyCleanup}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.cleanup_scope_label}" VerticalAlignment="Center" />
+                            <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding CleanExistingFiles}"
+                                      Content="{loc:Loc pair.cleanup_apply_existing}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap" Text="{loc:Loc pair.cleanup_apply_existing_hint}" />
                         </Grid>
                     </StackPanel>
                 </Border>

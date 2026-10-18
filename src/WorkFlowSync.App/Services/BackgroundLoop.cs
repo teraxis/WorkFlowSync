@@ -39,8 +39,18 @@ public sealed class BackgroundLoop : IDisposable
     /// </summary>
     public event Action<WorkFlowSync.Core.PassResult>? PassCompleted;
 
+    /// <summary>Progress reporter for current pair execution in background loop.</summary>
+    public event Action<string, int, int>? PairProgress;
+
+    /// <summary>Fired when pair processing starts in background loop.</summary>
+    public event Action<string>? PairStarting;
+
     /// <summary>Every log line of a background pass, so the window can show it live.</summary>
     public event Action<string>? LogLine;
+
+    private string? _activePairName;
+    private int _activeCurrent;
+    private int _activeTotal;
 
     public BackgroundLoop(string configPath, Func<string> logDir, Func<int>? logKeepDays = null)
     {
@@ -66,12 +76,31 @@ public sealed class BackgroundLoop : IDisposable
             var loop = new LoopRunner(_configPath, log);
             _loop = loop;   // only to read its watching state; the loop itself is driven by the task below
             loop.PassStarting += () => Set(LoopState.Running);
+            loop.PairStarting += pairName =>
+            {
+                _activePairName = pairName;
+                _activeCurrent = 0;
+                _activeTotal = 0;
+                PairStarting?.Invoke(pairName);
+                Changed?.Invoke();
+            };
+            loop.PairProgress += (pairName, current, total) =>
+            {
+                _activePairName = pairName;
+                _activeCurrent = current;
+                _activeTotal = total;
+                PairProgress?.Invoke(pairName, current, total);
+                Changed?.Invoke();
+            };
             loop.PassCompleted += r =>
             {
                 LastPassUtc = DateTimeOffset.UtcNow;
                 LastPassCopied = r.Pairs.Sum(p => (p.Execution?.FilesCopied ?? 0) + (p.Execution?.FilesUpdated ?? 0));
                 LastPassErrors = r.Errors;
                 HasHadPass = true;
+                _activePairName = null;
+                _activeCurrent = 0;
+                _activeTotal = 0;
                 Set(LoopState.Idle);
                 PassCompleted?.Invoke(r);
             };
@@ -165,7 +194,9 @@ public sealed class BackgroundLoop : IDisposable
         LoopState.Idle => LastPassUtc is { } t
             ? I18n.T("loop.status_idle_last", t.ToLocalTime().ToString("HH:mm", I18n.Instance.Culture), LastResult, WatchSuffix)
             : I18n.T("loop.status_idle_first"),
-        LoopState.Running => I18n.T("loop.status_running"),
+        LoopState.Running => _activeTotal > 0 && !string.IsNullOrEmpty(_activePairName)
+            ? I18n.T("loop.status_running_progress", _activePairName, _activeCurrent, _activeTotal, (int)Math.Round((double)_activeCurrent / _activeTotal * 100))
+            : I18n.T("loop.status_running"),
         LoopState.Paused => I18n.T("loop.status_paused"),
         _ => I18n.T("loop.status_stopped"),
     };

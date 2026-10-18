@@ -17,6 +17,9 @@ public sealed class SyncPlanner
     private readonly bool _backfillFirstSeen;
     private readonly TimeSpan? _maxAge;
     private readonly TimeSpan? _autoClean;
+    private readonly int? _keepLatestFiles;
+    private readonly bool _cleanExistingFiles;
+    private readonly DateTimeOffset? _cleanupFromUtc;
     private readonly PlanScope? _scope;
     private readonly WorkFlowSync.Core.Config.GoogleDocExportMode _googleDocExport;
     private readonly bool _convertGoogleRecordings;
@@ -27,6 +30,9 @@ public sealed class SyncPlanner
     /// Purely a filter — it never removes anything from the target, and the source is read-only either way (docs F3).
     /// </param>
     /// <param name="autoClean">Move our own copies older than this window to the Recycle Bin; null = keep forever (docs F3).</param>
+    /// <param name="keepLatestFiles">Configured cleanup: keep at most this number of newest files in target; null = unlimited.</param>
+    /// <param name="cleanExistingFiles">Whether cleanup applies to files that existed before cleanup was enabled.</param>
+    /// <param name="cleanupFromUtc">Timestamp when cleanup was enabled with cleanExistingFiles = false.</param>
     /// <param name="scope">
     /// Limits the pass to one directory. A scoped pass only adds and updates: every destructive decision is
     /// inferred from absence, and absence inside a slice of the tree proves nothing (docs/plan-etap5.md §4.2).
@@ -38,7 +44,8 @@ public sealed class SyncPlanner
     /// Whether to convert native Google recordings (.gvid) to MP4.
     /// </param>
     public SyncPlanner(string pair, DateTimeOffset now, bool backfillFirstSeen, TimeSpan? maxAge = null,
-        TimeSpan? autoClean = null, PlanScope? scope = null,
+        TimeSpan? autoClean = null, int? keepLatestFiles = null, bool cleanExistingFiles = true,
+        DateTimeOffset? cleanupFromUtc = null, PlanScope? scope = null,
         WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office,
         bool convertGoogleRecordings = true)
     {
@@ -47,6 +54,9 @@ public sealed class SyncPlanner
         _backfillFirstSeen = backfillFirstSeen;
         _maxAge = maxAge;
         _autoClean = autoClean;
+        _keepLatestFiles = keepLatestFiles;
+        _cleanExistingFiles = cleanExistingFiles;
+        _cleanupFromUtc = cleanupFromUtc;
         _scope = scope;
         _googleDocExport = googleDocExport;
         _convertGoogleRecordings = convertGoogleRecordings;
@@ -188,6 +198,7 @@ public sealed class SyncPlanner
             }
         }
 
+        ApplyKeepLatestFiles(plan, expiredFiles, target, state);
         PruneEmptyNewDirectories(plan, target);
         ApplyRetention(plan, expiredFiles, target, state);
         return plan;
@@ -201,7 +212,7 @@ public sealed class SyncPlanner
     /// </summary>
     private void PruneEmptyNewDirectories(SyncPlan plan, IReadOnlyDictionary<string, ScanEntry> target)
     {
-        if (_maxAge is null) return;
+        if (_maxAge is null && _keepLatestFiles is null) return;
 
         var dirs = plan.Actions
             .Where(a => a.Kind == SyncActionKind.CreateDirectory)
@@ -258,11 +269,103 @@ public sealed class SyncPlanner
     }
 
     /// <summary>
-    /// Auto-clean deletes files by age. It is a whole-pair decision — an empty folder is only empty once the
+    /// Configured cleanup: limit the total number of files in the target folder by keeping only the newest N files.
+    /// Files are ranked by their synchronization time (db.CopiedAtUtc ?? db.FirstSeenUtc; newly planned copies are treated as now).
+    /// Oldest surplus files are moved to the Recycle Bin and tombstoned (or dropped before copy). Mirror only.
+    /// </summary>
+    private void ApplyKeepLatestFiles(
+        SyncPlan plan,
+        List<StateEntry> expiredFiles,
+        IReadOnlyDictionary<string, ScanEntry> target,
+        IReadOnlyDictionary<string, StateEntry> state)
+    {
+        if (Scoped || _keepLatestFiles is null || _keepLatestFiles.Value < 1) return;
+        var maxCount = _keepLatestFiles.Value;
+
+        var alreadyExpired = new HashSet<string>(expiredFiles.Select(e => e.RelativePath), StringComparer.OrdinalIgnoreCase);
+
+        var items = new List<(string RelativePath, DateTimeOffset SyncTime, StateEntry Entry, bool IsNew, SyncAction? Action)>();
+
+        // 1. Existing active files in target:
+        foreach (var (relPath, scan) in target)
+        {
+            if (scan.Kind != EntryKind.File) continue;
+            if (alreadyExpired.Contains(relPath)) continue;
+            if (!state.TryGetValue(relPath, out var db) || db.Kind != EntryKind.File || db.Status != EntryStatus.Active) continue;
+            if (!LocalIntact(scan, db)) continue; // Never prune locally modified files
+
+            var updateAction = plan.Actions.FirstOrDefault(a => a.Kind == SyncActionKind.UpdateFile && a.RelativePath.Equals(relPath, StringComparison.OrdinalIgnoreCase));
+            var syncTime = updateAction is not null ? _now : SyncTime(db);
+            if (!_cleanExistingFiles && syncTime < (_cleanupFromUtc ?? _now))
+            {
+                // Pre-existing file: protected from count-based cleanup
+                continue;
+            }
+            items.Add((relPath, syncTime, db, false, updateAction));
+        }
+
+        // 2. Newly planned files to copy to target:
+        foreach (var action in plan.Actions.Where(a => a.Kind == SyncActionKind.CopyFile && a.Side == SyncSide.Target).ToList())
+        {
+            items.Add((action.RelativePath, _now, action.Proposed, true, action));
+        }
+
+        if (items.Count <= maxCount) return;
+
+        // Order descending: newest files first, then alphabetical tie-breaker.
+        // The top maxCount files are preserved; items beyond index maxCount are pruned.
+        var ordered = items
+            .OrderByDescending(x => x.SyncTime)
+            .ThenByDescending(x => x.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var toPrune = ordered.Skip(maxCount).ToList();
+        foreach (var item in toPrune)
+        {
+            if (item.IsNew && item.Action is { } copyAction)
+            {
+                plan.Actions.Remove(copyAction);
+                plan.StateUpdates.RemoveAll(e => e.RelativePath.Equals(item.RelativePath, StringComparison.OrdinalIgnoreCase));
+                plan.StateUpdates.Add(copyAction.Proposed with { Status = EntryStatus.TooOld, StatusChangedUtc = _now });
+                plan.Stats.New--;
+                plan.Stats.BytesToCopy -= copyAction.Proposed.SourceSize ?? 0;
+                plan.Stats.TooOld++;
+            }
+            else
+            {
+                if (item.Action is { } updateAction)
+                {
+                    plan.Actions.Remove(updateAction);
+                    plan.Stats.Updated--;
+                    plan.Stats.BytesToCopy -= updateAction.Proposed.SourceSize ?? 0;
+                }
+                else
+                {
+                    plan.Stats.Unchanged--;
+                }
+                expiredFiles.Add(item.Entry);
+                alreadyExpired.Add(item.RelativePath);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Synchronization date: when the file was copied or adopted by WorkFlowSync.
+    /// Independent of source creation (ctime) or modification (mtime) dates.
+    /// </summary>
+    private static DateTimeOffset SyncTime(StateEntry db) =>
+        db.CopiedAtUtc ?? db.StatusChangedUtc ?? db.FirstSeenUtc;
+
+    /// <summary>
+    /// Auto-clean deletes files by synchronization age. It is a whole-pair decision — an empty folder is only empty once the
     /// whole pair has been looked at — so a scoped pass never expires anything (docs/plan-etap5.md §4.2).
     /// </summary>
-    private bool IsExpired(StateEntry db) =>
-        !Scoped && _autoClean is { } r && db.Kind == EntryKind.File && db.FirstSeenUtc < _now - r;
+    private bool IsExpired(StateEntry db)
+    {
+        if (Scoped || _autoClean is not { } r || db.Kind != EntryKind.File) return false;
+        if (!_cleanExistingFiles && db.FirstSeenUtc < (_cleanupFromUtc ?? _now)) return false;
+        return db.FirstSeenUtc < _now - r;
+    }
 
     /// <summary>
     /// The intake filter: this item appeared too long ago to be worth copying. Unlike auto-clean this is a
@@ -292,7 +395,12 @@ public sealed class SyncPlanner
     /// <summary>Present on both sides but unknown to us (e.g. copied earlier by FreeFileSync): record it, never overwrite it.</summary>
     private void Adopt(SyncPlan plan, ScanEntry s, ScanEntry l)
     {
-        var entry = NewEntry(s) with { CopiedSize = l.Kind == EntryKind.File ? l.Size : null, CopiedMtimeUtc = l.Kind == EntryKind.File ? l.MtimeUtc : null };
+        var entry = NewEntry(s) with
+        {
+            CopiedSize = l.Kind == EntryKind.File ? l.Size : null,
+            CopiedMtimeUtc = l.Kind == EntryKind.File ? l.MtimeUtc : null,
+            CopiedAtUtc = _now,
+        };
 
         // Adopting means "ours from now on, keep it in sync" — which is exactly what the intake window says
         // NOT to do for an old file. This is the delete-the-pair-and-add-it-again case: the target still holds

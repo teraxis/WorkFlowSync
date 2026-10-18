@@ -77,6 +77,27 @@ public class SyncConfigTests
     }
 
     [Fact]
+    public void Keep_latest_files_is_rejected_on_a_two_way_pair_and_must_be_positive()
+    {
+        var cfg = new SyncConfig
+        {
+            Pairs = { new FolderPair { Name = "p", Source = @"C:\a", Target = @"C:\b", Mode = SyncMode.TwoWay, KeepLatestFiles = 10 } },
+        };
+        Assert.Contains(cfg.Validate(), p => p.Contains("keepLatestFiles", StringComparison.Ordinal));
+
+        cfg.Pairs[0].Mode = SyncMode.Mirror;
+        cfg.Pairs[0].KeepLatestFiles = 0;
+        Assert.Contains(cfg.Validate(), p => p.Contains("keepLatestFiles", StringComparison.Ordinal));
+
+        cfg.Pairs[0].KeepLatestFiles = 25;
+        Assert.Empty(cfg.Validate());
+
+        var json = cfg.ToJson();
+        var roundTrip = SyncConfig.Parse(json);
+        Assert.Equal(25, roundTrip.Pairs[0].KeepLatestFiles);
+    }
+
+    [Fact]
     public void Validate_reports_missing_pairs_and_duplicates()
     {
         var empty = new SyncConfig();

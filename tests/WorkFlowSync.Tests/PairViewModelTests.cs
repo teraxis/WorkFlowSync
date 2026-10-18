@@ -23,6 +23,7 @@ public class PairViewModelTests
             Links = LinkMode.Skip,
             MaxAge = TimeSpan.FromDays(400),
             AutoClean = TimeSpan.FromDays(700),
+            KeepLatestFiles = 100,
             FreeUpSpaceAfterCopy = true,
             FreeUpSourceSpaceAfterCopy = true,
             DiskQuotaEnabled = true,
@@ -36,6 +37,8 @@ public class PairViewModelTests
         Assert.Equal(400, vm.MaxAgeDays);
         Assert.True(vm.HasAutoClean);
         Assert.Equal(700, vm.AutoCleanDays);
+        Assert.True(vm.HasKeepLatestFiles);
+        Assert.Equal(100, vm.KeepLatestFilesCount);
         Assert.True(vm.FreeUpSpaceAfterCopy);
         Assert.True(vm.FreeUpSourceSpaceAfterCopy);
         Assert.True(vm.DiskQuotaEnabled);
@@ -50,6 +53,7 @@ public class PairViewModelTests
         Assert.Equal(LinkMode.Skip, back.Links);
         Assert.Equal(TimeSpan.FromDays(400), back.MaxAge);
         Assert.Equal(TimeSpan.FromDays(700), back.AutoClean);
+        Assert.Equal(100, back.KeepLatestFiles);
         Assert.True(back.FreeUpSpaceAfterCopy);
         Assert.True(back.FreeUpSourceSpaceAfterCopy);
         Assert.True(back.DiskQuotaEnabled);
@@ -87,11 +91,47 @@ public class PairViewModelTests
     [Fact]
     public void Unchecked_windows_mean_no_filter_and_no_cleanup_and_blank_exclude_lines_are_dropped()
     {
-        var vm = new PairViewModel { Name = "a", Source = "x", Target = "y", HasMaxAge = false, HasAutoClean = false, ExcludeText = "\r\n  *.bak \r\n\r\n" };
+        var vm = new PairViewModel { Name = "a", Source = "x", Target = "y", HasMaxAge = false, HasAutoClean = false, HasKeepLatestFiles = false, ExcludeText = "\r\n  *.bak \r\n\r\n" };
         var m = vm.ToModel();
         Assert.Null(m.MaxAge);
         Assert.Null(m.AutoClean);
+        Assert.Null(m.KeepLatestFiles);
         Assert.Equal(new[] { "*.bak" }, m.Exclude);
+    }
+
+    [Fact]
+    public void Keep_latest_files_is_mirror_only()
+    {
+        var vm = new PairViewModel { Name = "a", Source = "x", Target = "y", Mode = SyncMode.TwoWay, HasKeepLatestFiles = true, KeepLatestFilesCount = 20 };
+        Assert.Null(vm.ToModel().KeepLatestFiles);
+
+        vm.Mode = SyncMode.Mirror;
+        Assert.Equal(20, vm.ToModel().KeepLatestFiles);
+    }
+
+    [Fact]
+    public void Clean_existing_files_and_has_any_cleanup()
+    {
+        var vm = new PairViewModel { Name = "a", Source = "x", Target = "y", Mode = SyncMode.Mirror };
+        Assert.False(vm.HasAnyCleanup);
+
+        vm.HasAutoClean = true;
+        Assert.True(vm.HasAnyCleanup);
+
+        vm.CleanExistingFiles = true;
+        var m = vm.ToModel();
+        Assert.True(m.CleanExistingFiles);
+        Assert.Null(m.CleanupFromUtc);
+
+        vm.CleanExistingFiles = false;
+        var m2 = vm.ToModel();
+        Assert.False(m2.CleanExistingFiles);
+        Assert.NotNull(m2.CleanupFromUtc);
+
+        // In TwoWay mode, cleanup is disabled
+        vm.Mode = SyncMode.TwoWay;
+        Assert.False(vm.HasAnyCleanup);
+        Assert.False(vm.ToModel().CleanExistingFiles);
     }
 
     [Fact]
@@ -226,6 +266,81 @@ public class PairViewModelTests
             Assert.True(vm.ShowAllTasks);
             Assert.Equal(2, vm.VisiblePairs.Count);
             Assert.False(vm.ShowEmptyFilteredState);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Sync_progress_is_reported_with_current_total_and_percentage_in_statuses()
+    {
+        var vm = new PairViewModel { Name = "test-task", Source = @"C:\s", Target = @"C:\t", Enabled = true };
+        vm.IsBusy = true;
+
+        // Before progress: default processing state
+        Assert.Equal("Синхронізація…", vm.SyncStatusTitle);
+        Assert.Equal("Порівняння файлів…", vm.SyncStatusSubtext);
+        Assert.Equal("Синхронізація", vm.StatusBadgeText);
+
+        // Progress update: 3 of 10 (30%)
+        vm.UpdateProgress(3, 10);
+        Assert.Equal(3, vm.SyncCurrentFiles);
+        Assert.Equal(10, vm.SyncTotalFiles);
+        Assert.Equal(30, vm.SyncProgressPercent);
+        Assert.Equal("Синхронізація… (30%)", vm.SyncStatusTitle);
+        Assert.Equal("Синхронізовано 3 з 10 (30%)", vm.SyncStatusSubtext);
+        Assert.Equal("Синхронізація 3/10 (30%)", vm.StatusBadgeText);
+        Assert.Contains("3/10, 30%", vm.StateSummary);
+
+        // Reset progress on finish
+        vm.ResetProgress();
+        Assert.Equal(0, vm.SyncCurrentFiles);
+        Assert.Equal(0, vm.SyncTotalFiles);
+        Assert.Equal(0, vm.SyncProgressPercent);
+        Assert.Equal("Синхронізація…", vm.SyncStatusTitle);
+        Assert.Equal("Порівняння файлів…", vm.SyncStatusSubtext);
+        Assert.Equal("Синхронізація", vm.StatusBadgeText);
+    }
+
+    [Fact]
+    public void SyncExecutor_reports_progress_at_start_and_after_each_file()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"wfs-prog-{Guid.NewGuid():N}");
+        var src = Path.Combine(dir, "src");
+        var dst = Path.Combine(dir, "dst");
+        Directory.CreateDirectory(src);
+        try
+        {
+            var plan = new WorkFlowSync.Core.Planning.SyncPlan();
+            for (var i = 0; i < 3; i++)
+            {
+                var name = $"prog{i}.txt";
+                File.WriteAllText(Path.Combine(src, name), "content");
+                plan.Actions.Add(new WorkFlowSync.Core.Planning.SyncAction(
+                    WorkFlowSync.Core.Planning.SyncActionKind.CopyFile,
+                    name,
+                    new WorkFlowSync.Core.Model.StateEntry
+                    {
+                        PairName = "p",
+                        RelativePath = name,
+                        Kind = WorkFlowSync.Core.Model.EntryKind.File,
+                        Status = WorkFlowSync.Core.Model.EntryStatus.Active,
+                        FirstSeenUtc = DateTimeOffset.UtcNow,
+                        LastSeenUtc = DateTimeOffset.UtcNow,
+                        SourceSize = 7
+                    }));
+            }
+
+            var progressReports = new List<(int Current, int Total)>();
+            var executor = new WorkFlowSync.Core.Execution.SyncExecutor(src, dst, new WorkFlowSync.Core.Logging.MemorySyncLog(), dryRun: false);
+            executor.Execute(plan, "[p]", progress: (cur, tot) => progressReports.Add((cur, tot)));
+
+            Assert.Contains((0, 3), progressReports);
+            Assert.Contains((1, 3), progressReports);
+            Assert.Contains((2, 3), progressReports);
+            Assert.Contains((3, 3), progressReports);
         }
         finally
         {

@@ -476,7 +476,7 @@
                                                     <TextBlock Text="{Binding SyncStatusSubtext}" FontSize="11"
                                                                Foreground="{DynamicResource TextMuted}"
                                                                HorizontalAlignment="Center" TextAlignment="Center"
-                                                               MaxWidth="160" Classes="oneline" />
+                                                               MaxWidth="160" TextWrapping="Wrap" />
                                                 </StackPanel>
 
                                                 <!-- Action Button: Approve OR Sync now OR View details -->

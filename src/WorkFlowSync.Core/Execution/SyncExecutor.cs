@@ -124,11 +124,14 @@ public sealed class SyncExecutor
     /// (docs/plan-etap5.md §4.4, point 4). Null in dry-run and wherever nothing should be persisted.
     /// </param>
     public ExecutionResult Execute(SyncPlan plan, string pairTag, CancellationToken ct = default,
-        Action<IReadOnlyList<StateEntry>>? checkpoint = null)
+        Action<IReadOnlyList<StateEntry>>? checkpoint = null,
+        Action<int, int>? progress = null)
     {
         var result = new ExecutionResult();
         var prefix = _dryRun ? $"{pairTag} [dry-run] " : $"{pairTag} ";
         var sinceCheckpoint = System.Diagnostics.Stopwatch.StartNew();
+        var totalFiles = plan.Actions.Count(a => a.Kind is SyncActionKind.CopyFile or SyncActionKind.UpdateFile);
+        progress?.Invoke(0, totalFiles);
 
         void FlushCheckpoint(bool force)
         {
@@ -392,7 +395,13 @@ public sealed class SyncExecutor
                 result.Errors++;
                 _log.Error($"{pairTag} {action.Kind} \\{action.RelativePath}: {ex.GetType().Name}: {ex.Message}");
             }
+
+            if (action.Kind is SyncActionKind.CopyFile or SyncActionKind.UpdateFile)
+            {
+                progress?.Invoke(result.FilesCopied + result.FilesUpdated, totalFiles);
+            }
         }
+        progress?.Invoke(result.FilesCopied + result.FilesUpdated, totalFiles);
         return result;
     }
 

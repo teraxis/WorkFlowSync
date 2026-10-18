@@ -6,11 +6,11 @@ commits, or agent attribution.
 
 ## Added
 
-<!-- Add additions here for the next release -->
+<!-- Add user-visible additions here for the next release -->
 
 ## Changed
 
-<!-- Add changes here for the next release -->
+<!-- Add user-visible changes here for the next release -->
 
 ## Fixed
 

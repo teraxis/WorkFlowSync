@@ -29,6 +29,8 @@ public sealed class LoopRunner
 
     public event Action? PassStarting;
     public event Action<PassResult>? PassCompleted;
+    public event Action<string, int, int>? PairProgress;
+    public event Action<string>? PairStarting;
 
     /// <summary>How often the loop looks at the watchers while it waits for the next scheduled pass.</summary>
     public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(1);
@@ -99,7 +101,12 @@ public sealed class LoopRunner
                             PassStarting?.Invoke();
                             // Re-applied every pass: the setting can change between passes (the config is re-read above).
                             CpuBudget.TrySetPriority(Thread.CurrentThread, CpuBudget.For(cfg).Priority);
-                            var runner = new SyncRunner(cfg, _configPath, _log) { SelfWrites = _selfWrites };
+                            var runner = new SyncRunner(cfg, _configPath, _log)
+                            {
+                                SelfWrites = _selfWrites,
+                                OnPairProgress = (pairName, current, total) => PairProgress?.Invoke(pairName, current, total),
+                                OnPairStarting = pairName => PairStarting?.Invoke(pairName)
+                            };
                             var enabled = cfg.Pairs.Count(p => p.Enabled);
 
                             // All of them due at once is the common case (and the usual one right after a
@@ -312,8 +319,13 @@ public sealed class LoopRunner
                 }
 
                 CpuBudget.TrySetPriority(Thread.CurrentThread, CpuBudget.For(cfg).Priority);
-                var result = new SyncRunner(cfg, _configPath, _log) { SelfWrites = _selfWrites }
-                    .Run(_dryRun, forceBackfill: false, ct, pair.Name, dir);
+                var runner = new SyncRunner(cfg, _configPath, _log)
+                {
+                    SelfWrites = _selfWrites,
+                    OnPairProgress = (pairName, current, total) => PairProgress?.Invoke(pairName, current, total),
+                    OnPairStarting = pairName => PairStarting?.Invoke(pairName)
+                };
+                var result = runner.Run(_dryRun, forceBackfill: false, ct, pair.Name, dir);
                 ScopedPassesRun++;
                 PassCompleted?.Invoke(result);
             }

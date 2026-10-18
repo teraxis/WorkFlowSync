@@ -135,6 +135,7 @@ public partial class PairDialog : Window
                 : "Вихідна тека не може бути всередині кінцевої.");
         if (_draft.HasMaxAge && _draft.MaxAgeDays < 1) problems.Add("Кількість днів для перенесення має бути ≥ 1.");
         if (_draft.HasAutoClean && _draft.AutoCleanDays < 1) problems.Add("Кількість днів для автоочищення має бути ≥ 1.");
+        if (_draft.HasKeepLatestFiles && _draft.KeepLatestFilesCount < 1) problems.Add("Кількість файлів для утримання має бути ≥ 1.");
 
         if (problems.Count > 0)
         {
@@ -142,6 +143,66 @@ public partial class PairDialog : Window
             return;
         }
         Close(true);
+    }
+
+    private async void OnAutoCleanClick(object? sender, RoutedEventArgs e)
+    {
+        if (_draft.HasAutoClean)
+        {
+            var res = await ConfirmDialog.ShowDetailedAsync(
+                this,
+                I18n.T("pair.cleanup_confirm_title"),
+                I18n.T("pair.autoclean_confirm_body"),
+                I18n.T("pair.cleanup_confirm_button"),
+                I18n.T("pair.cleanup_apply_existing"),
+                defaultChecked: _draft.CleanExistingFiles);
+            if (!res.Confirmed)
+            {
+                _draft.HasAutoClean = false;
+            }
+            else
+            {
+                _draft.CleanExistingFiles = res.CheckboxChecked;
+                if (res.CheckboxChecked)
+                {
+                    _draft.CleanupFromUtc = null;
+                }
+                else if (_draft.CleanupFromUtc is null)
+                {
+                    _draft.CleanupFromUtc = DateTimeOffset.UtcNow;
+                }
+            }
+        }
+    }
+
+    private async void OnKeepLatestFilesClick(object? sender, RoutedEventArgs e)
+    {
+        if (_draft.HasKeepLatestFiles)
+        {
+            var res = await ConfirmDialog.ShowDetailedAsync(
+                this,
+                I18n.T("pair.cleanup_confirm_title"),
+                I18n.T("pair.keep_latest_confirm_body"),
+                I18n.T("pair.cleanup_confirm_button"),
+                I18n.T("pair.cleanup_apply_existing"),
+                defaultChecked: _draft.CleanExistingFiles);
+            if (!res.Confirmed)
+            {
+                _draft.HasKeepLatestFiles = false;
+            }
+            else
+            {
+                _draft.CleanExistingFiles = res.CheckboxChecked;
+                if (res.CheckboxChecked)
+                {
+                    _draft.CleanupFromUtc = null;
+                }
+                else if (_draft.CleanupFromUtc is null)
+                {
+                    _draft.CleanupFromUtc = DateTimeOffset.UtcNow;
+                }
+            }
+        }
     }
 
     private void OnCancel(object? sender, RoutedEventArgs e) => Close(false);

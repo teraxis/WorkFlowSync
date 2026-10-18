@@ -119,6 +119,22 @@ public sealed partial class PairViewModel : ObservableObject
     [ObservableProperty] private bool _hasAutoClean;
     [ObservableProperty] private int _autoCleanDays = 365;
 
+    /// <summary>
+    /// Keep latest files limit. False = keep all; true = keep at most <see cref="KeepLatestFilesCount"/> newest files.
+    /// Mirror mode only.
+    /// </summary>
+    [ObservableProperty] private bool _hasKeepLatestFiles;
+    [ObservableProperty] private int _keepLatestFilesCount = 50;
+
+    /// <summary>
+    /// Configured cleanup: apply to existing files in target folder.
+    /// If false, existing files are preserved, and cleanup only prunes files synced after cleanup was enabled.
+    /// </summary>
+    [ObservableProperty] private bool _cleanExistingFiles;
+    [ObservableProperty] private DateTimeOffset? _cleanupFromUtc;
+
+    public bool HasAnyCleanup => IsMirror && (HasAutoClean || HasKeepLatestFiles);
+
     /// <summary>One exclude pattern per line.</summary>
     [ObservableProperty] private string _excludeText = "";
 
@@ -135,6 +151,27 @@ public sealed partial class PairViewModel : ObservableObject
     [ObservableProperty] private int _lastSyncErrors;
     [ObservableProperty] private int _pendingApprovalsCount;
     public bool HasPendingApprovals => PendingApprovalsCount > 0;
+
+    [ObservableProperty] private int _syncTotalFiles;
+    [ObservableProperty] private int _syncCurrentFiles;
+
+    public int SyncProgressPercent => SyncTotalFiles > 0
+        ? (int)Math.Clamp(Math.Round((double)SyncCurrentFiles / SyncTotalFiles * 100), 0, 100)
+        : 0;
+
+    public void UpdateProgress(int current, int total)
+    {
+        SyncCurrentFiles = current;
+        SyncTotalFiles = total;
+        RaiseSyncState();
+    }
+
+    public void ResetProgress()
+    {
+        SyncCurrentFiles = 0;
+        SyncTotalFiles = 0;
+        RaiseSyncState();
+    }
 
     partial void OnPendingApprovalsCountChanged(int value)
     {
@@ -162,11 +199,22 @@ public sealed partial class PairViewModel : ObservableObject
     public bool IsUpToDate => Enabled && !IsBusy && !HasPendingApprovals && LastSyncTime is not null && LastSyncErrors == 0;
     public bool HasError => Enabled && !IsBusy && LastSyncErrors > 0;
 
-    public string StatusBadgeText => IsBusy
-        ? I18n.T("pair.badge_syncing")
-        : Enabled
-            ? I18n.T("pair.badge_active")
-            : I18n.T("pair.badge_paused");
+    public string StatusBadgeText
+    {
+        get
+        {
+            if (IsBusy)
+            {
+                var baseBadge = I18n.T("pair.badge_syncing");
+                return SyncTotalFiles > 0
+                    ? $"{baseBadge} {SyncCurrentFiles}/{SyncTotalFiles} ({SyncProgressPercent}%)"
+                    : baseBadge;
+            }
+            return Enabled
+                ? I18n.T("pair.badge_active")
+                : I18n.T("pair.badge_paused");
+        }
+    }
 
     public string LastSyncSummary => MainViewModel.FormatRelative(LastSyncTime);
 
@@ -174,7 +222,13 @@ public sealed partial class PairViewModel : ObservableObject
     {
         get
         {
-            if (IsBusy) return I18n.T("tasks.status_syncing");
+            if (IsBusy)
+            {
+                var baseTitle = I18n.T("tasks.status_syncing");
+                return SyncTotalFiles > 0
+                    ? $"{baseTitle} ({SyncProgressPercent}%)"
+                    : baseTitle;
+            }
             if (!Enabled) return I18n.T("tasks.status_paused");
             if (HasPendingApprovals) return I18n.T("tasks.status_pending_approval");
             if (LastSyncErrors > 0) return I18n.T("tasks.status_error");
@@ -189,6 +243,10 @@ public sealed partial class PairViewModel : ObservableObject
         {
             if (IsBusy)
             {
+                if (SyncTotalFiles > 0)
+                {
+                    return I18n.T("tasks.status_syncing_progress", SyncCurrentFiles, SyncTotalFiles, SyncProgressPercent);
+                }
                 return LastSyncFilesCount > 0
                     ? I18n.T("tasks.status_processed_files", LastSyncFilesCount.ToString("N0", I18n.Instance.Culture))
                     : I18n.T("tasks.status_processing");
@@ -235,10 +293,12 @@ public sealed partial class PairViewModel : ObservableObject
 
     public void RaiseSyncState()
     {
+        OnPropertyChanged(nameof(SyncProgressPercent));
         OnPropertyChanged(nameof(LastSyncSummary));
         OnPropertyChanged(nameof(StatusBadgeText));
         OnPropertyChanged(nameof(SyncStatusTitle));
         OnPropertyChanged(nameof(SyncStatusSubtext));
+        OnPropertyChanged(nameof(StateSummary));
         OnPropertyChanged(nameof(IsPaused));
         OnPropertyChanged(nameof(IsActiveAndIdle));
         OnPropertyChanged(nameof(IsUpToDate));
@@ -384,9 +444,15 @@ public sealed partial class PairViewModel : ObservableObject
         ? I18n.T("pair.autoclean_hint")
         : I18n.T("pair.autoclean_hint");
 
+    public string KeepLatestFilesHint => IsMirror
+        ? I18n.T("pair.keep_latest_files_hint")
+        : I18n.T("pair.keep_latest_files_hint");
+
     public string MaxAgeSummary => HasMaxAge ? I18n.T("pair.facts_maxage", MaxAgeDays) : I18n.T("pair.facts_any_age");
 
     public string AutoCleanSummary => HasAutoClean ? I18n.T("pair.facts_autoclean", AutoCleanDays) : I18n.T("pair.facts_off");
+
+    public string KeepLatestFilesSummary => HasKeepLatestFiles ? I18n.T("pair.facts_keep_latest_files", KeepLatestFilesCount) : I18n.T("pair.facts_off");
 
     /// <summary>True while this very pair is being synchronised (drives the row's buttons).</summary>
     [ObservableProperty] private bool _isBusy;
@@ -395,7 +461,13 @@ public sealed partial class PairViewModel : ObservableObject
     public Geometry? ToggleIcon => Icon(Enabled ? "IconPauseFill" : "IconPlayFill");
     public string ToggleGlyph => Enabled ? "⏸" : "▶";
     public string ToggleTip => Enabled ? I18n.T("pair.toggle_tip_pause") : I18n.T("pair.toggle_tip_resume");
-    public string StateSummary => IsBusy ? I18n.T("pair.state_checking") : Enabled ? I18n.T("pair.state_running") : I18n.T("pair.state_paused");
+    public string StateSummary => IsBusy
+        ? (SyncTotalFiles > 0
+            ? $"{I18n.T("pair.state_checking")} ({SyncCurrentFiles}/{SyncTotalFiles}, {SyncProgressPercent}%)"
+            : I18n.T("pair.state_checking"))
+        : Enabled
+            ? I18n.T("pair.state_running")
+            : I18n.T("pair.state_paused");
 
     /// <summary>One line of secondary facts under the paths.</summary>
     public string Facts
@@ -409,6 +481,7 @@ public sealed partial class PairViewModel : ObservableObject
             {
                 if (HasMaxAge) parts.Add(MaxAgeSummary);
                 if (HasAutoClean) parts.Add(AutoCleanSummary);
+                if (HasKeepLatestFiles) parts.Add(KeepLatestFilesSummary);
             }
             else
             {
@@ -481,6 +554,10 @@ public sealed partial class PairViewModel : ObservableObject
         MaxAgeDays = p.MaxAge is { } ma ? Math.Max(1, (int)Math.Round(ma.TotalDays)) : 365,
         HasAutoClean = p.AutoClean is not null,
         AutoCleanDays = p.AutoClean is { } ac ? Math.Max(1, (int)Math.Round(ac.TotalDays)) : 365,
+        HasKeepLatestFiles = p.KeepLatestFiles is not null,
+        KeepLatestFilesCount = p.KeepLatestFiles ?? 50,
+        CleanExistingFiles = p.CleanExistingFiles,
+        CleanupFromUtc = p.CleanupFromUtc,
         ExcludeText = string.Join(Environment.NewLine, p.Exclude),
         RequireApproval = p.RequireApproval,
         Versioning = p.Versioning,
@@ -518,6 +595,9 @@ public sealed partial class PairViewModel : ObservableObject
         MaxAge = HasMaxAge ? TimeSpan.FromDays(MaxAgeDays) : null,
         // Auto-clean is a mirror-only idea; a two-way pair carries real deletions across instead.
         AutoClean = HasAutoClean && Mode == SyncMode.Mirror ? TimeSpan.FromDays(AutoCleanDays) : null,
+        KeepLatestFiles = HasKeepLatestFiles && Mode == SyncMode.Mirror ? Math.Max(1, KeepLatestFilesCount) : null,
+        CleanExistingFiles = Mode == SyncMode.Mirror && CleanExistingFiles,
+        CleanupFromUtc = Mode == SyncMode.Mirror && !CleanExistingFiles ? CleanupFromUtc : null,
         Exclude = ParseExcludes(ExcludeText),
         RequireApproval = Mode == SyncMode.TwoWay && RequireApproval,
         Versioning = Versioning,
@@ -554,6 +634,10 @@ public sealed partial class PairViewModel : ObservableObject
         MaxAgeDays = other.MaxAgeDays;
         HasAutoClean = other.HasAutoClean;
         AutoCleanDays = other.AutoCleanDays;
+        HasKeepLatestFiles = other.HasKeepLatestFiles;
+        KeepLatestFilesCount = other.KeepLatestFilesCount;
+        CleanExistingFiles = other.CleanExistingFiles;
+        CleanupFromUtc = other.CleanupFromUtc;
         ExcludeText = other.ExcludeText;
         RequireApproval = other.RequireApproval;
         Versioning = other.Versioning;
@@ -574,6 +658,7 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(StateSummary));
         OnPropertyChanged(nameof(MaxAgeSummary));
         OnPropertyChanged(nameof(AutoCleanSummary));
+        OnPropertyChanged(nameof(KeepLatestFilesSummary));
         OnPropertyChanged(nameof(LinksSummary));
         OnPropertyChanged(nameof(ExcludeCount));
         OnPropertyChanged(nameof(SourceKindSummary));
@@ -594,6 +679,7 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(GoogleDocExportSummary));
         OnPropertyChanged(nameof(CanUploadConvertedDocs));
         OnPropertyChanged(nameof(SyncConvertedDocsHint));
+        OnPropertyChanged(nameof(HasAnyCleanup));
         RaiseSyncState();
         RaiseMode();
     }
@@ -626,8 +712,30 @@ public sealed partial class PairViewModel : ObservableObject
 
     partial void OnHasMaxAgeChanged(bool value) => RaiseFacts(nameof(MaxAgeSummary));
     partial void OnMaxAgeDaysChanged(int value) => RaiseFacts(nameof(MaxAgeSummary));
-    partial void OnHasAutoCleanChanged(bool value) => RaiseFacts(nameof(AutoCleanSummary));
+    partial void OnHasAutoCleanChanged(bool value)
+    {
+        RaiseFacts(nameof(AutoCleanSummary));
+        OnPropertyChanged(nameof(HasAnyCleanup));
+    }
     partial void OnAutoCleanDaysChanged(int value) => RaiseFacts(nameof(AutoCleanSummary));
+    partial void OnHasKeepLatestFilesChanged(bool value)
+    {
+        RaiseFacts(nameof(KeepLatestFilesSummary));
+        OnPropertyChanged(nameof(HasAnyCleanup));
+    }
+    partial void OnKeepLatestFilesCountChanged(int value) => RaiseFacts(nameof(KeepLatestFilesSummary));
+
+    partial void OnCleanExistingFilesChanged(bool value)
+    {
+        if (value)
+        {
+            CleanupFromUtc = null;
+        }
+        else if (CleanupFromUtc is null)
+        {
+            CleanupFromUtc = DateTimeOffset.UtcNow;
+        }
+    }
     partial void OnLinksChanged(LinkMode value) => RaiseFacts(nameof(LinksSummary));
 
     partial void OnWatchChanged(WatchMode value)
@@ -725,6 +833,7 @@ public sealed partial class PairViewModel : ObservableObject
         RaiseMode();
         RaiseFacts(nameof(MaxAgeSummary));
         OnPropertyChanged(nameof(AutoCleanSummary));
+        OnPropertyChanged(nameof(KeepLatestFilesSummary));
     }
 
     private void RaiseMode()
@@ -735,6 +844,9 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(ModeHint));
         OnPropertyChanged(nameof(MaxAgeHint));
         OnPropertyChanged(nameof(AutoCleanHint));
+        OnPropertyChanged(nameof(KeepLatestFilesHint));
+        OnPropertyChanged(nameof(KeepLatestFilesSummary));
+        OnPropertyChanged(nameof(HasAnyCleanup));
         OnPropertyChanged(nameof(RotationApplies));
         OnPropertyChanged(nameof(RotationHint));
         OnPropertyChanged(nameof(SourceLabel));

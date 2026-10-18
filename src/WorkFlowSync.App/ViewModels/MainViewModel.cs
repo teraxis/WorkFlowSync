@@ -319,10 +319,32 @@ public sealed partial class MainViewModel : ObservableObject
         Background.PassCompleted += r => OnUi(() => UpdatePairsFromPassResult(r));
         Run = new RunViewModel(ToConfig, () => ConfigPath, Background, () => false);
         Run.PassCompleted += r => OnUi(() => UpdatePairsFromPassResult(r));
+        Run.PairProgress += (pair, cur, tot) => OnUi(() => HandlePairProgress(pair, cur, tot));
+        Run.PairStarting += pair => OnUi(() => HandlePairStarting(pair));
         Autostart = new AutostartViewModel(() => ConfigPath, () => IntervalMinutes);
         Load();
         RefreshPendingApprovals();
         Run.RefreshSummary();
+    }
+
+    private void HandlePairStarting(string pairName)
+    {
+        var pair = Pairs.FirstOrDefault(p => string.Equals(p.Name, pairName, StringComparison.OrdinalIgnoreCase));
+        if (pair != null)
+        {
+            pair.IsBusy = true;
+            pair.ResetProgress();
+        }
+    }
+
+    private void HandlePairProgress(string pairName, int current, int total)
+    {
+        var pair = Pairs.FirstOrDefault(p => string.Equals(p.Name, pairName, StringComparison.OrdinalIgnoreCase));
+        if (pair != null)
+        {
+            pair.IsBusy = true;
+            pair.UpdateProgress(current, total);
+        }
     }
 
     private void UpdatePairsFromPassResult(PassResult r)
@@ -333,6 +355,8 @@ public sealed partial class MainViewModel : ObservableObject
             var pairVm = Pairs.FirstOrDefault(p => string.Equals(p.Name, pr.Pair, StringComparison.OrdinalIgnoreCase));
             if (pairVm != null)
             {
+                pairVm.IsBusy = false;
+                pairVm.ResetProgress();
                 pairVm.LastSyncTime = DateTimeOffset.UtcNow;
                 if (pr.Execution is { } ex)
                 {
@@ -670,6 +694,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (Run.IsRunning) { SetStatus("Прохід уже виконується.", error: true); return; }
         pair.IsBusy = true;
+        pair.ResetProgress();
         try
         {
             var success = await Run.RunPairAsync(pair.Name);
@@ -707,6 +732,7 @@ public sealed partial class MainViewModel : ObservableObject
         finally
         {
             pair.IsBusy = false;
+            pair.ResetProgress();
         }
     }
 

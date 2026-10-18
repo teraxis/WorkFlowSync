@@ -155,6 +155,28 @@
         <Setter Property="TextBlock.Foreground" Value="{DynamicResource Danger}" />
     </Style>
 
+    <Style Selector="Button.primary.danger">
+        <Setter Property="Background" Value="{DynamicResource Danger}" />
+        <Setter Property="Foreground" Value="#FFFFFF" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Danger}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.primary.danger /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource Danger}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Danger}" />
+        <Setter Property="TextBlock.Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.primary.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#9A1D13" />
+        <Setter Property="BorderBrush" Value="#9A1D13" />
+        <Setter Property="TextBlock.Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.primary.danger:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="#7E170F" />
+        <Setter Property="BorderBrush" Value="#7E170F" />
+        <Setter Property="TextBlock.Foreground" Value="#FFFFFF" />
+    </Style>
+
     <!-- square icon button (play/pause on a row) -->
     <Style Selector="Button.icon">
         <Setter Property="Width" Value="38" />
@@ -194,6 +216,15 @@
     </Style>
     <Style Selector="Button.danger TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Danger}" />
+    </Style>
+    <Style Selector="Button.primary.danger TextBlock">
+        <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.primary.danger:pointerover TextBlock">
+        <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.primary.danger:pressed TextBlock">
+        <Setter Property="Foreground" Value="#FFFFFF" />
     </Style>
     <Style Selector="Button:disabled TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
