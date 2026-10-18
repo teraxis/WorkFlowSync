@@ -278,6 +278,13 @@ public sealed class FolderPair
     public bool FreeUpSpaceAfterCopy { get; set; }
 
     /// <summary>
+    /// After copying a file from a Windows Files On-Demand source sync root (e.g. OneDrive),
+    /// request the «online-only» state on the source file to release hydrated disk space.
+    /// Files explicitly pinned by the user are preserved.
+    /// </summary>
+    public bool FreeUpSourceSpaceAfterCopy { get; set; }
+
+    /// <summary>
     /// Protect the configured free-space reserve on the target volume independently of cloud storage.
     /// </summary>
     public bool DiskQuotaEnabled { get; set; }

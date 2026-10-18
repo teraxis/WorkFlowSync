@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <Version>0.3.8</Version>
+    <Version>0.3.9</Version>
     <Authors>Білик Ігор</Authors>
     <Product>WorkFlowSync</Product>
     <Copyright>© 2026 Білик Ігор. MIT License.</Copyright>

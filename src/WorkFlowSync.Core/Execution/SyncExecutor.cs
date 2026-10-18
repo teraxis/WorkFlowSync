@@ -19,6 +19,9 @@ public sealed class ExecutionResult
     /// <summary>Files handed to Windows/OneDrive with the «online-only» intent.</summary>
     public int OnlineOnlyRequested { get; set; }
 
+    /// <summary>Source files restored to «online-only» state after copying.</summary>
+    public int SourceOnlineOnlyRequested { get; set; }
+
     /// <summary>How many times copying had to wait for OneDrive to release disk space.</summary>
     public int CloudSpaceWaits { get; set; }
 
@@ -55,10 +58,13 @@ public sealed class SyncExecutor
     private readonly CloudFileMode _cloudFiles;
     private readonly bool _diskQuotaEnabled;
     private readonly bool _freeUpSpaceAfterCopy;
+    private readonly bool _freeUpSourceSpaceAfterCopy;
     private readonly long _minFreeSpaceBytes;
     private readonly ICloudFilePlatform _cloudPlatform;
     private bool? _cloudTargetReady;
     private bool _cloudTargetFailureReported;
+    private bool? _cloudSourceReady;
+    private bool _cloudSourceFailureReported;
     private bool _cloudRequestFailed;
     private bool _quotaBlocked;
 
@@ -80,6 +86,7 @@ public sealed class SyncExecutor
 
     public SyncExecutor(string sourceRoot, string targetRoot, ISyncLog log, bool dryRun,
         CloudFileMode cloudFiles = CloudFileMode.Skip, bool diskQuotaEnabled = false, bool freeUpSpaceAfterCopy = false,
+        bool freeUpSourceSpaceAfterCopy = false,
         int minFreeSpaceGb = 5, ICloudFilePlatform? cloudPlatform = null,
         GoogleDocExportMode googleDocExport = GoogleDocExportMode.Office, GoogleAuthConfig? googleAuth = null,
         CloudAccount? account = null, IGoogleDriveExporter? googleDriveExporter = null)
@@ -91,6 +98,7 @@ public sealed class SyncExecutor
         _cloudFiles = cloudFiles;
         _diskQuotaEnabled = diskQuotaEnabled;
         _freeUpSpaceAfterCopy = freeUpSpaceAfterCopy;
+        _freeUpSourceSpaceAfterCopy = freeUpSourceSpaceAfterCopy;
         _minFreeSpaceBytes = checked((long)minFreeSpaceGb * 1024 * 1024 * 1024);
         _cloudPlatform = cloudPlatform ?? new WindowsCloudFilePlatform();
         _sourceHasRecycleBin = RecycleBin.IsAvailableFor(_sourceRoot);
@@ -189,6 +197,7 @@ public sealed class SyncExecutor
                         // The setting is deliberately target-only. In a two-way pair a reverse action writes
                         // to the source, whose storage policy belongs to that side rather than to this target.
                         var manageCloud = !back && !_dryRun && _freeUpSpaceAfterCopy;
+                        var manageSourceCloud = !back && !_dryRun && _freeUpSourceSpaceAfterCopy;
                         var protectQuota = !back && !_dryRun && _diskQuotaEnabled;
                         if (manageCloud && !EnsureCloudTarget(pairTag, result))
                         {
@@ -301,6 +310,24 @@ public sealed class SyncExecutor
                                                $"further target copies are paused: {ex.GetType().Name}: {ex.Message}");
                                 }
                             }
+
+                            if (manageSourceCloud && EnsureCloudSource(pairTag))
+                            {
+                                try
+                                {
+                                    var srcAttrs = File.GetAttributes(src);
+                                    if ((srcAttrs & CloudFiles.Pinned) == 0)
+                                    {
+                                        _cloudPlatform.RequestOnlineOnly(src);
+                                        result.SourceOnlineOnlyRequested++;
+                                        _log.Debug($"{pairTag} source online-only requested  \\{srcRel}");
+                                    }
+                                }
+                                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+                                {
+                                    _log.Warn($"{pairTag} cannot request online-only state for source \\{srcRel}: {ex.GetType().Name}: {ex.Message}");
+                                }
+                            }
                         }
                         if (action.Kind == SyncActionKind.CopyFile) result.FilesCopied++; else result.FilesUpdated++;
                         result.BytesCopied += action.Proposed.SourceSize ?? 0;
@@ -383,6 +410,21 @@ public sealed class SyncExecutor
             result.Errors++;
             _log.Error($"{pairTag} «free up space after copy» is enabled, but the target is not inside an active " +
                        $"Windows Files On-Demand sync root: {_targetRoot}. Target copies are paused to protect the disk.");
+        }
+        return false;
+    }
+
+    private bool EnsureCloudSource(string pairTag)
+    {
+        if (_cloudSourceReady is { } ready) return ready;
+        _cloudSourceReady = _cloudPlatform.IsSyncRoot(_sourceRoot);
+        if (_cloudSourceReady.Value) return true;
+
+        if (!_cloudSourceFailureReported)
+        {
+            _cloudSourceFailureReported = true;
+            _log.Warn($"{pairTag} «free up source space after copy» is enabled, but the source is not inside an active " +
+                      $"Windows Files On-Demand sync root: {_sourceRoot}.");
         }
         return false;
     }

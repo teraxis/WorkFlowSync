@@ -80,6 +80,9 @@ public sealed partial class PairViewModel : ObservableObject
     /// <summary>Ask Windows/OneDrive to make each target copy online-only as soon as it is uploaded.</summary>
     [ObservableProperty] private bool _freeUpSpaceAfterCopy;
 
+    /// <summary>Ask Windows/OneDrive to make each source copy online-only after copying.</summary>
+    [ObservableProperty] private bool _freeUpSourceSpaceAfterCopy;
+
     /// <summary>Protect a free-space reserve independently of the destination's storage provider.</summary>
     [ObservableProperty] private bool _diskQuotaEnabled;
 
@@ -281,6 +284,15 @@ public sealed partial class PairViewModel : ObservableObject
         ? I18n.T("pair.cloud_offload_hint")
         : I18n.T("pair.cloud_offload_not_applicable");
 
+    /// <summary>
+    /// Available only when Windows confirms that the source belongs to a registered Files On-Demand sync root.
+    /// </summary>
+    public bool FreeUpSourceSpaceApplies => Core.CloudFiles.Possible(Source) && _cloudPlatform.IsSyncRoot(Source);
+
+    public string FreeUpSourceSpaceHint => FreeUpSourceSpaceApplies
+        ? I18n.T("pair.cloud_source_offload_hint")
+        : I18n.T("pair.cloud_source_offload_not_applicable");
+
     public bool DiskQuotaApplies => !string.IsNullOrWhiteSpace(Target);
 
     public string DiskQuotaHint => DiskQuotaApplies
@@ -405,6 +417,7 @@ public sealed partial class PairViewModel : ObservableObject
             if (Versioning) parts.Add(I18n.T("pair.facts_versioning", VersionsKeepDays, VersionsMaxGb));
             if (DiskQuotaEnabled) parts.Add(I18n.T("pair.facts_disk_quota", MinFreeSpaceGb));
             if (FreeUpSpaceAfterCopy) parts.Add(I18n.T("pair.facts_cloud_offload"));
+            if (FreeUpSourceSpaceAfterCopy) parts.Add(I18n.T("pair.facts_source_cloud_offload"));
             if (RotateOnLowSpace) parts.Add(I18n.T("pair.facts_rotation"));
             if (GoogleDocExportApplies)
             {
@@ -459,6 +472,7 @@ public sealed partial class PairViewModel : ObservableObject
         Watch = p.Watch,
         CloudFiles = p.CloudFiles,
         FreeUpSpaceAfterCopy = p.FreeUpSpaceAfterCopy,
+        FreeUpSourceSpaceAfterCopy = p.FreeUpSourceSpaceAfterCopy,
         DiskQuotaEnabled = p.DiskQuotaEnabled,
         MinFreeSpaceGb = p.MinFreeSpaceGb,
         RotateOnLowSpace = p.RotateOnLowSpace,
@@ -496,6 +510,7 @@ public sealed partial class PairViewModel : ObservableObject
         Watch = Watch,
         CloudFiles = CloudFiles,
         FreeUpSpaceAfterCopy = FreeUpSpaceAfterCopy,
+        FreeUpSourceSpaceAfterCopy = FreeUpSourceSpaceAfterCopy,
         DiskQuotaEnabled = DiskQuotaEnabled,
         MinFreeSpaceGb = Math.Clamp(MinFreeSpaceGb, 1, 1000),
         RotateOnLowSpace = DiskQuotaEnabled && RotateOnLowSpace,
@@ -530,6 +545,7 @@ public sealed partial class PairViewModel : ObservableObject
         Watch = other.Watch;
         CloudFiles = other.CloudFiles;
         FreeUpSpaceAfterCopy = other.FreeUpSpaceAfterCopy;
+        FreeUpSourceSpaceAfterCopy = other.FreeUpSourceSpaceAfterCopy;
         DiskQuotaEnabled = other.DiskQuotaEnabled;
         MinFreeSpaceGb = other.MinFreeSpaceGb;
         RotateOnLowSpace = other.RotateOnLowSpace;
@@ -642,6 +658,7 @@ public sealed partial class PairViewModel : ObservableObject
     }
 
     partial void OnFreeUpSpaceAfterCopyChanged(bool value) => RaiseFacts(nameof(FreeUpSpaceHint));
+    partial void OnFreeUpSourceSpaceAfterCopyChanged(bool value) => RaiseFacts(nameof(FreeUpSourceSpaceHint));
     partial void OnDiskQuotaEnabledChanged(bool value)
     {
         if (!value && RotateOnLowSpace) RotateOnLowSpace = false;
@@ -661,6 +678,8 @@ public sealed partial class PairViewModel : ObservableObject
         RaiseFacts(nameof(SourceKindSummary));
         OnPropertyChanged(nameof(SourceIcon));
         RaiseCloudFiles();
+        OnPropertyChanged(nameof(FreeUpSourceSpaceApplies));
+        OnPropertyChanged(nameof(FreeUpSourceSpaceHint));
         OnPropertyChanged(nameof(FolderName));
         OnPropertyChanged(nameof(HasFolderName));
         OnPropertyChanged(nameof(GoogleDocExportApplies));

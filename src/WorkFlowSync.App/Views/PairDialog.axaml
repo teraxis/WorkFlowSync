@@ -187,6 +187,15 @@
                                        Text="{Binding FreeUpSpaceHint}" />
                         </Grid>
 
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.cloud_source_offload}"
+                                       VerticalAlignment="Top" Margin="0,4,0,0" />
+                            <CheckBox Grid.Row="0" Grid.Column="1" IsChecked="{Binding FreeUpSourceSpaceAfterCopy}"
+                                      IsEnabled="{Binding FreeUpSourceSpaceApplies}" Content="{loc:Loc pair.cloud_source_offload_checkbox}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
+                                       Text="{Binding FreeUpSourceSpaceHint}" />
+                        </Grid>
+
                         <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,4,Auto" IsVisible="{Binding GoogleDocExportApplies}">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Loc pair.google_doc_export}" VerticalAlignment="Center" />
                             <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{x:Static vm:PairViewModel.GoogleDocExportModes}" SelectedItem="{Binding GoogleDocExport}" Width="320" HorizontalAlignment="Left">

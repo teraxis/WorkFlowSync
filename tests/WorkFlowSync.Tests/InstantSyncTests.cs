@@ -60,7 +60,14 @@ public sealed class InstantSyncTests : IDisposable
         var deadline = DateTime.UtcNow.AddSeconds(seconds);
         while (DateTime.UtcNow < deadline)
         {
-            if (condition()) return true;
+            try
+            {
+                if (condition()) return true;
+            }
+            catch (IOException)
+            {
+                // File may be locked momentarily during write/move by the sync runner
+            }
             Thread.Sleep(50);
         }
         return condition();

@@ -24,6 +24,7 @@ public class PairViewModelTests
             MaxAge = TimeSpan.FromDays(400),
             AutoClean = TimeSpan.FromDays(700),
             FreeUpSpaceAfterCopy = true,
+            FreeUpSourceSpaceAfterCopy = true,
             DiskQuotaEnabled = true,
             MinFreeSpaceGb = 12,
             RotateOnLowSpace = true,
@@ -36,6 +37,7 @@ public class PairViewModelTests
         Assert.True(vm.HasAutoClean);
         Assert.Equal(700, vm.AutoCleanDays);
         Assert.True(vm.FreeUpSpaceAfterCopy);
+        Assert.True(vm.FreeUpSourceSpaceAfterCopy);
         Assert.True(vm.DiskQuotaEnabled);
         Assert.Equal(12, vm.MinFreeSpaceGb);
         Assert.True(vm.RotateOnLowSpace);
@@ -49,6 +51,7 @@ public class PairViewModelTests
         Assert.Equal(TimeSpan.FromDays(400), back.MaxAge);
         Assert.Equal(TimeSpan.FromDays(700), back.AutoClean);
         Assert.True(back.FreeUpSpaceAfterCopy);
+        Assert.True(back.FreeUpSourceSpaceAfterCopy);
         Assert.True(back.DiskQuotaEnabled);
         Assert.Equal(12, back.MinFreeSpaceGb);
         Assert.True(back.RotateOnLowSpace);
@@ -99,6 +102,10 @@ public class PairViewModelTests
         Assert.True(new PairViewModel(new FixedCloudPlatform(true)) { Target = local }.FreeUpSpaceApplies);
         Assert.False(new PairViewModel(new FixedCloudPlatform(false)) { Target = local }.FreeUpSpaceApplies);
         Assert.False(new PairViewModel(new FixedCloudPlatform(true)) { Target = @"\\server\share" }.FreeUpSpaceApplies);
+
+        Assert.True(new PairViewModel(new FixedCloudPlatform(true)) { Source = local }.FreeUpSourceSpaceApplies);
+        Assert.False(new PairViewModel(new FixedCloudPlatform(false)) { Source = local }.FreeUpSourceSpaceApplies);
+        Assert.False(new PairViewModel(new FixedCloudPlatform(true)) { Source = @"\\server\share" }.FreeUpSourceSpaceApplies);
     }
 
     [Fact]

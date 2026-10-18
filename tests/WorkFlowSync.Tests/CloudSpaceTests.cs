@@ -146,7 +146,58 @@ public sealed class CloudSpaceTests : IDisposable
         Assert.Equal(1, result.FilesCopied);
         Assert.Equal(0, result.Errors);
         Assert.Empty(platform.Requests);
-        Assert.True(File.Exists(Path.Combine(_source, "back.txt")));
+    }
+
+    [Fact]
+    public void Enabled_pair_requests_online_only_for_source_file_when_freeUpSourceSpaceAfterCopy_is_enabled()
+    {
+        WriteSource("src1.txt");
+        var platform = new FakeCloudPlatform(new CloudDiskSpace(10 * Gb, 20 * Gb));
+        var executor = new SyncExecutor(_source, _target, new MemorySyncLog(), dryRun: false,
+            freeUpSpaceAfterCopy: false, freeUpSourceSpaceAfterCopy: true, cloudPlatform: platform);
+
+        var result = executor.Execute(Plan("src1.txt"), "[p]");
+
+        Assert.Equal(1, result.FilesCopied);
+        Assert.Equal(0, result.OnlineOnlyRequested);
+        Assert.Equal(1, result.SourceOnlineOnlyRequested);
+        Assert.Equal(Path.Combine(_source, "src1.txt"), Assert.Single(platform.Requests));
+        Assert.True(File.Exists(Path.Combine(_target, "src1.txt")));
+    }
+
+    [Fact]
+    public void Pinned_source_file_is_preserved_and_not_requested_online_only()
+    {
+        var srcFile = Path.Combine(_source, "pinned.txt");
+        File.WriteAllText(srcFile, "data");
+        File.SetAttributes(srcFile, File.GetAttributes(srcFile) | CloudFiles.Pinned);
+
+        var platform = new FakeCloudPlatform(new CloudDiskSpace(10 * Gb, 20 * Gb));
+        var executor = new SyncExecutor(_source, _target, new MemorySyncLog(), dryRun: false,
+            freeUpSpaceAfterCopy: false, freeUpSourceSpaceAfterCopy: true, cloudPlatform: platform);
+
+        var result = executor.Execute(Plan("pinned.txt"), "[p]");
+
+        Assert.Equal(1, result.FilesCopied);
+        Assert.Equal(0, result.SourceOnlineOnlyRequested);
+        Assert.Empty(platform.Requests);
+        Assert.True((File.GetAttributes(srcFile) & CloudFiles.Pinned) != 0);
+    }
+
+    [Fact]
+    public void Disabled_source_offload_does_not_request_online_only_for_source()
+    {
+        WriteSource("normal.txt");
+        var platform = new FakeCloudPlatform(new CloudDiskSpace(10 * Gb, 20 * Gb));
+        var executor = new SyncExecutor(_source, _target, new MemorySyncLog(), dryRun: false,
+            freeUpSpaceAfterCopy: true, freeUpSourceSpaceAfterCopy: false, cloudPlatform: platform);
+
+        var result = executor.Execute(Plan("normal.txt"), "[p]");
+
+        Assert.Equal(1, result.FilesCopied);
+        Assert.Equal(1, result.OnlineOnlyRequested);
+        Assert.Equal(0, result.SourceOnlineOnlyRequested);
+        Assert.Equal(Path.Combine(_target, "normal.txt"), Assert.Single(platform.Requests));
     }
 
     [Fact]

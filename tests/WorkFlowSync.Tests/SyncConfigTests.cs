@@ -119,13 +119,14 @@ public class SyncConfigTests
     {
         var defaults = new FolderPair();
         Assert.False(defaults.FreeUpSpaceAfterCopy);
+        Assert.False(defaults.FreeUpSourceSpaceAfterCopy);
         Assert.False(defaults.DiskQuotaEnabled);
         Assert.False(defaults.RotateOnLowSpace);
         Assert.Equal(5, defaults.MinFreeSpaceGb);
 
         var cfg = new SyncConfig
         {
-            Pairs = { new FolderPair { Name = "p", Source = @"D:\src", Target = @"D:\dst", FreeUpSpaceAfterCopy = true, DiskQuotaEnabled = true, RotateOnLowSpace = true, MinFreeSpaceGb = 0 } },
+            Pairs = { new FolderPair { Name = "p", Source = @"D:\src", Target = @"D:\dst", FreeUpSpaceAfterCopy = true, FreeUpSourceSpaceAfterCopy = true, DiskQuotaEnabled = true, RotateOnLowSpace = true, MinFreeSpaceGb = 0 } },
         };
         Assert.Contains(cfg.Validate(), p => p.Contains("minFreeSpaceGb", StringComparison.Ordinal));
 
@@ -133,6 +134,7 @@ public class SyncConfigTests
         Assert.Empty(cfg.Validate());
         var roundTrip = SyncConfig.Parse(cfg.ToJson()).Pairs[0];
         Assert.True(roundTrip.FreeUpSpaceAfterCopy);
+        Assert.True(roundTrip.FreeUpSourceSpaceAfterCopy);
         Assert.True(roundTrip.DiskQuotaEnabled);
         Assert.True(roundTrip.RotateOnLowSpace);
         Assert.Equal(8, roundTrip.MinFreeSpaceGb);

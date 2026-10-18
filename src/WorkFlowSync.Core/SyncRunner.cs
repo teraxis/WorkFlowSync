@@ -231,7 +231,18 @@ public sealed class SyncRunner
         // storage kind. Otherwise the pass stops before adding more bytes.
         if (!dryRun && pair.DiskQuotaEnabled)
         {
-            Directory.CreateDirectory(pair.Target);
+            try
+            {
+                Directory.CreateDirectory(pair.Target);
+            }
+            catch (Exception ex)
+            {
+                _log.Warn($"{tag} target unavailable, pair skipped: {pair.Target} ({ex.Message})");
+                result.Skipped = true;
+                result.SkipReason = "target unavailable";
+                result.Elapsed = sw.Elapsed;
+                return result;
+            }
             var reserve = checked((long)pair.MinFreeSpaceGb * 1024 * 1024 * 1024);
             var disk = _cloudPlatform.GetDiskSpace(pair.Target);
             if (disk.AvailableBytes < reserve)
@@ -265,10 +276,34 @@ public sealed class SyncRunner
 
         // 3. Target (local; attributes only). Missing target root = create it (first run) unless dry-run.
         ScanResult target;
+        var targetRoot = Path.GetPathRoot(Path.GetFullPath(pair.Target));
+        if (!string.IsNullOrEmpty(targetRoot) && !Directory.Exists(targetRoot))
+        {
+            _log.Warn($"{tag} target drive or root unavailable, pair skipped: {targetRoot}");
+            result.Skipped = true;
+            result.SkipReason = "target unavailable";
+            result.Elapsed = sw.Elapsed;
+            return result;
+        }
+
         if (!Directory.Exists(pair.Target))
         {
             _log.Info($"{tag} target root does not exist{(dryRun ? " (would be created)" : ", creating")}: {pair.Target}");
-            if (!dryRun) Directory.CreateDirectory(pair.Target);
+            if (!dryRun)
+            {
+                try
+                {
+                    Directory.CreateDirectory(pair.Target);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn($"{tag} target unavailable, pair skipped: {pair.Target} ({ex.Message})");
+                    result.Skipped = true;
+                    result.SkipReason = "target unavailable";
+                    result.Elapsed = sw.Elapsed;
+                    return result;
+                }
+            }
             target = new ScanResult();
         }
         else
@@ -284,6 +319,14 @@ public sealed class SyncRunner
             catch (RootUnavailableException) when (scope is not null)
             {
                 target = new ScanResult();   // the mirror has not got this folder yet; it will be created
+            }
+            catch (RootUnavailableException ex)
+            {
+                _log.Warn($"{tag} target unavailable, pair skipped: {ex.Root}");
+                result.Skipped = true;
+                result.SkipReason = "target unavailable";
+                result.Elapsed = sw.Elapsed;
+                return result;
             }
             foreach (var w in target.Warnings) _log.Warn($"{tag} target: {w}");
         }
@@ -335,7 +378,7 @@ public sealed class SyncRunner
         // 5. Execute (target only). Checkpoints persist copied rows as we go, so an interrupted first pass
         //    over a huge tree keeps what it already did — and first_seen stays the real date (F3).
         var exec = new SyncExecutor(pair.Source, pair.Target, _log, dryRun, pair.CloudFiles,
-            pair.DiskQuotaEnabled, pair.FreeUpSpaceAfterCopy, pair.MinFreeSpaceGb, _cloudPlatform,
+            pair.DiskQuotaEnabled, pair.FreeUpSpaceAfterCopy, pair.FreeUpSourceSpaceAfterCopy, pair.MinFreeSpaceGb, _cloudPlatform,
             pair.GoogleDocExport, _config.GoogleAuth, _config.GetActiveGoogleAccount()) { SelfWrites = SelfWrites }
             .Execute(plan, tag, ct, dryRun ? null : rows => store.Upsert(rows));
         result.Execution = exec;
@@ -361,7 +404,7 @@ public sealed class SyncRunner
         }
 
         result.Elapsed = sw.Elapsed;
-        _log.Info($"{tag} done  copied={exec.FilesCopied} updated={exec.FilesUpdated} mkdir={exec.DirectoriesCreated} recycled={exec.FilesRecycled}+{exec.DirectoriesRecycled}dirs{(result.RotatedFiles > 0 ? $" rotated={result.RotatedFiles}" : "")}{(exec.OnlineOnlyRequested > 0 ? $" online_only={exec.OnlineOnlyRequested}" : "")}{(exec.CloudSpaceWaits > 0 ? $" cloud_waits={exec.CloudSpaceWaits}" : "")}{(exec.DiskQuotaStops > 0 ? $" quota_stops={exec.DiskQuotaStops}" : "")}{(exec.Skipped > 0 ? $" skipped={exec.Skipped}" : "")}{(result.HeldBackRemovals > 0 ? $" held_back={result.HeldBackRemovals}" : "")} bytes={SyncExecutor.FormatSize(exec.BytesCopied)} errors={exec.Errors} took={result.Elapsed.TotalSeconds:0.0}s");
+        _log.Info($"{tag} done  copied={exec.FilesCopied} updated={exec.FilesUpdated} mkdir={exec.DirectoriesCreated} recycled={exec.FilesRecycled}+{exec.DirectoriesRecycled}dirs{(result.RotatedFiles > 0 ? $" rotated={result.RotatedFiles}" : "")}{(exec.OnlineOnlyRequested > 0 ? $" online_only={exec.OnlineOnlyRequested}" : "")}{(exec.SourceOnlineOnlyRequested > 0 ? $" src_online_only={exec.SourceOnlineOnlyRequested}" : "")}{(exec.CloudSpaceWaits > 0 ? $" cloud_waits={exec.CloudSpaceWaits}" : "")}{(exec.DiskQuotaStops > 0 ? $" quota_stops={exec.DiskQuotaStops}" : "")}{(exec.Skipped > 0 ? $" skipped={exec.Skipped}" : "")}{(result.HeldBackRemovals > 0 ? $" held_back={result.HeldBackRemovals}" : "")} bytes={SyncExecutor.FormatSize(exec.BytesCopied)} errors={exec.Errors} took={result.Elapsed.TotalSeconds:0.0}s");
         return result;
     }
 }

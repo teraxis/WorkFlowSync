@@ -131,9 +131,11 @@ WorkFlowSync is fully bilingual (Ukrainian and English) with dynamic runtime lan
 - Cycle detection in TreeScanner must be per-path (target is ancestor of current physical dir or of any dir a link was
   followed from), NOT a global visited set — the global set was order-dependent under parallel scanning and dropped real folders.
 - OneDrive placeholders carry ReparsePoint + RecallOnDataAccess; only reparse points WITHOUT recall/offline flags are treated as links.
-- F22 has three separate target-only settings: `DiskQuotaEnabled` protects `MinFreeSpaceGb` on any
+- F22 space settings: `DiskQuotaEnabled` protects `MinFreeSpaceGb` on any
   destination whose filesystem reports capacity; `FreeUpSpaceAfterCopy` verifies the target with `CfGetSyncRootInfoByPath`
-  and then sets Unpinned/clears Pinned; `RotateOnLowSpace` is the sole local permanent-delete exception.
+  and sets Unpinned/clears Pinned; `FreeUpSourceSpaceAfterCopy` verifies the source with `CfGetSyncRootInfoByPath` and
+  requests Unpinned on copied unpinned source files to free up hydrated cache bytes in OneDrive; `RotateOnLowSpace` is the
+  sole local permanent-delete exception.
   Rotation is allowed on every destination storage kind, including cloud roots, only for active ordinary
   files or confirmed cloud placeholders with non-null `copied_at` whose size+mtime still match, WARN-logs the full path, persists a tombstone
   at once, and sorts by copied_at → mtime → ctime. It never touches the source; on a cloud root its permanent
