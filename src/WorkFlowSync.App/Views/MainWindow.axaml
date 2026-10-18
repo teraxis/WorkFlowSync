@@ -269,6 +269,9 @@
                                                                        Foreground="{DynamicResource TextSecondary}" />
                                                             <TextBlock Text="{Binding Source}" Classes="mono oneline" FontSize="12"
                                                                        Foreground="{DynamicResource TextPrimary}" />
+                                                            <TextBlock Text="{Binding SourceFilesSummary}" FontSize="11"
+                                                                       Foreground="{DynamicResource TextMuted}"
+                                                                       IsVisible="{Binding HasSourceFilesCount}" />
                                                         </StackPanel>
                                                     </Grid>
                                                 </Border>
@@ -291,6 +294,9 @@
                                                                        Foreground="{DynamicResource TextSecondary}" />
                                                             <TextBlock Text="{Binding Target}" Classes="mono oneline" FontSize="12"
                                                                        Foreground="{DynamicResource TextPrimary}" />
+                                                            <TextBlock Text="{Binding TargetFilesSummary}" FontSize="11"
+                                                                       Foreground="{DynamicResource TextMuted}"
+                                                                       IsVisible="{Binding HasTargetFilesCount}" />
                                                         </StackPanel>
                                                     </Grid>
                                                 </Border>

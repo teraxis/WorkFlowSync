@@ -348,6 +348,27 @@ public class PairViewModelTests
         }
     }
 
+    [Fact]
+    public void Source_and_target_file_counts_are_formatted_under_paths()
+    {
+        var vm = new PairViewModel { Name = "test-task", Source = @"C:\s", Target = @"C:\t" };
+        Assert.False(vm.HasSourceFilesCount);
+        Assert.False(vm.HasTargetFilesCount);
+        Assert.Equal("", vm.SourceFilesSummary);
+        Assert.Equal("", vm.TargetFilesSummary);
+
+        vm.SourceFilesCount = 1;
+        vm.TargetFilesCount = 87111;
+
+        Assert.True(vm.HasSourceFilesCount);
+        Assert.True(vm.HasTargetFilesCount);
+        Assert.Equal("1 файл", vm.SourceFilesSummary);
+        Assert.Equal("87\u00A0111 файлів", vm.TargetFilesSummary);
+
+        vm.SourceFilesCount = 4;
+        Assert.Equal("4 файли", vm.SourceFilesSummary);
+    }
+
     private sealed class FixedCloudPlatform(bool isSyncRoot) : ICloudFilePlatform
     {
         public bool IsSyncRoot(string path) => isSyncRoot;

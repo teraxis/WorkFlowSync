@@ -484,6 +484,19 @@ public sealed class StateStore : IDisposable
         cmd.ExecuteNonQuery();
     }
 
+    public int? GetActiveFilesCount(string pairName)
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM entries WHERE pair = $pair AND kind = 0 AND status IN (0, 2, 4, 5);";
+        cmd.Parameters.AddWithValue("$pair", pairName);
+        var res = cmd.ExecuteScalar();
+        if (res is long count && count > 0)
+        {
+            return (int)count;
+        }
+        return null;
+    }
+
     public long FileSizeBytes => File.Exists(Path) ? new FileInfo(Path).Length : 0;
 
     // ------------------------------------------------------------------ helpers

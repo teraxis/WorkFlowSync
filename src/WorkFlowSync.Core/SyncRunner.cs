@@ -408,6 +408,8 @@ public sealed class SyncRunner
             }
             store.SetMeta($"last_run_{pair.Name}", StateStore.Fmt(DateTimeOffset.UtcNow));
             store.SetMeta($"last_files_{pair.Name}", (exec.FilesCopied + exec.FilesUpdated).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            store.SetMeta($"last_source_files_{pair.Name}", source.FileCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            store.SetMeta($"last_target_files_{pair.Name}", target.FileCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
             store.SetMeta($"last_errors_{pair.Name}", exec.Errors.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 

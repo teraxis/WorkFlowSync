@@ -152,6 +152,33 @@ public sealed partial class PairViewModel : ObservableObject
     [ObservableProperty] private int _pendingApprovalsCount;
     public bool HasPendingApprovals => PendingApprovalsCount > 0;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SourceFilesSummary))]
+    [NotifyPropertyChangedFor(nameof(HasSourceFilesCount))]
+    private int? _sourceFilesCount;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TargetFilesSummary))]
+    [NotifyPropertyChangedFor(nameof(HasTargetFilesCount))]
+    private int? _targetFilesCount;
+
+    public bool HasSourceFilesCount => SourceFilesCount.HasValue;
+    public bool HasTargetFilesCount => TargetFilesCount.HasValue;
+
+    public string SourceFilesSummary => SourceFilesCount is { } count ? FormatFilesCount(count) : "";
+    public string TargetFilesSummary => TargetFilesCount is { } count ? FormatFilesCount(count) : "";
+
+    public static string FormatFilesCount(int count)
+    {
+        var formatted = count.ToString("N0", I18n.Instance.Culture);
+        if (I18n.Instance.CurrentLanguage.StartsWith("uk", StringComparison.OrdinalIgnoreCase))
+        {
+            return WorkFlowSync.Core.Notifications.NotificationPolicy.Plural(count,
+                $"{formatted} файл", $"{formatted} файли", $"{formatted} файлів");
+        }
+        return count == 1 ? $"{formatted} file" : $"{formatted} files";
+    }
+
     [ObservableProperty] private int _syncTotalFiles;
     [ObservableProperty] private int _syncCurrentFiles;
 
@@ -294,6 +321,10 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(IsActiveAndIdle));
         OnPropertyChanged(nameof(IsUpToDate));
         OnPropertyChanged(nameof(HasError));
+        OnPropertyChanged(nameof(SourceFilesSummary));
+        OnPropertyChanged(nameof(TargetFilesSummary));
+        OnPropertyChanged(nameof(HasSourceFilesCount));
+        OnPropertyChanged(nameof(HasTargetFilesCount));
     }
 
     public static IReadOnlyList<LinkMode> LinkModes { get; } = Enum.GetValues<LinkMode>();

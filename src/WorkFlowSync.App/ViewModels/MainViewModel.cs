@@ -231,8 +231,49 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowEmptyFilteredState));
     }
 
+    private static readonly HashSet<string> ConfigPairProperties = new(StringComparer.Ordinal)
+    {
+        nameof(PairViewModel.Name),
+        nameof(PairViewModel.Enabled),
+        nameof(PairViewModel.Source),
+        nameof(PairViewModel.Target),
+        nameof(PairViewModel.SourceAccountId),
+        nameof(PairViewModel.SourceFolderId),
+        nameof(PairViewModel.TargetAccountId),
+        nameof(PairViewModel.TargetFolderId),
+        nameof(PairViewModel.Mode),
+        nameof(PairViewModel.Links),
+        nameof(PairViewModel.Watch),
+        nameof(PairViewModel.CloudFiles),
+        nameof(PairViewModel.FreeUpSpaceAfterCopy),
+        nameof(PairViewModel.FreeUpSourceSpaceAfterCopy),
+        nameof(PairViewModel.DiskQuotaEnabled),
+        nameof(PairViewModel.MinFreeSpaceGb),
+        nameof(PairViewModel.RotateOnLowSpace),
+        nameof(PairViewModel.IntervalMinutes),
+        nameof(PairViewModel.HasMaxAge),
+        nameof(PairViewModel.MaxAgeDays),
+        nameof(PairViewModel.HasAutoClean),
+        nameof(PairViewModel.AutoCleanDays),
+        nameof(PairViewModel.HasKeepLatestFiles),
+        nameof(PairViewModel.KeepLatestFilesCount),
+        nameof(PairViewModel.CleanExistingFiles),
+        nameof(PairViewModel.CleanupFromUtc),
+        nameof(PairViewModel.ExcludeText),
+        nameof(PairViewModel.RequireApproval),
+        nameof(PairViewModel.Versioning),
+        nameof(PairViewModel.VersionsKeepDays),
+        nameof(PairViewModel.VersionsMaxGb),
+        nameof(PairViewModel.GoogleDocExport),
+        nameof(PairViewModel.ConvertGoogleRecordings),
+        nameof(PairViewModel.UploadConvertedDocs),
+    };
+
     private void OnPairPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is null || !ConfigPairProperties.Contains(e.PropertyName))
+            return;
+
         MarkDirty();
         if (e.PropertyName == nameof(PairViewModel.Enabled))
         {
@@ -357,7 +398,14 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 pairVm.IsBusy = false;
                 pairVm.ResetProgress();
-                pairVm.LastSyncTime = DateTimeOffset.UtcNow;
+                if (pr.SourceScan is not null)
+                {
+                    pairVm.SourceFilesCount = pr.SourceScan.FileCount;
+                }
+                if (pr.TargetScan is not null)
+                {
+                    pairVm.TargetFilesCount = pr.TargetScan.FileCount;
+                }
                 if (pr.Execution is { } ex)
                 {
                     pairVm.LastSyncFilesCount = ex.FilesCopied + ex.FilesUpdated;
@@ -367,6 +415,7 @@ public sealed partial class MainViewModel : ObservableObject
                 {
                     pairVm.LastSyncErrors = 0;
                 }
+                pairVm.LastSyncTime = DateTimeOffset.UtcNow;
                 pairVm.RaiseSyncState();
             }
         }
@@ -519,6 +568,24 @@ public sealed partial class MainViewModel : ObservableObject
                     {
                         pair.LastSyncFilesCount = f;
                     }
+                    var pSrcFiles = store.GetMeta($"last_source_files_{pair.Name}");
+                    if (pSrcFiles is not null && int.TryParse(pSrcFiles, out var sf))
+                    {
+                        pair.SourceFilesCount = sf;
+                    }
+                    else if (store.GetActiveFilesCount(pair.Name) is { } fallbackCount)
+                    {
+                        pair.SourceFilesCount = fallbackCount;
+                    }
+                    var pDstFiles = store.GetMeta($"last_target_files_{pair.Name}");
+                    if (pDstFiles is not null && int.TryParse(pDstFiles, out var df))
+                    {
+                        pair.TargetFilesCount = df;
+                    }
+                    else if (pair.SourceFilesCount.HasValue)
+                    {
+                        pair.TargetFilesCount = pair.SourceFilesCount;
+                    }
                     var pErrors = store.GetMeta($"last_errors_{pair.Name}");
                     if (pErrors is not null && int.TryParse(pErrors, out var e))
                     {
@@ -533,6 +600,43 @@ public sealed partial class MainViewModel : ObservableObject
         {
             // ignore database read errors on initial load
         }
+        PopulateMissingFileCountsInBackground();
+    }
+
+    private void PopulateMissingFileCountsInBackground()
+    {
+        Task.Run(() =>
+        {
+            foreach (var pair in Pairs.ToList())
+            {
+                if (!pair.SourceFilesCount.HasValue && Directory.Exists(pair.Source))
+                {
+                    try
+                    {
+                        var count = Directory.EnumerateFiles(pair.Source, "*", SearchOption.AllDirectories).Count();
+                        OnUi(() =>
+                        {
+                            pair.SourceFilesCount = count;
+                            pair.RaiseSyncState();
+                        });
+                    }
+                    catch { }
+                }
+                if (!pair.TargetFilesCount.HasValue && Directory.Exists(pair.Target))
+                {
+                    try
+                    {
+                        var count = Directory.EnumerateFiles(pair.Target, "*", SearchOption.AllDirectories).Count();
+                        OnUi(() =>
+                        {
+                            pair.TargetFilesCount = count;
+                            pair.RaiseSyncState();
+                        });
+                    }
+                    catch { }
+                }
+            }
+        });
     }
 
     /// <summary>
@@ -708,6 +812,12 @@ public sealed partial class MainViewModel : ObservableObject
                     var pFiles = store.GetMeta($"last_files_{pair.Name}");
                     if (pFiles is not null && int.TryParse(pFiles, out var f))
                         pair.LastSyncFilesCount = f;
+                    var pSrcFiles = store.GetMeta($"last_source_files_{pair.Name}");
+                    if (pSrcFiles is not null && int.TryParse(pSrcFiles, out var sf))
+                        pair.SourceFilesCount = sf;
+                    var pDstFiles = store.GetMeta($"last_target_files_{pair.Name}");
+                    if (pDstFiles is not null && int.TryParse(pDstFiles, out var df))
+                        pair.TargetFilesCount = df;
                 }
                 else
                 {

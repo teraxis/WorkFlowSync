@@ -90,7 +90,7 @@ WorkFlowSync stays quietly out of your way in the Windows notification area. Cli
 
 ## Getting Started
 
-1. **Download** the portable release [WorkFlowSync-0.3.10-win-x64.zip](https://github.com/teraxis/WorkFlowSync/releases) and extract it to any convenient directory (e.g. `D:\Tools\WorkFlowSync`).
+1. **Download** the portable release [WorkFlowSync-0.3.11-win-x64.zip](https://github.com/teraxis/WorkFlowSync/releases) and extract it to any convenient directory (e.g. `D:\Tools\WorkFlowSync`).
 2. **Launch** `WorkFlowSync.exe`.
 3. Click **"+ Add Task"**, select your folders, and set your check schedule or enable real-time change tracking.
 

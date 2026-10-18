@@ -333,6 +333,25 @@ public class StateSchemaTests : IDisposable
         Assert.Equal(3, result.Completed.Count);
     }
 
+    [Fact]
+    public void GetActiveFilesCount_returns_count_of_active_files()
+    {
+        using var store = new StateStore(DbPath);
+        Assert.Null(store.GetActiveFilesCount("pair-x"));
+
+        store.Upsert(new[]
+        {
+            Entry("pair-x", "f1.txt"),
+            Entry("pair-x", "f2.txt"),
+            Entry("pair-x", "dir1") with { Kind = EntryKind.Directory },
+            Entry("pair-x", "tomb.txt") with { Status = EntryStatus.Tombstone },
+            Entry("pair-y", "other.txt")
+        });
+
+        Assert.Equal(2, store.GetActiveFilesCount("pair-x"));
+        Assert.Equal(1, store.GetActiveFilesCount("pair-y"));
+    }
+
     private static StateEntry Entry(string pair, string rel) => new()
     {
         PairName = pair,
