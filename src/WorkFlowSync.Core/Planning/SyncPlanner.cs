@@ -24,6 +24,9 @@ public sealed class SyncPlanner
     private readonly WorkFlowSync.Core.Config.GoogleDocExportMode _googleDocExport;
     private readonly bool _convertGoogleRecordings;
     private readonly bool _freeUpSourceSpaceAfterCopy;
+    private readonly string? _targetRoot;
+    private readonly bool _shortenLongPaths;
+    private readonly int _maxPathLength;
 
     /// <param name="backfillFirstSeen">First pass: use min(ctime, mtime) of the source item as first_seen (docs F3).</param>
     /// <param name="maxAge">
@@ -49,7 +52,10 @@ public sealed class SyncPlanner
         DateTimeOffset? cleanupFromUtc = null, PlanScope? scope = null,
         WorkFlowSync.Core.Config.GoogleDocExportMode googleDocExport = WorkFlowSync.Core.Config.GoogleDocExportMode.Office,
         bool convertGoogleRecordings = true,
-        bool freeUpSourceSpaceAfterCopy = false)
+        bool freeUpSourceSpaceAfterCopy = false,
+        string? targetRoot = null,
+        bool shortenLongPaths = false,
+        int maxPathLength = 240)
     {
         _pair = pair;
         _now = now;
@@ -63,6 +69,9 @@ public sealed class SyncPlanner
         _googleDocExport = googleDocExport;
         _convertGoogleRecordings = convertGoogleRecordings;
         _freeUpSourceSpaceAfterCopy = freeUpSourceSpaceAfterCopy;
+        _targetRoot = targetRoot;
+        _shortenLongPaths = shortenLongPaths;
+        _maxPathLength = maxPathLength;
     }
 
     /// <summary>True while planning only part of the tree; destructive rules are off.</summary>
@@ -73,6 +82,10 @@ public sealed class SyncPlanner
     {
         var plan = new SyncPlan();
         var mappedSource = GoogleDrive.MapGoogleDocsForExport(source, _googleDocExport, _convertGoogleRecordings, out var targetToSourceMap);
+        if (_shortenLongPaths && !string.IsNullOrEmpty(_targetRoot))
+        {
+            mappedSource = PathShortener.MapEntries(mappedSource, _targetRoot, _shortenLongPaths, _maxPathLength, state, targetToSourceMap, out targetToSourceMap);
+        }
         var tombstoneDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var e in state.Values)
             if (e.Kind == EntryKind.Directory && e.Status == EntryStatus.Tombstone)
@@ -116,7 +129,7 @@ public sealed class SyncPlanner
             {
                 if (s is null) { plan.Stats.IgnoredLocalOnly++; continue; }   // local-only item: not ours
                 if (l is null) { AddNew(plan, s, sourceRel); continue; }
-                Adopt(plan, s, l);
+                Adopt(plan, s, l, sourceRel);
                 continue;
             }
 
@@ -141,6 +154,7 @@ public sealed class SyncPlanner
                         {
                             Status = EntryStatus.Active, StatusChangedUtc = _now, LastSeenUtc = _now,
                             SourceSize = s.Size, SourceMtimeUtc = s.MtimeUtc, ViaLink = s.ViaLink,
+                            RemoteId = sourceRel ?? db.RemoteId,
                         };
                         plan.Actions.Add(new SyncAction(SyncActionKind.CopyFile, path, admitted, SyncSide.Target, sourceRel));
                         plan.Stats.New++;
@@ -149,7 +163,7 @@ public sealed class SyncPlanner
                     }
                     // A file of the same name turned up locally while we were holding back: it is not ours
                     // to overwrite, so adopt it the way any other unknown local copy is adopted.
-                    Adopt(plan, s, l);
+                    Adopt(plan, s, l, sourceRel);
                     break;
 
                 case EntryStatus.Active:
@@ -190,7 +204,7 @@ public sealed class SyncPlanner
                         // Outside the intake window the pair stops following this file: the copy already here
                         // stays exactly as it is (auto-clean, not the filter, is what removes things).
                         if (OutsideIntakeWindow(db.FirstSeenUtc)) { plan.Stats.TooOld++; break; }
-                        var proposed = db with { SourceSize = s.Size, SourceMtimeUtc = s.MtimeUtc, LastSeenUtc = _now, ViaLink = s.ViaLink };
+                        var proposed = db with { SourceSize = s.Size, SourceMtimeUtc = s.MtimeUtc, LastSeenUtc = _now, ViaLink = s.ViaLink, RemoteId = sourceRel ?? db.RemoteId };
                         plan.Actions.Add(new SyncAction(SyncActionKind.UpdateFile, path, proposed, SyncSide.Target, sourceRel));
                         plan.Stats.Updated++;
                         plan.Stats.BytesToCopy += s.Size;
@@ -384,6 +398,8 @@ public sealed class SyncPlanner
     private void AddNew(SyncPlan plan, ScanEntry s, string? sourceRelativePath = null)
     {
         var entry = NewEntry(s);
+        if (sourceRelativePath is not null)
+            entry = entry with { RemoteId = sourceRelativePath };
         // The intake window is decided here, before a single byte moves: a file that appeared outside it is
         // left in the source and never copied. Directories are not judged by age — a new report dropped into
         // a folder from 2019 must still arrive — so an empty one is pruned afterwards instead.
@@ -401,13 +417,14 @@ public sealed class SyncPlanner
     }
 
     /// <summary>Present on both sides but unknown to us (e.g. copied earlier by FreeFileSync): record it, never overwrite it.</summary>
-    private void Adopt(SyncPlan plan, ScanEntry s, ScanEntry l)
+    private void Adopt(SyncPlan plan, ScanEntry s, ScanEntry l, string? sourceRelativePath = null)
     {
         var entry = NewEntry(s) with
         {
             CopiedSize = l.Kind == EntryKind.File ? l.Size : null,
             CopiedMtimeUtc = l.Kind == EntryKind.File ? l.MtimeUtc : null,
             CopiedAtUtc = _now,
+            RemoteId = sourceRelativePath,
         };
 
         // Adopting means "ours from now on, keep it in sync" — which is exactly what the intake window says

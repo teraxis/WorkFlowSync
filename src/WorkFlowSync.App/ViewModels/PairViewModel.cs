@@ -48,6 +48,7 @@ public sealed partial class PairViewModel : ObservableObject
             OnPropertyChanged(nameof(WatchSummaryShort));
             OnPropertyChanged(nameof(ExcludeCountSummary));
             OnPropertyChanged(nameof(GoogleDocExportSummary));
+            OnPropertyChanged(nameof(ShortenLongPathsHint));
         };
     }
 
@@ -91,6 +92,12 @@ public sealed partial class PairViewModel : ObservableObject
 
     /// <summary>Permanently delete oldest verified copies on any target when the quota is enabled.</summary>
     [ObservableProperty] private bool _rotateOnLowSpace;
+
+    /// <summary>Shorten long paths to stay within Windows and OneDrive MAX_PATH limits.</summary>
+    [ObservableProperty] private bool _shortenLongPaths;
+
+    /// <summary>Maximum allowed full target path length before shortening kicks in.</summary>
+    [ObservableProperty] private int _maxPathLength = 240;
 
     /// <summary>Mirror with memory (default) or full two-way synchronisation.</summary>
     [ObservableProperty] private SyncMode _mode = SyncMode.Mirror;
@@ -387,6 +394,8 @@ public sealed partial class PairViewModel : ObservableObject
         ? I18n.T("pair.rotation_hint")
         : I18n.T("pair.rotation_not_applicable");
 
+    public string ShortenLongPathsHint => I18n.T("pair.shorten_paths_hint");
+
     public static IReadOnlyList<GoogleDocExportMode> GoogleDocExportModes { get; } = new[]
     {
         GoogleDocExportMode.Office,
@@ -514,6 +523,7 @@ public sealed partial class PairViewModel : ObservableObject
             if (FreeUpSpaceAfterCopy) parts.Add(I18n.T("pair.facts_cloud_offload"));
             if (FreeUpSourceSpaceAfterCopy) parts.Add(I18n.T("pair.facts_source_cloud_offload"));
             if (RotateOnLowSpace) parts.Add(I18n.T("pair.facts_rotation"));
+            if (ShortenLongPaths) parts.Add(I18n.T("pair.facts_shorten", MaxPathLength));
             if (GoogleDocExportApplies)
             {
                 var exportParts = new List<string>();
@@ -571,6 +581,8 @@ public sealed partial class PairViewModel : ObservableObject
         DiskQuotaEnabled = p.DiskQuotaEnabled,
         MinFreeSpaceGb = p.MinFreeSpaceGb,
         RotateOnLowSpace = p.RotateOnLowSpace,
+        ShortenLongPaths = p.ShortenLongPaths,
+        MaxPathLength = p.MaxPathLength > 0 ? p.MaxPathLength : 240,
         IntervalMinutes = p.Interval is { } iv ? Math.Max(1, (int)Math.Round(iv.TotalMinutes)) : 30,
         HasMaxAge = p.MaxAge is not null,
         MaxAgeDays = p.MaxAge is { } ma ? Math.Max(1, (int)Math.Round(ma.TotalDays)) : 365,
@@ -613,6 +625,8 @@ public sealed partial class PairViewModel : ObservableObject
         DiskQuotaEnabled = DiskQuotaEnabled,
         MinFreeSpaceGb = Math.Clamp(MinFreeSpaceGb, 1, 1000),
         RotateOnLowSpace = DiskQuotaEnabled && RotateOnLowSpace,
+        ShortenLongPaths = ShortenLongPaths,
+        MaxPathLength = Math.Clamp(MaxPathLength, 80, 1000),
         Interval = TimeSpan.FromMinutes(Math.Max(1, IntervalMinutes)),
         MaxAge = HasMaxAge ? TimeSpan.FromDays(MaxAgeDays) : null,
         // Auto-clean is a mirror-only idea; a two-way pair carries real deletions across instead.
@@ -651,6 +665,8 @@ public sealed partial class PairViewModel : ObservableObject
         DiskQuotaEnabled = other.DiskQuotaEnabled;
         MinFreeSpaceGb = other.MinFreeSpaceGb;
         RotateOnLowSpace = other.RotateOnLowSpace;
+        ShortenLongPaths = other.ShortenLongPaths;
+        MaxPathLength = other.MaxPathLength;
         IntervalMinutes = other.IntervalMinutes;
         HasMaxAge = other.HasMaxAge;
         MaxAgeDays = other.MaxAgeDays;
@@ -875,9 +891,12 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(TargetLabel));
         OnPropertyChanged(nameof(CanUploadConvertedDocs));
         OnPropertyChanged(nameof(SyncConvertedDocsHint));
+        OnPropertyChanged(nameof(ShortenLongPathsHint));
         RaiseCloudFiles();          // a mirror reads its source, two-way reads both — the answer changes
     }
     partial void OnExcludeTextChanged(string value) => RaiseFacts(nameof(ExcludeCount));
+    partial void OnShortenLongPathsChanged(bool value) => RaiseFacts(nameof(ShortenLongPaths));
+    partial void OnMaxPathLengthChanged(int value) => RaiseFacts(nameof(MaxPathLength));
 
     private void RaiseFacts(string name)
     {

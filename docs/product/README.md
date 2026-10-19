@@ -52,6 +52,7 @@
 | [storage-space.md](features/storage-space.md) | Незалежна дискова квота, Files On-Demand вивантаження та безпечна ротація копій |
 | [google-drive.md](features/google-drive.md) | Синхронізація з Google Диск: десктопний клієнт, пропуск нативних веб-документів (.gdoc/.gsheet), двобічна та дзеркальна синхронізація |
 | [accounts.md](features/accounts.md) | Керування обліковими записами: новий розділ інтерфейсу, інтерактивний візард Google OAuth 2.0 (RFC 8252), автоматичне оновлення токенів |
+| [path-shortener.md](features/path-shortener.md) | Скорочення занадто довгих шляхів файлів і папок для запобігання системним лімітам ОС та OneDrive |
 
 ## Документаційний контракт
 

@@ -369,6 +369,32 @@ public class PairViewModelTests
         Assert.Equal("4 файли", vm.SourceFilesSummary);
     }
 
+    [Fact]
+    public void Shorten_long_paths_roundtrips_and_appears_in_facts()
+    {
+        var model = new FolderPair
+        {
+            Name = "shorten-test",
+            Source = @"C:\src",
+            Target = @"C:\dst",
+            ShortenLongPaths = true,
+            MaxPathLength = 220
+        };
+
+        var vm = PairViewModel.FromModel(model);
+        Assert.True(vm.ShortenLongPaths);
+        Assert.Equal(220, vm.MaxPathLength);
+        Assert.Contains("скорочення шляхів (макс. 220)", vm.Facts);
+
+        var roundtripped = vm.ToModel();
+        Assert.True(roundtripped.ShortenLongPaths);
+        Assert.Equal(220, roundtripped.MaxPathLength);
+
+        var clone = vm.Clone();
+        Assert.True(clone.ShortenLongPaths);
+        Assert.Equal(220, clone.MaxPathLength);
+    }
+
     private sealed class FixedCloudPlatform(bool isSyncRoot) : ICloudFilePlatform
     {
         public bool IsSyncRoot(string path) => isSyncRoot;

@@ -35,4 +35,10 @@ public sealed record StateEntry
     public bool ViaLink { get; init; }
 
     public DateTimeOffset? StatusChangedUtc { get; init; }
+
+    /// <summary>Original source relative path when target path was shortened, or remote identifier.</summary>
+    public string? RemoteId { get; init; }
+
+    /// <summary>Remote version tag or hash if tracked.</summary>
+    public string? RemoteVersion { get; init; }
 }

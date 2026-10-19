@@ -122,6 +122,8 @@ public sealed class SyncConfig
                 problems.Add($"Pair '{pair.Name}': minFreeSpaceGb must be between 1 and 1000.");
             if (pair.RotateOnLowSpace && !pair.DiskQuotaEnabled)
                 problems.Add($"Pair '{pair.Name}': rotateOnLowSpace requires diskQuotaEnabled.");
+            if (pair.ShortenLongPaths && pair.MaxPathLength is < 80 or > 1000)
+                problems.Add($"Pair '{pair.Name}': maxPathLength must be between 80 and 1000.");
             if (Nesting(pair.Source, pair.Target) is { } nest) problems.Add($"Pair '{pair.Name}': {nest}");
         }
         if (Interval < TimeSpan.FromMinutes(1)) problems.Add("Interval must be at least 1 minute.");
@@ -300,6 +302,15 @@ public sealed class FolderPair
     /// this pair. Never applies to the source side. A cloud provider may propagate the deletion.
     /// </summary>
     public bool RotateOnLowSpace { get; set; }
+
+    /// <summary>
+    /// When true, long file paths exceeding <see cref="MaxPathLength"/> are shortened for Windows and OneDrive compatibility
+    /// with deterministic hash suffixes to avoid collisions, preserving file mapping across runs.
+    /// </summary>
+    public bool ShortenLongPaths { get; set; }
+
+    /// <summary>Maximum allowed full target path length before shortening kicks in (default 240, range 80..1000).</summary>
+    public int MaxPathLength { get; set; } = 240;
 
     /// <summary>
     /// Intake filter: copy only items whose appearance date (<c>first_seen</c>) falls within this window;

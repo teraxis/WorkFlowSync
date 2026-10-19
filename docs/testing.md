@@ -30,6 +30,15 @@ Requires .NET SDK 8.0.x on PATH (`C:\Program Files\dotnet`). No other services.
 
 If a command cannot run, record the exact reason and the next step needed.
 
+## Current Status (2026-10-19, F26 — Path Shortener for long paths and OneDrive compatibility)
+
+- `scripts\build.ps1`: OK, 0 warnings.
+- `dotnet build WorkFlowSync.sln -warnaserror`: OK, 0 warnings, 0 errors.
+- `scripts\test.ps1`: **560 passed, 0 failed** (1 m 37 s).
+- `PathShortenerTests` (10): pure shortening logic, extension preservation, hash determinism, directory segment shortening, state-based reverse mapping (`RemoteId` -> `RelativePath`), collision avoidance, planner pass 1 (copy with shortened name + RemoteId stored in StateEntry) & pass 2 (Unchanged, no re-copy), two-way sync preservation, and config validation.
+- `PairViewModelTests`: roundtrip for `ShortenLongPaths` and `MaxPathLength`, validation, and facts summary.
+- `LocalizationTests`: 100% key parity verified for path shortener keys across uk.json and en.json.
+
 ## Current Status (2026-10-12, F25 — Tasks list filter: Active only vs All tasks)
 
 - `scripts\build.ps1`: OK, 0 warnings.

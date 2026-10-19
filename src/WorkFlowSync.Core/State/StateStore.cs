@@ -273,7 +273,7 @@ public sealed class StateStore : IDisposable
 
     private Dictionary<string, StateEntry> Read(string pair, string? scopeDir)
     {
-        const string Columns = "path, kind, status, first_seen, last_seen, src_size, src_mtime, copied_size, copied_mtime, copied_at, via_link, status_changed";
+        const string Columns = "path, kind, status, first_seen, last_seen, src_size, src_mtime, copied_size, copied_mtime, copied_at, via_link, status_changed, remote_id, remote_version";
         var dict = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = scopeDir is null
@@ -310,6 +310,8 @@ public sealed class StateStore : IDisposable
                 CopiedAtUtc = r.IsDBNull(9) ? null : FromUnixMs(r.GetInt64(9)),
                 ViaLink = r.GetInt32(10) != 0,
                 StatusChangedUtc = r.IsDBNull(11) ? null : FromUnixMs(r.GetInt64(11)),
+                RemoteId = r.IsDBNull(12) ? null : r.GetString(12),
+                RemoteVersion = r.IsDBNull(13) ? null : r.GetString(13),
             };
             dict[e.RelativePath] = e;
         }
@@ -394,14 +396,15 @@ public sealed class StateStore : IDisposable
             cmd.Transaction = tx;
             cmd.CommandText = """
                 INSERT INTO entries (pair, path, kind, status, first_seen, last_seen, src_size, src_mtime,
-                                     copied_size, copied_mtime, copied_at, via_link, status_changed)
+                                     copied_size, copied_mtime, copied_at, via_link, status_changed, remote_id, remote_version)
                 VALUES ($pair, $path, $kind, $status, $first_seen, $last_seen, $src_size, $src_mtime,
-                        $copied_size, $copied_mtime, $copied_at, $via_link, $status_changed)
+                        $copied_size, $copied_mtime, $copied_at, $via_link, $status_changed, $remote_id, $remote_version)
                 ON CONFLICT(pair, path) DO UPDATE SET
                   kind = excluded.kind, status = excluded.status, first_seen = excluded.first_seen, last_seen = excluded.last_seen,
                   src_size = excluded.src_size, src_mtime = excluded.src_mtime, copied_size = excluded.copied_size,
                   copied_mtime = excluded.copied_mtime, copied_at = excluded.copied_at,
-                  via_link = excluded.via_link, status_changed = excluded.status_changed
+                  via_link = excluded.via_link, status_changed = excluded.status_changed,
+                  remote_id = excluded.remote_id, remote_version = excluded.remote_version
                 """;
             var p = AddEntryParameters(cmd);
 
@@ -421,6 +424,8 @@ public sealed class StateStore : IDisposable
                 p.CopiedAt.Value = e.CopiedAtUtc is { } ca ? ToUnixMs(ca) : DBNull.Value;
                 p.ViaLink.Value = e.ViaLink ? 1 : 0;
                 p.StatusChanged.Value = e.StatusChangedUtc is { } sc ? ToUnixMs(sc) : DBNull.Value;
+                p.RemoteId.Value = (object?)e.RemoteId ?? DBNull.Value;
+                p.RemoteVersion.Value = (object?)e.RemoteVersion ?? DBNull.Value;
                 cmd.ExecuteNonQuery();
 
                 if (++inBatch < BatchRows) continue;
@@ -505,7 +510,7 @@ public sealed class StateStore : IDisposable
         SqliteParameter Pair, SqliteParameter PathValue, SqliteParameter Kind, SqliteParameter Status,
         SqliteParameter First, SqliteParameter Last, SqliteParameter SrcSize, SqliteParameter SrcMtime,
         SqliteParameter CopiedSize, SqliteParameter CopiedMtime, SqliteParameter CopiedAt,
-        SqliteParameter ViaLink, SqliteParameter StatusChanged);
+        SqliteParameter ViaLink, SqliteParameter StatusChanged, SqliteParameter RemoteId, SqliteParameter RemoteVersion);
 
     private static EntryParameters AddEntryParameters(SqliteCommand cmd) => new(
         cmd.Parameters.Add("$pair", SqliteType.Text),
@@ -520,7 +525,9 @@ public sealed class StateStore : IDisposable
         cmd.Parameters.Add("$copied_mtime", SqliteType.Integer),
         cmd.Parameters.Add("$copied_at", SqliteType.Integer),
         cmd.Parameters.Add("$via_link", SqliteType.Integer),
-        cmd.Parameters.Add("$status_changed", SqliteType.Integer));
+        cmd.Parameters.Add("$status_changed", SqliteType.Integer),
+        cmd.Parameters.Add("$remote_id", SqliteType.Text),
+        cmd.Parameters.Add("$remote_version", SqliteType.Text));
 
     private void Exec(string sql, SqliteTransaction? tx = null)
     {

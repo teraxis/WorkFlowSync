@@ -350,8 +350,8 @@ public sealed class SyncRunner
         }
 
         var plan = twoWay
-            ? new TwoWayPlanner(pair.Name, now, scope, frozen, pair.GoogleDocExport, pair.ConvertGoogleRecordings, pair.UploadConvertedDocs, pair.RequireApproval, pair.FreeUpSourceSpaceAfterCopy).Plan(source.Entries, target.Entries, state)
-            : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, pair.KeepLatestFiles, pair.CleanExistingFiles, pair.CleanupFromUtc, scope, pair.GoogleDocExport, pair.ConvertGoogleRecordings, pair.FreeUpSourceSpaceAfterCopy).Plan(source.Entries, target.Entries, state);
+            ? new TwoWayPlanner(pair.Name, now, scope, frozen, pair.GoogleDocExport, pair.ConvertGoogleRecordings, pair.UploadConvertedDocs, pair.RequireApproval, pair.FreeUpSourceSpaceAfterCopy, pair.Target, pair.ShortenLongPaths, pair.MaxPathLength).Plan(source.Entries, target.Entries, state)
+            : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, pair.KeepLatestFiles, pair.CleanExistingFiles, pair.CleanupFromUtc, scope, pair.GoogleDocExport, pair.ConvertGoogleRecordings, pair.FreeUpSourceSpaceAfterCopy, pair.Target, pair.ShortenLongPaths, pair.MaxPathLength).Plan(source.Entries, target.Entries, state);
         foreach (var w in plan.Warnings) _log.Warn($"{tag} plan: {w}");
         result.Plan = plan.Stats;
         result.PendingNew = plan.PendingUpdates.Count;

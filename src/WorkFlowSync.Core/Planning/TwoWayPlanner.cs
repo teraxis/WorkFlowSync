@@ -25,6 +25,9 @@ public sealed class TwoWayPlanner
     private readonly bool _uploadConvertedDocs;
     private readonly bool _requireApproval;
     private readonly bool _freeUpSourceSpaceAfterCopy;
+    private readonly string? _targetRoot;
+    private readonly bool _shortenLongPaths;
+    private readonly int _maxPathLength;
 
     /// <param name="scope">
     /// Limits the pass to one directory. Deletions do not travel in a scoped pass: they are inferred from
@@ -51,7 +54,10 @@ public sealed class TwoWayPlanner
         bool convertGoogleRecordings = true,
         bool uploadConvertedDocs = false,
         bool requireApproval = false,
-        bool freeUpSourceSpaceAfterCopy = false)
+        bool freeUpSourceSpaceAfterCopy = false,
+        string? targetRoot = null,
+        bool shortenLongPaths = false,
+        int maxPathLength = 240)
     {
         _pair = pair;
         _now = now;
@@ -62,6 +68,9 @@ public sealed class TwoWayPlanner
         _uploadConvertedDocs = uploadConvertedDocs;
         _requireApproval = requireApproval;
         _freeUpSourceSpaceAfterCopy = freeUpSourceSpaceAfterCopy;
+        _targetRoot = targetRoot;
+        _shortenLongPaths = shortenLongPaths;
+        _maxPathLength = maxPathLength;
     }
 
     public SyncPlan Plan(IReadOnlyDictionary<string, ScanEntry> a, IReadOnlyDictionary<string, ScanEntry> b,
@@ -69,6 +78,10 @@ public sealed class TwoWayPlanner
     {
         var plan = new SyncPlan();
         var mappedA = GoogleDrive.MapGoogleDocsForExport(a, _googleDocExport, _convertGoogleRecordings, out var targetToSourceMap);
+        if (_shortenLongPaths && !string.IsNullOrEmpty(_targetRoot))
+        {
+            mappedA = PathShortener.MapEntries(mappedA, _targetRoot, _shortenLongPaths, _maxPathLength, state, targetToSourceMap, out targetToSourceMap);
+        }
         var deletions = new List<SyncAction>();
 
         var all = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

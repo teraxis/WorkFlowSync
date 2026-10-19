@@ -11,6 +11,7 @@ Copy-Item -LiteralPath (Join-Path $root "portable\README.txt") -Destination $out
 
 # Strict security & privacy checks: prevent any live user data, personal paths, or logs from leaking into the release package.
 # Releases are packaged without config.example.json or user-specific files; config.json is created automatically on first run.
+Get-ChildItem -Path $out -Filter "*.zip" -File -ErrorAction SilentlyContinue | Remove-Item -Force
 foreach ($leftover in "config.example.json", "config.json", "state.db", "state.db-wal", "state.db-shm", "logs", ".wfsversions") {
     $path = Join-Path $out $leftover
     if (Test-Path $path) { Remove-Item $path -Recurse -Force }

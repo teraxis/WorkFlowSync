@@ -160,7 +160,8 @@ public sealed class SyncExecutor
             var back = action.Side == SyncSide.Source;
             var srcRel = back ? action.RelativePath : (action.SourceRelativePath ?? action.RelativePath);
             var src = Path.Combine(back ? _targetRoot : _sourceRoot, srcRel);
-            var dst = Path.Combine(back ? _sourceRoot : _targetRoot, action.RelativePath);
+            var dstRel = back ? (action.SourceRelativePath ?? action.RelativePath) : action.RelativePath;
+            var dst = Path.Combine(back ? _sourceRoot : _targetRoot, dstRel);
             var where = back ? " <-" : "";
             var manageSourceCloud = !back && !_dryRun && _freeUpSourceSpaceAfterCopy;
             // Noted before the write, not after: the notification can reach the watcher first.
