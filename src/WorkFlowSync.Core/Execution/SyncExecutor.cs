@@ -242,7 +242,10 @@ public sealed class SyncExecutor
                             var exportRes = _googleDriveExporter.Export(src, dst, action.Proposed.SourceMtimeUtc, ct);
                             if (exportRes.AuthRequired)
                             {
-                                _log.Warn($"{pairTag} skip  \\{action.RelativePath}: Google Doc export requires authorization token. Set up Google account in settings or config.json.");
+                                var authMsg = !string.IsNullOrWhiteSpace(exportRes.ErrorMessage)
+                                    ? $"Google Doc export requires authorization ({exportRes.ErrorMessage}). Re-authorize Google account in settings or config.json."
+                                    : "Google Doc export requires authorization token. Set up Google account in settings or config.json.";
+                                _log.Warn($"{pairTag} skip  \\{action.RelativePath}: {authMsg}");
                                 result.Skipped++;
                                 break;
                             }
@@ -536,7 +539,10 @@ public sealed class SyncExecutor
     {
         var dir = Path.GetDirectoryName(dst);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-        var tmp = dst + ".wfs-tmp";
+        var dstFileName = Path.GetFileName(dst);
+        var tmp = System.Text.Encoding.UTF8.GetByteCount(dstFileName) > PathShortener.MaxSegmentUtf8Bytes && !string.IsNullOrEmpty(dir)
+            ? Path.Combine(dir, $".~wfs-{PathShortener.ComputeHash(dstFileName, 12)}.wfs-tmp")
+            : dst + ".wfs-tmp";
         try
         {
             for (var attempt = 0; attempt < 6; attempt++)

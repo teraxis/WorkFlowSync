@@ -93,6 +93,14 @@ public sealed class ApprovalService
         var targetFile = Path.Combine(fullTarget, entry.Path);
         var targetExists = File.Exists(targetFile) || Directory.Exists(targetFile);
 
+        if (!targetExists && Directory.Exists(fullTarget) && entry.Change != PendingChange.Deleted && decision == DecisionType.Approve)
+        {
+            _store.Pending.Resolve(entry.Id, PendingStatus.Stale, now);
+            result.StaleCount = 1;
+            result.Errors.Add($"{entry.Path}: item no longer exists in target.");
+            return result;
+        }
+
         if (targetExists && entry.Change != PendingChange.Deleted)
         {
             var info = new FileInfo(targetFile);
@@ -119,7 +127,7 @@ public sealed class ApprovalService
                     ExecuteApprove(entry, fullSource, fullTarget, pairName, now, result, ct);
                     break;
                 case DecisionType.Dismiss:
-                    ExecuteDismiss(entry, pairName, now, result);
+                    ExecuteDismiss(entry, fullTarget, pairName, now, result);
                     break;
                 case DecisionType.Revert:
                     ExecuteRevert(entry, fullSource, fullTarget, pairName, now, result, ct);
@@ -136,12 +144,12 @@ public sealed class ApprovalService
 
     private void ExecuteApprove(PendingEntry entry, string sourceRoot, string targetRoot, string pairName, DateTimeOffset now, ApprovalResult result, CancellationToken ct)
     {
-        var executor = new SyncExecutor(sourceRoot, targetRoot, _log, dryRun: false);
+        var executor = new SyncExecutor(sourceRoot, targetRoot, _log, dryRun: false, cloudFiles: CloudFileMode.Hydrate);
 
         if (entry.Change is PendingChange.Added or PendingChange.Modified or PendingChange.Conflict)
         {
             var targetFile = Path.Combine(targetRoot, entry.Path);
-            var isDir = Directory.Exists(targetFile);
+            var isDir = entry.Kind == EntryKind.Directory || Directory.Exists(targetFile);
             var actionKind = isDir ? SyncActionKind.CreateDirectory : SyncActionKind.CopyFile;
 
             var plan = new SyncPlan();
@@ -162,9 +170,9 @@ public sealed class ApprovalService
             plan.Actions.Add(new SyncAction(actionKind, entry.Path, proposed, SyncSide.Source));
             var execRes = executor.Execute(plan, $"[{pairName}]", ct);
 
-            if (execRes.Errors == 0)
+            if (execRes.Errors == 0 && execRes.Skipped == 0 && execRes.Completed.Count > 0)
             {
-                _store.Upsert(execRes.Completed.Count > 0 ? execRes.Completed : new[] { proposed });
+                _store.Upsert(execRes.Completed);
                 _store.Pending.Resolve(entry.Id, PendingStatus.Approved, now);
                 result.ApprovedCount = 1;
             }
@@ -176,10 +184,9 @@ public sealed class ApprovalService
         else if (entry.Change == PendingChange.Deleted)
         {
             var sourceFile = Path.Combine(sourceRoot, entry.Path);
-            var isDir = Directory.Exists(sourceFile);
-            var actionKind = isDir ? SyncActionKind.DeleteDirectory : SyncActionKind.DeleteFile;
+            var isDir = entry.Kind == EntryKind.Directory || Directory.Exists(sourceFile);
+            var sourceExists = File.Exists(sourceFile) || Directory.Exists(sourceFile);
 
-            var plan = new SyncPlan();
             var proposed = new StateEntry
             {
                 PairName = pairName,
@@ -190,6 +197,16 @@ public sealed class ApprovalService
                 LastSeenUtc = now,
             };
 
+            if (!sourceExists)
+            {
+                _store.Upsert(new[] { proposed });
+                _store.Pending.Resolve(entry.Id, PendingStatus.Approved, now);
+                result.ApprovedCount = 1;
+                return;
+            }
+
+            var actionKind = isDir ? SyncActionKind.DeleteDirectory : SyncActionKind.DeleteFile;
+            var plan = new SyncPlan();
             plan.Actions.Add(new SyncAction(actionKind, entry.Path, proposed, SyncSide.Source));
             var execRes = executor.Execute(plan, $"[{pairName}]", ct);
 
@@ -208,6 +225,7 @@ public sealed class ApprovalService
         {
             if (!string.IsNullOrEmpty(entry.FromPath))
             {
+                var targetFile = Path.Combine(targetRoot, entry.Path);
                 var oldSource = Path.Combine(sourceRoot, entry.FromPath);
                 var newSource = Path.Combine(sourceRoot, entry.Path);
 
@@ -220,7 +238,18 @@ public sealed class ApprovalService
                 }
                 else if (Directory.Exists(oldSource))
                 {
-                    Directory.Move(oldSource, newSource);
+                    if (!Directory.Exists(newSource))
+                    {
+                        Directory.Move(oldSource, newSource);
+                    }
+                }
+                else if (File.Exists(targetFile))
+                {
+                    File.Copy(targetFile, newSource, overwrite: true);
+                }
+                else if (Directory.Exists(targetFile))
+                {
+                    Directory.CreateDirectory(newSource);
                 }
 
                 _store.Delete(pairName, new[] { entry.FromPath });
@@ -247,31 +276,37 @@ public sealed class ApprovalService
         }
     }
 
-    private void ExecuteDismiss(PendingEntry entry, string pairName, DateTimeOffset now, ApprovalResult result)
+    private void ExecuteDismiss(PendingEntry entry, string targetRoot, string pairName, DateTimeOffset now, ApprovalResult result)
     {
-        var targetStatus = entry.Change switch
-        {
-            PendingChange.Added => EntryStatus.LocalOnly,
-            PendingChange.Deleted => EntryStatus.Tombstone,
-            _ => EntryStatus.Diverged,
-        };
+        var targetFile = Path.Combine(targetRoot, entry.Path);
+        var targetExists = File.Exists(targetFile) || Directory.Exists(targetFile);
 
-        _store.Upsert(new[]
+        if (targetExists || entry.Change == PendingChange.Deleted)
         {
-            new StateEntry
+            var targetStatus = entry.Change switch
             {
-                PairName = pairName,
-                RelativePath = entry.Path,
-                Kind = entry.Kind,
-                Status = targetStatus,
-                FirstSeenUtc = entry.DetectedUtc,
-                LastSeenUtc = now,
-                SourceSize = entry.SrcSize,
-                SourceMtimeUtc = entry.SrcMtimeUtc,
-                CopiedSize = entry.DstSize,
-                CopiedMtimeUtc = entry.DstMtimeUtc,
-            }
-        });
+                PendingChange.Added => EntryStatus.LocalOnly,
+                PendingChange.Deleted => EntryStatus.Tombstone,
+                _ => EntryStatus.Diverged,
+            };
+
+            _store.Upsert(new[]
+            {
+                new StateEntry
+                {
+                    PairName = pairName,
+                    RelativePath = entry.Path,
+                    Kind = entry.Kind,
+                    Status = targetStatus,
+                    FirstSeenUtc = entry.DetectedUtc,
+                    LastSeenUtc = now,
+                    SourceSize = entry.SrcSize,
+                    SourceMtimeUtc = entry.SrcMtimeUtc,
+                    CopiedSize = entry.DstSize,
+                    CopiedMtimeUtc = entry.DstMtimeUtc,
+                }
+            });
+        }
 
         _store.Pending.Resolve(entry.Id, PendingStatus.Dismissed, now);
         result.DismissedCount = 1;
@@ -279,7 +314,7 @@ public sealed class ApprovalService
 
     private void ExecuteRevert(PendingEntry entry, string sourceRoot, string targetRoot, string pairName, DateTimeOffset now, ApprovalResult result, CancellationToken ct)
     {
-        var executor = new SyncExecutor(sourceRoot, targetRoot, _log, dryRun: false);
+        var executor = new SyncExecutor(sourceRoot, targetRoot, _log, dryRun: false, cloudFiles: CloudFileMode.Hydrate);
 
         if (entry.Change == PendingChange.Added)
         {
@@ -297,7 +332,14 @@ public sealed class ApprovalService
             }
             else if (Directory.Exists(targetFile))
             {
-                Directory.Delete(targetFile, recursive: true);
+                if (RecycleBin.IsAvailableFor(targetFile))
+                {
+                    RecycleBin.Send(targetFile);
+                }
+                else
+                {
+                    Directory.Delete(targetFile, recursive: true);
+                }
             }
 
             _store.Delete(pairName, new[] { entry.Path });
@@ -307,7 +349,16 @@ public sealed class ApprovalService
         else if (entry.Change is PendingChange.Modified or PendingChange.Deleted or PendingChange.Conflict)
         {
             var sourceFile = Path.Combine(sourceRoot, entry.Path);
-            var isDir = Directory.Exists(sourceFile);
+            var isDir = entry.Kind == EntryKind.Directory || Directory.Exists(sourceFile);
+            var sourceExists = File.Exists(sourceFile) || Directory.Exists(sourceFile);
+            if (!sourceExists)
+            {
+                _store.Pending.Resolve(entry.Id, PendingStatus.Stale, now);
+                result.StaleCount = 1;
+                result.Errors.Add($"{entry.Path}: item no longer exists in source.");
+                return;
+            }
+
             var actionKind = isDir ? SyncActionKind.CreateDirectory : SyncActionKind.CopyFile;
 
             var proposed = new StateEntry
@@ -328,9 +379,9 @@ public sealed class ApprovalService
             plan.Actions.Add(new SyncAction(actionKind, entry.Path, proposed, SyncSide.Target));
             var execRes = executor.Execute(plan, $"[{pairName}]", ct);
 
-            if (execRes.Errors == 0)
+            if (execRes.Errors == 0 && execRes.Skipped == 0 && execRes.Completed.Count > 0)
             {
-                _store.Upsert(execRes.Completed.Count > 0 ? execRes.Completed : new[] { proposed });
+                _store.Upsert(execRes.Completed);
                 _store.Pending.Resolve(entry.Id, PendingStatus.Reverted, now);
                 result.RevertedCount = 1;
             }
@@ -355,7 +406,10 @@ public sealed class ApprovalService
                 }
                 else if (Directory.Exists(oldTarget))
                 {
-                    Directory.Move(oldTarget, origTarget);
+                    if (!Directory.Exists(origTarget))
+                    {
+                        Directory.Move(oldTarget, origTarget);
+                    }
                 }
 
                 _store.Delete(pairName, new[] { entry.Path });

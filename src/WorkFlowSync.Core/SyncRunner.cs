@@ -57,6 +57,7 @@ public sealed class PassResult
 public sealed class SyncRunner
 {
     private readonly SyncConfig _config;
+    private readonly string _configPath;
     private readonly string _configDir;
     private readonly ISyncLog _log;
     private readonly ICloudFilePlatform _cloudPlatform;
@@ -64,7 +65,8 @@ public sealed class SyncRunner
     public SyncRunner(SyncConfig config, string configPath, ISyncLog log, ICloudFilePlatform? cloudPlatform = null)
     {
         _config = config;
-        _configDir = Path.GetDirectoryName(Path.GetFullPath(configPath)) ?? AppContext.BaseDirectory;
+        _configPath = Path.GetFullPath(configPath);
+        _configDir = Path.GetDirectoryName(_configPath) ?? AppContext.BaseDirectory;
         _log = log;
         _cloudPlatform = cloudPlatform ?? new WindowsCloudFilePlatform();
     }
@@ -346,7 +348,27 @@ public sealed class SyncRunner
         {
             var openPending = store.Pending.GetOpen(pair.Name);
             if (openPending.Count > 0)
-                frozen = FrozenPaths.FromPending(openPending);
+            {
+                var activePending = new List<PendingEntry>(openPending.Count);
+                foreach (var p in openPending)
+                {
+                    var inScope = scope is null || scope.Contains(p.Path);
+                    var isObsolete = inScope && (p.Change != PendingChange.Deleted
+                        ? !target.Entries.ContainsKey(p.Path)
+                        : target.Entries.ContainsKey(p.Path) || !source.Entries.ContainsKey(p.Path));
+                    if (isObsolete)
+                    {
+                        if (!dryRun)
+                        {
+                            store.Pending.Resolve(p.Id, PendingStatus.Stale, now);
+                        }
+                        continue;
+                    }
+                    activePending.Add(p);
+                }
+                if (activePending.Count > 0)
+                    frozen = FrozenPaths.FromPending(activePending);
+            }
         }
 
         var plan = twoWay
@@ -384,11 +406,17 @@ public sealed class SyncRunner
 
         // 5. Execute (target only). Checkpoints persist copied rows as we go, so an interrupted first pass
         //    over a huge tree keeps what it already did — and first_seen stays the real date (F3).
+        var activeAccount = _config.GetActiveGoogleAccount();
+        var prevToken = activeAccount?.AccessToken;
         var exec = new SyncExecutor(pair.Source, pair.Target, _log, dryRun, pair.CloudFiles,
             pair.DiskQuotaEnabled, pair.FreeUpSpaceAfterCopy, pair.FreeUpSourceSpaceAfterCopy, pair.MinFreeSpaceGb, _cloudPlatform,
-            pair.GoogleDocExport, _config.GoogleAuth, _config.GetActiveGoogleAccount()) { SelfWrites = SelfWrites }
+            pair.GoogleDocExport, _config.GoogleAuth, activeAccount) { SelfWrites = SelfWrites }
             .Execute(plan, tag, ct, dryRun ? null : rows => store.Upsert(rows),
                 progress: (current, total) => OnPairProgress?.Invoke(pair.Name, current, total));
+        if (!dryRun && activeAccount is not null && !string.Equals(prevToken, activeAccount.AccessToken, StringComparison.Ordinal) && File.Exists(_configPath))
+        {
+            try { ConfigFile.Save(_config, _configPath); } catch { /* best effort */ }
+        }
         result.Execution = exec;
 
         // 6. Persist: bookkeeping updates + successful actions, one transaction. Nothing on dry-run.

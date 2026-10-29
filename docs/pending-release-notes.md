@@ -14,7 +14,7 @@ commits, or agent attribution.
 
 ## Fixed
 
-<!-- Add fixes here for the next release -->
+<!-- Add bug fixes here for the next release -->
 
 ## Removed
 

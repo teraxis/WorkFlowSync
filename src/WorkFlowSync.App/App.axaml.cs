@@ -168,7 +168,14 @@ public partial class App : Application
     {
         if (_vm is null) return;
 
-        Dispatcher.UIThread.Post(() => _vm.RefreshPendingApprovals());
+        Dispatcher.UIThread.Post(() =>
+        {
+            _vm.RefreshPendingApprovals();
+            if (_approvalWindow is not null && _approvalModel is { IsBusy: false })
+            {
+                _approvalModel.Load();
+            }
+        });
 
         var added = result.Pairs.Sum(p => p.Execution?.FilesCopied ?? 0);
         var heldBack = result.Pairs.Sum(p => p.HeldBackRemovals);

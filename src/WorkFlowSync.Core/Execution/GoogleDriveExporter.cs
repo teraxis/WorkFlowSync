@@ -51,14 +51,22 @@ public sealed class GoogleDriveExporter : IGoogleDriveExporter
 
         if (_account is { IsExpired: true, RefreshToken: not null })
         {
+            var refreshed = false;
             try
             {
                 var service = _oauthService ?? new WorkFlowSync.Core.OAuth.GoogleOAuthService();
-                service.RefreshTokenIfNeededAsync(_account, ct).GetAwaiter().GetResult();
+                refreshed = service.RefreshTokenIfNeededAsync(_account, ct).GetAwaiter().GetResult();
             }
             catch
             {
-                // Best effort refresh
+                // Handled below via refreshed == false
+            }
+
+            if (!refreshed)
+            {
+                return new ExportResult(false, 0, null,
+                    $"Google account '{_account.Email}' token expired or was revoked",
+                    AuthRequired: true);
             }
         }
 

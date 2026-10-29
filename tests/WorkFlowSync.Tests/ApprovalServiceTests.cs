@@ -200,4 +200,73 @@ public class ApprovalServiceTests : IDisposable
         // Pending entry remains open for when the share comes back online
         Assert.Equal(1, store.Pending.CountOpen("pair1"));
     }
+
+    [Fact]
+    public async Task Approve_added_item_missing_in_target_resolves_as_Stale_and_clears_open_queue()
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        using var store = new StateStore(_dbPath);
+        var pendingId = store.Pending.Upsert(new PendingEntry
+        {
+            Pair = "pair1",
+            Path = @"Стратегії\Нова папка",
+            Change = PendingChange.Added,
+            Kind = EntryKind.Directory,
+            DetectedUtc = now,
+        });
+
+        // Target directory was renamed/removed before user clicked Approve
+        var service = new ApprovalService(store, new MemorySyncLog());
+        var res = await service.ApproveAsync(pendingId, _src, _dst, now);
+
+        Assert.Equal(1, res.StaleCount);
+        Assert.Equal(0, store.Pending.CountOpen("pair1"));
+        Assert.Equal(PendingStatus.Stale, store.Pending.GetById(pendingId)!.Status);
+    }
+
+    [Fact]
+    public void SyncRunner_TwoWay_AutoExpiresObsoletePendingEntries_BeforeFreezingSubtree()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var cfgPath = Path.Combine(_dir, "config.json");
+        var cfg = new WorkFlowSync.Core.Config.SyncConfig
+        {
+            StatePath = _dbPath,
+            ScanParallelism = 1,
+            Pairs =
+            {
+                new WorkFlowSync.Core.Config.FolderPair
+                {
+                    Name = "pair1",
+                    Source = _src,
+                    Target = _dst,
+                    Mode = WorkFlowSync.Core.Config.SyncMode.TwoWay,
+                    RequireApproval = true,
+                }
+            }
+        };
+
+        using (var store = new StateStore(_dbPath))
+        {
+            // Open pending directory that no longer exists in _dst
+            store.Pending.Upsert(new PendingEntry
+            {
+                Pair = "pair1",
+                Path = @"Стратегії\Нова папка",
+                Change = PendingChange.Added,
+                Kind = EntryKind.Directory,
+                DetectedUtc = now,
+            });
+        }
+
+        var runner = new WorkFlowSync.Core.SyncRunner(cfg, cfgPath, new MemorySyncLog());
+        var pass = runner.Run(dryRun: false);
+
+        Assert.Equal(0, pass.Errors);
+        using (var store = new StateStore(_dbPath))
+        {
+            Assert.Equal(0, store.Pending.CountOpen("pair1"));
+        }
+    }
 }

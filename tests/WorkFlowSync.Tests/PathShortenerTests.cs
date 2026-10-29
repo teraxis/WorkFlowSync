@@ -287,4 +287,48 @@ public sealed class PathShortenerTests
         config.Pairs[0].MaxPathLength = 240;
         Assert.Empty(config.Validate());
     }
+
+    [Fact]
+    public void ShortenDirectoryPath_WhenCyrillicSegmentExceeds255Utf8Bytes_ShortensSegmentUtf8Bytes()
+    {
+        var root = @"G:\Мій диск\Дисциплінарні провадження";
+        // 137 Cyrillic characters = 256 UTF-8 bytes (> 255 byte Google DriveFS limit), even though total chars is only 186 (< 240)
+        var longSegment = "Головне управління з протидії системним загрозам управлінню державою Департаменту захисту національної державності Служби безпеки України";
+        var relDir = @"Березін А.Г\" + longSegment;
+
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(longSegment) > 255);
+        Assert.True(Path.Combine(root, relDir).Length < 240);
+
+        var shortened = PathShortener.ShortenDirectoryPath(root, relDir, 240);
+        var shortenedSegments = shortened.Split('\\');
+
+        Assert.NotEqual(relDir, shortened);
+        Assert.All(shortenedSegments, seg =>
+            Assert.True(System.Text.Encoding.UTF8.GetByteCount(seg) <= PathShortener.MaxSegmentUtf8Bytes));
+    }
+
+    [Fact]
+    public void MapEntries_WhenDirectorySegmentHasLeadingSpace_TrimsLeadingSpaceAndMapsOriginalSource()
+    {
+        var root = @"G:\Мій диск\Дисциплінарні провадження";
+        var dirWithLeadingSpace = @"Мороз Н.В\№914-1165-24\ Визнання права власності ЗАГС 06-11";
+        var fileUnderDir = dirWithLeadingSpace + @"\doc.pdf";
+        var now = DateTimeOffset.UtcNow;
+
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [dirWithLeadingSpace] = new() { RelativePath = dirWithLeadingSpace, Kind = EntryKind.Directory, MtimeUtc = now },
+            [fileUnderDir] = new() { RelativePath = fileUnderDir, Kind = EntryKind.File, Size = 100, MtimeUtc = now },
+        };
+
+        var mapped = PathShortener.MapEntries(source, root, enabled: true, maxPathLength: 240, state: null, existingTargetToSourceMap: null, out var map);
+
+        var expectedDir = @"Мороз Н.В\№914-1165-24\Визнання права власності ЗАГС 06-11";
+        var expectedFile = expectedDir + @"\doc.pdf";
+
+        Assert.True(mapped.ContainsKey(expectedDir));
+        Assert.True(mapped.ContainsKey(expectedFile));
+        Assert.Equal(dirWithLeadingSpace, map[expectedDir]);
+        Assert.Equal(fileUnderDir, map[expectedFile]);
+    }
 }

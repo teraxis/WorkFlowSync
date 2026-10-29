@@ -16,6 +16,46 @@ public static class PathShortener
     public const int DefaultMaxPathLength = 240;
     public const int MinMaxPathLength = 80;
     public const int MaxMaxPathLength = 1000;
+    public const int MaxSegmentUtf8Bytes = 240;
+
+    /// <summary>
+    /// Truncates a string so that its UTF-8 byte count does not exceed <paramref name="maxBytes"/>,
+    /// without splitting surrogate pairs.
+    /// </summary>
+    public static string TruncateToUtf8Bytes(string text, int maxBytes)
+    {
+        if (string.IsNullOrEmpty(text) || maxBytes <= 0) return string.Empty;
+        if (Encoding.UTF8.GetByteCount(text) <= maxBytes) return text;
+
+        var len = Math.Min(text.Length, maxBytes);
+        while (len > 0 && Encoding.UTF8.GetByteCount(text.AsSpan(0, len)) > maxBytes)
+        {
+            len--;
+        }
+        if (len > 0 && char.IsHighSurrogate(text[len - 1]))
+        {
+            len--;
+        }
+        return text[..len];
+    }
+
+    /// <summary>
+    /// Checks whether any segment in the relative path has leading/trailing spaces
+    /// or exceeds <see cref="MaxSegmentUtf8Bytes"/> in UTF-8 (which Google DriveFS and Linux/NAS reject).
+    /// </summary>
+    public static bool HasInvalidOrLongSegment(string? relativePath)
+    {
+        if (string.IsNullOrEmpty(relativePath)) return false;
+        var segments = relativePath.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var seg in segments)
+        {
+            if (seg.Length > 0 && (seg[0] == ' ' || seg[^1] == ' '))
+                return true;
+            if (Encoding.UTF8.GetByteCount(seg) > MaxSegmentUtf8Bytes)
+                return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// Computes an 8-character lowercase hexadecimal hash of the relative path
@@ -38,10 +78,10 @@ public static class PathShortener
         if (string.IsNullOrWhiteSpace(relativePath)) return relativePath;
         var root = (targetRoot ?? "").TrimEnd('\\', '/');
         var fullTarget = string.IsNullOrEmpty(root) ? relativePath : Path.Combine(root, relativePath);
-        if (fullTarget.Length <= maxPathLength) return relativePath;
+        if (fullTarget.Length <= maxPathLength && !HasInvalidOrLongSegment(relativePath)) return relativePath;
 
         var dir = Path.GetDirectoryName(relativePath) ?? "";
-        var fileName = Path.GetFileName(relativePath);
+        var fileName = Path.GetFileName(relativePath).Trim();
         var ext = Path.GetExtension(fileName);
         var baseName = Path.GetFileNameWithoutExtension(fileName);
         if (string.IsNullOrEmpty(baseName))
@@ -50,18 +90,38 @@ public static class PathShortener
             ext = "";
         }
 
+        if (!string.IsNullOrEmpty(dir) && HasInvalidOrLongSegment(dir))
+        {
+            dir = ShortenDirectoryPath(root, dir, maxPathLength);
+        }
+
+        var candidateRel = string.IsNullOrEmpty(dir) ? fileName : Path.Combine(dir, fileName);
+        fullTarget = string.IsNullOrEmpty(root) ? candidateRel : Path.Combine(root, candidateRel);
+        if (fullTarget.Length <= maxPathLength && Encoding.UTF8.GetByteCount(fileName) <= MaxSegmentUtf8Bytes)
+        {
+            return candidateRel;
+        }
+
         var hash = ComputeHash(relativePath, 8);
         var hashTag = "_#" + hash; // 10 chars
-        var excess = fullTarget.Length - maxPathLength;
+        var suffixUtf8Bytes = Encoding.UTF8.GetByteCount(hashTag + ext);
+        var maxBaseUtf8Bytes = Math.Max(3, MaxSegmentUtf8Bytes - suffixUtf8Bytes);
+        var excess = Math.Max(0, fullTarget.Length - maxPathLength);
 
         // Try shortening only the file name first (leaving at least 3 chars of base name)
-        var maxBaseLen = baseName.Length - excess - hashTag.Length;
+        var maxBaseLen = baseName.Length - excess - (excess > 0 ? hashTag.Length : 0);
         if (maxBaseLen >= 3)
         {
-            var shortenedBase = baseName[..maxBaseLen].TrimEnd(' ', '.', '_');
-            if (shortenedBase.Length == 0) shortenedBase = baseName[..Math.Min(3, baseName.Length)];
+            var shortenedBase = baseName[..Math.Min(baseName.Length, maxBaseLen)];
+            shortenedBase = TruncateToUtf8Bytes(shortenedBase, maxBaseUtf8Bytes).TrimEnd(' ', '.', '_');
+            if (shortenedBase.Length == 0) shortenedBase = TruncateToUtf8Bytes(baseName, Math.Max(2, maxBaseUtf8Bytes));
             var newFileName = shortenedBase + hashTag + ext;
-            return string.IsNullOrEmpty(dir) ? newFileName : Path.Combine(dir, newFileName);
+            var candidate = string.IsNullOrEmpty(dir) ? newFileName : Path.Combine(dir, newFileName);
+            var candidateFull = string.IsNullOrEmpty(root) ? candidate : Path.Combine(root, candidate);
+            if (candidateFull.Length <= maxPathLength)
+            {
+                return candidate;
+            }
         }
 
         // If file name shortening alone is not enough, shorten directory segments first
@@ -84,19 +144,21 @@ public static class PathShortener
         if (availableForBase >= 1)
         {
             var keepLen = Math.Min(baseName.Length, availableForBase);
-            var shortenedBase = baseName[..keepLen].TrimEnd(' ', '.', '_');
+            var shortenedBase = TruncateToUtf8Bytes(baseName[..keepLen], maxBaseUtf8Bytes).TrimEnd(' ', '.', '_');
             if (shortenedBase.Length == 0) shortenedBase = baseName[..1];
             var newFileName = shortenedBase + hashTag + ext;
             return string.IsNullOrEmpty(targetDir) ? newFileName : Path.Combine(targetDir, newFileName);
         }
 
         // Extreme length constraint: drop hashTag prefix if strictly necessary or truncate ext
-        var emergencyFileName = baseName[..Math.Min(baseName.Length, Math.Max(1, availableForFileName - 6))] + "_#" + hash[..4];
+        var emergencyBase = TruncateToUtf8Bytes(baseName[..Math.Min(baseName.Length, Math.Max(1, availableForFileName - 6))], MaxSegmentUtf8Bytes - 10);
+        var emergencyFileName = emergencyBase + "_#" + hash[..4];
         return string.IsNullOrEmpty(targetDir) ? emergencyFileName : Path.Combine(targetDir, emergencyFileName);
     }
 
     /// <summary>
-    /// Shortens a relative directory path so that <c>Path.Combine(targetRoot, shortenedDir).Length &lt;= maxDirectoryLength</c>.
+    /// Shortens a relative directory path so that <c>Path.Combine(targetRoot, shortenedDir).Length &lt;= maxDirectoryLength</c>
+    /// and every directory segment fits within <see cref="MaxSegmentUtf8Bytes"/> UTF-8 bytes without leading/trailing spaces.
     /// Shortens individual directory segments starting from the deepest subfolder.
     /// </summary>
     public static string ShortenDirectoryPath(string targetRoot, string directoryRelativePath, int maxDirectoryLength)
@@ -104,12 +166,10 @@ public static class PathShortener
         if (string.IsNullOrWhiteSpace(directoryRelativePath)) return directoryRelativePath;
         var root = (targetRoot ?? "").TrimEnd('\\', '/');
         var fullTarget = string.IsNullOrEmpty(root) ? directoryRelativePath : Path.Combine(root, directoryRelativePath);
-        if (fullTarget.Length <= maxDirectoryLength) return directoryRelativePath;
+        if (fullTarget.Length <= maxDirectoryLength && !HasInvalidOrLongSegment(directoryRelativePath)) return directoryRelativePath;
 
         var segments = directoryRelativePath.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length == 0) return directoryRelativePath;
-
-        var excess = fullTarget.Length - maxDirectoryLength;
 
         // Cumulative path to compute stable segment hashes
         var cumulative = new string[segments.Length];
@@ -117,6 +177,29 @@ public static class PathShortener
         {
             cumulative[i] = i == 0 ? segments[0] : cumulative[i - 1] + "\\" + segments[i];
         }
+
+        // Normalize leading/trailing spaces and enforce UTF-8 byte limit per segment
+        for (var i = 0; i < segments.Length; i++)
+        {
+            var seg = segments[i].Trim();
+            if (seg.Length == 0) seg = "_#" + ComputeHash(cumulative[i], 6);
+
+            if (Encoding.UTF8.GetByteCount(seg) > MaxSegmentUtf8Bytes)
+            {
+                var segHash = "_#" + ComputeHash(cumulative[i], 6); // 8 ASCII bytes
+                var maxBaseBytes = Math.Max(4, MaxSegmentUtf8Bytes - segHash.Length);
+                var shortenedBase = TruncateToUtf8Bytes(seg, maxBaseBytes).TrimEnd(' ', '.', '_');
+                if (shortenedBase.Length == 0) shortenedBase = seg[..1];
+                seg = shortenedBase + segHash;
+            }
+            segments[i] = seg;
+        }
+
+        var normalizedRel = string.Join("\\", segments);
+        fullTarget = string.IsNullOrEmpty(root) ? normalizedRel : Path.Combine(root, normalizedRel);
+        if (fullTarget.Length <= maxDirectoryLength) return normalizedRel;
+
+        var excess = fullTarget.Length - maxDirectoryLength;
 
         // First pass: shorten segments longer than 12 chars from deepest to shallowest
         for (var i = segments.Length - 1; i >= 0 && excess > 0; i--)
@@ -245,15 +328,7 @@ public static class PathShortener
                     mappedParent = parent;
 
                 var candidate = string.IsNullOrEmpty(mappedParent) ? baseDir : Path.Combine(mappedParent, baseDir);
-                var fullTarget = string.IsNullOrEmpty(targetRoot) ? candidate : Path.Combine(targetRoot, candidate);
-                if (fullTarget.Length > maxPathLength)
-                {
-                    targetRel = ShortenDirectoryPath(targetRoot, candidate, maxPathLength);
-                }
-                else
-                {
-                    targetRel = candidate;
-                }
+                targetRel = ShortenDirectoryPath(targetRoot, candidate, maxPathLength);
                 dirMap[path] = targetRel;
             }
             else
@@ -268,15 +343,7 @@ public static class PathShortener
                     mappedParent = parent;
 
                 var candidate = string.IsNullOrEmpty(mappedParent) ? fileName : Path.Combine(mappedParent, fileName);
-                var fullTarget = string.IsNullOrEmpty(targetRoot) ? candidate : Path.Combine(targetRoot, candidate);
-                if (fullTarget.Length > maxPathLength)
-                {
-                    targetRel = ShortenFilePath(targetRoot, candidate, maxPathLength);
-                }
-                else
-                {
-                    targetRel = candidate;
-                }
+                targetRel = ShortenFilePath(targetRoot, candidate, maxPathLength);
             }
 
             if (!string.Equals(targetRel, path, StringComparison.OrdinalIgnoreCase))

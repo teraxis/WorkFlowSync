@@ -740,6 +740,7 @@ public sealed partial class ApprovalViewModel : ObservableObject
         {
             IsBusy = false;
             Load();
+            StatusMessage = totalResult.Errors.Count > 0 ? totalResult.Errors[0] : string.Empty;
             Resolved?.Invoke();
         }
 
