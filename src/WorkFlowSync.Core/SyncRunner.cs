@@ -364,6 +364,20 @@ public sealed class SyncRunner
                         }
                         continue;
                     }
+                    if (!dryRun && inScope && p.Change != PendingChange.Deleted && p.Kind == EntryKind.File &&
+                        target.Entries.TryGetValue(p.Path, out var curTarget) && curTarget.Kind == EntryKind.File &&
+                        (p.DstSize != curTarget.Size || p.DstMtimeUtc != curTarget.MtimeUtc))
+                    {
+                        var updated = p with
+                        {
+                            DstSize = curTarget.Size,
+                            DstMtimeUtc = curTarget.MtimeUtc,
+                            DetectedUtc = now,
+                        };
+                        var newId = store.Pending.Upsert(updated);
+                        activePending.Add(updated with { Id = newId });
+                        continue;
+                    }
                     activePending.Add(p);
                 }
                 if (activePending.Count > 0)

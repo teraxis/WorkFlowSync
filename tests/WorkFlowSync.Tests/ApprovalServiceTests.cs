@@ -269,4 +269,67 @@ public class ApprovalServiceTests : IDisposable
             Assert.Equal(0, store.Pending.CountOpen("pair1"));
         }
     }
+
+    [Fact]
+    public async Task SyncRunner_TwoWay_RefreshesOpenPendingFileMetadata_WhenEditedAgainInTarget()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var srcFile = Path.Combine(_src, "doc_v2.docx");
+        var dstFile = Path.Combine(_dst, "doc_v2.docx");
+        File.WriteAllText(srcFile, "Original 15B");
+        File.WriteAllText(dstFile, "First edit 17B!!!");
+
+        var cfgPath = Path.Combine(_dir, "config.json");
+        var cfg = new WorkFlowSync.Core.Config.SyncConfig
+        {
+            StatePath = _dbPath,
+            ScanParallelism = 1,
+            Pairs =
+            {
+                new WorkFlowSync.Core.Config.FolderPair
+                {
+                    Name = "pair1",
+                    Source = _src,
+                    Target = _dst,
+                    Mode = WorkFlowSync.Core.Config.SyncMode.TwoWay,
+                    RequireApproval = true,
+                }
+            }
+        };
+
+        long pendingId;
+        using (var store = new StateStore(_dbPath))
+        {
+            pendingId = store.Pending.Upsert(new PendingEntry
+            {
+                Pair = "pair1",
+                Path = "doc_v2.docx",
+                Change = PendingChange.Modified,
+                Kind = EntryKind.File,
+                SrcSize = 12,
+                DstSize = 17,
+                DetectedUtc = now.AddMinutes(-10),
+            });
+        }
+
+        // User saves the file a second time in Word while it is frozen in pending queue
+        File.WriteAllText(dstFile, "Second edit with much longer content 40B");
+
+        var runner = new WorkFlowSync.Core.SyncRunner(cfg, cfgPath, new MemorySyncLog());
+        var pass = runner.Run(dryRun: false);
+        Assert.Equal(0, pass.Errors);
+
+        using (var store = new StateStore(_dbPath))
+        {
+            var open = store.Pending.GetOpen("pair1");
+            Assert.Single(open);
+            Assert.Equal(new FileInfo(dstFile).Length, open[0].DstSize);
+
+            var service = new ApprovalService(store, new MemorySyncLog());
+            var res = await service.ApproveAsync(open[0].Id, _src, _dst, DateTimeOffset.UtcNow);
+            Assert.True(res.IsSuccess);
+            Assert.Equal(1, res.ApprovedCount);
+            Assert.Equal("Second edit with much longer content 40B", File.ReadAllText(srcFile));
+        }
+    }
 }

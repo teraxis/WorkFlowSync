@@ -447,10 +447,30 @@ public sealed partial class ApprovalViewModel : ObservableObject
         {
             using var store = new StateStore(_statePath());
             var open = store.Pending.GetOpen();
+            var roots = _pairRoots();
+            var now = DateTimeOffset.UtcNow;
 
             var pairs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var entry in open)
+            foreach (var rawEntry in open)
             {
+                var entry = rawEntry;
+                if (roots.TryGetValue(entry.Pair, out var pairRoot) && Directory.Exists(pairRoot.Target))
+                {
+                    var targetPath = Path.Combine(pairRoot.Target, entry.Path);
+                    if (entry.Change != PendingChange.Deleted && entry.Kind == EntryKind.File && File.Exists(targetPath))
+                    {
+                        var info = new FileInfo(targetPath);
+                        var curSize = info.Length;
+                        var curMtime = new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero);
+                        if (entry.DstSize != curSize || entry.DstMtimeUtc != curMtime)
+                        {
+                            var updated = entry with { DstSize = curSize, DstMtimeUtc = curMtime, DetectedUtc = now };
+                            var newId = store.Pending.Upsert(updated);
+                            entry = updated with { Id = newId };
+                        }
+                    }
+                }
+
                 pairs.Add(entry.Pair);
                 var vm = new ApprovalItemViewModel { Entry = entry };
                 vm.PropertyChanged += (_, e) =>
@@ -715,11 +735,27 @@ public sealed partial class ApprovalViewModel : ObservableObject
                     continue;
                 }
 
+                var pendingId = item.Id;
+                if (decision == DecisionKind.Approve && item.Entry.Change != PendingChange.Deleted && item.Entry.Kind == EntryKind.File)
+                {
+                    var targetFile = Path.Combine(pairRoot.Target, item.Entry.Path);
+                    if (File.Exists(targetFile))
+                    {
+                        var info = new FileInfo(targetFile);
+                        var curSize = info.Length;
+                        var curMtime = new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero);
+                        if (item.Entry.DstSize != curSize || item.Entry.DstMtimeUtc != curMtime)
+                        {
+                            pendingId = store.Pending.Upsert(item.Entry with { DstSize = curSize, DstMtimeUtc = curMtime, DetectedUtc = now });
+                        }
+                    }
+                }
+
                 var res = decision switch
                 {
-                    DecisionKind.Approve => await service.ApproveAsync(item.Id, pairRoot.Source, pairRoot.Target, now, ct),
-                    DecisionKind.Dismiss => await service.DismissAsync(item.Id, pairRoot.Source, pairRoot.Target, now, ct),
-                    DecisionKind.Revert => await service.RevertAsync(item.Id, pairRoot.Source, pairRoot.Target, now, ct),
+                    DecisionKind.Approve => await service.ApproveAsync(pendingId, pairRoot.Source, pairRoot.Target, now, ct),
+                    DecisionKind.Dismiss => await service.DismissAsync(pendingId, pairRoot.Source, pairRoot.Target, now, ct),
+                    DecisionKind.Revert => await service.RevertAsync(pendingId, pairRoot.Source, pairRoot.Target, now, ct),
                     _ => new ApprovalResult()
                 };
 

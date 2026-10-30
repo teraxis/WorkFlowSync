@@ -644,12 +644,15 @@
         <Border Grid.Row="3" Background="{DynamicResource SurfaceCard}"
                 BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,1,0,0"
                 Padding="16,10" MinHeight="48">
-            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+            <Grid ColumnDefinitions="Auto,Auto,*" VerticalAlignment="Center">
                 <CheckBox Grid.Column="0" Content="{loc:Loc approval.select_all}" Click="OnSelectAllToggled"
                           VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0" />
                 <TextBlock Grid.Column="1" Text="{Binding SummaryText}" VerticalAlignment="Center"
                            Margin="20,0,0,0" Foreground="{DynamicResource TextSecondary}" FontSize="13" />
                 <TextBlock Grid.Column="2" Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                           HorizontalAlignment="Right" Margin="16,0,0,0"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                           ToolTip.Tip="{Binding StatusMessage}"
                            Foreground="{DynamicResource Danger}" FontSize="13" FontWeight="SemiBold" />
             </Grid>
         </Border>

@@ -235,6 +235,16 @@ public sealed class ApprovalService
                 if (File.Exists(oldSource))
                 {
                     File.Move(oldSource, newSource, overwrite: true);
+                    if (File.Exists(targetFile))
+                    {
+                        var srcInfo = new FileInfo(newSource);
+                        var dstInfo = new FileInfo(targetFile);
+                        if (srcInfo.Length != dstInfo.Length || srcInfo.LastWriteTimeUtc != dstInfo.LastWriteTimeUtc)
+                        {
+                            File.Copy(targetFile, newSource, overwrite: true);
+                            File.SetLastWriteTimeUtc(newSource, dstInfo.LastWriteTimeUtc);
+                        }
+                    }
                 }
                 else if (Directory.Exists(oldSource))
                 {
