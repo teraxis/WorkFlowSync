@@ -14,7 +14,7 @@ commits, or agent attribution.
 
 ## Fixed
 
-- Виправлено помилку `file in target changed again since detection` під час підтвердження змін у вікні «Погодження змін», коли файл у кінцевій теці повторно зберігався після першого виявлення.
+<!-- Add bug fixes here for the next release -->
 
 ## Removed
 
