@@ -158,6 +158,36 @@ public class ApprovalViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task ExecuteDecisionForItemsAsync_sets_status_and_is_not_busy_after_completion()
+    {
+        File.WriteAllText(Path.Combine(_dst, "doc.txt"), "content");
+
+        using (var store = new StateStore(_dbPath))
+        {
+            store.Pending.Upsert(new PendingEntry
+            {
+                Pair = "pair1",
+                Path = "doc.txt",
+                Change = PendingChange.Added,
+                Kind = EntryKind.File,
+                DstSize = 7,
+                DetectedUtc = _now
+            });
+        }
+
+        var vm = CreateModel();
+        vm.Load();
+
+        Assert.False(vm.IsBusy);
+        var res = await vm.ExecuteDecisionForItemsAsync(vm.FilteredItems, ApprovalViewModel.DecisionKind.Approve);
+
+        Assert.True(res.IsSuccess);
+        Assert.False(vm.IsBusy);
+        Assert.False(vm.IsStatusError);
+        Assert.Equal(string.Empty, vm.StatusMessage);
+    }
+
+    [Fact]
     public void MultiCheckbox_filtering_allows_custom_combinations()
     {
         using (var store = new StateStore(_dbPath))

@@ -189,6 +189,10 @@
   "approval.success_approve": "Зміни підтверджено та перенесено",
   "approval.success_dismiss": "Зміни залишено як є",
   "approval.success_revert": "Зміни скасовано (відновлено)",
+  "approval.processing_approve": "[{0}/{1}] Підтвердження: {2}...",
+  "approval.processing_dismiss": "[{0}/{1}] Залишення: {2}...",
+  "approval.processing_revert": "[{0}/{1}] Відновлення: {2}...",
+  "approval.processing_generic": "Обробка змін...",
 
   "recent.title": "Останні зміни",
   "recent.settings_tip": "Відкрити вікно програми",

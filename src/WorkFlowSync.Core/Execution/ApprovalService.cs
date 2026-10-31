@@ -36,26 +36,29 @@ public sealed class ApprovalService
 
     /// <summary>
     /// Approves a pending change (✓): applies the change to the source folder A.
+    /// Runs on a thread pool thread to prevent blocking the UI thread during heavy disk/network I/O.
     /// </summary>
     public Task<ApprovalResult> ApproveAsync(long pendingId, string sourceRoot, string targetRoot, DateTimeOffset now, CancellationToken ct = default)
     {
-        return Task.FromResult(ProcessEntry(pendingId, sourceRoot, targetRoot, now, DecisionType.Approve, ct));
+        return Task.Run(() => ProcessEntry(pendingId, sourceRoot, targetRoot, now, DecisionType.Approve, ct), ct);
     }
 
     /// <summary>
     /// Dismisses a pending change (⃠): leaves target B as is, records state as Diverged/LocalOnly/Tombstone.
+    /// Runs on a thread pool thread to prevent blocking the UI thread during heavy disk/network I/O.
     /// </summary>
     public Task<ApprovalResult> DismissAsync(long pendingId, string sourceRoot, string targetRoot, DateTimeOffset now, CancellationToken ct = default)
     {
-        return Task.FromResult(ProcessEntry(pendingId, sourceRoot, targetRoot, now, DecisionType.Dismiss, ct));
+        return Task.Run(() => ProcessEntry(pendingId, sourceRoot, targetRoot, now, DecisionType.Dismiss, ct), ct);
     }
 
     /// <summary>
     /// Reverts a pending change (↺): restores target B to the initial state from source A.
+    /// Runs on a thread pool thread to prevent blocking the UI thread during heavy disk/network I/O.
     /// </summary>
     public Task<ApprovalResult> RevertAsync(long pendingId, string sourceRoot, string targetRoot, DateTimeOffset now, CancellationToken ct = default)
     {
-        return Task.FromResult(ProcessEntry(pendingId, sourceRoot, targetRoot, now, DecisionType.Revert, ct));
+        return Task.Run(() => ProcessEntry(pendingId, sourceRoot, targetRoot, now, DecisionType.Revert, ct), ct);
     }
 
     private enum DecisionType { Approve, Dismiss, Revert }

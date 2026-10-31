@@ -234,6 +234,14 @@
             <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
         </Style>
+
+        <!-- Status message styles -->
+        <Style Selector="TextBlock.danger">
+            <Setter Property="Foreground" Value="{DynamicResource Danger}" />
+        </Style>
+        <Style Selector="TextBlock.progress">
+            <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+        </Style>
     </Window.Styles>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto">
@@ -252,6 +260,7 @@
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Button Classes="primary top-btn" Click="OnApproveAllClicked"
+                                IsEnabled="{Binding !IsBusy}"
                                 ToolTip.Tip="{loc:Loc approval.approve_all_tip}">
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                 <Path Classes="ico" Data="{StaticResource IconCheck}" Width="14" Height="14"
@@ -260,6 +269,7 @@
                             </StackPanel>
                         </Button>
                         <Button Classes="top-btn" Click="OnDismissAllClicked"
+                                IsEnabled="{Binding !IsBusy}"
                                 ToolTip.Tip="{loc:Loc approval.dismiss_all_tip}">
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                 <Path Classes="ico" Data="{StaticResource IconX}" Width="13" Height="13"
@@ -268,6 +278,7 @@
                             </StackPanel>
                         </Button>
                         <Button Classes="top-btn top-btn-revert" Click="OnRevertAllClicked"
+                                IsEnabled="{Binding !IsBusy}"
                                 ToolTip.Tip="{loc:Loc approval.revert_all_tip}">
                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                 <Path Classes="ico" Data="{StaticResource IconRotateCcw}" Width="13" Height="13"
@@ -409,6 +420,7 @@
 
                     <!-- Refresh Button -->
                     <Button Grid.Column="3" Classes="ghost" Click="OnRefreshClicked"
+                            IsEnabled="{Binding !IsBusy}"
                             ToolTip.Tip="{loc:Loc common.refresh}" Height="32" Padding="8,0" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <Path Classes="ico" Data="{StaticResource IconRefresh}" Width="14" Height="14"
@@ -419,6 +431,11 @@
                 </Grid>
             </Grid>
         </Border>
+
+        <!-- Top Progress Line when Busy -->
+        <ProgressBar Grid.Row="1" Height="2" IsIndeterminate="True"
+                     VerticalAlignment="Top" Margin="0"
+                     IsVisible="{Binding IsBusy}" ZIndex="10" />
 
         <!-- Warning Ceiling Banner (§5.8) -->
         <Border Grid.Row="1" IsVisible="{Binding IsCeilingExceeded}" Background="{DynamicResource DangerSoft}"
@@ -604,6 +621,7 @@
                                                 <!-- Row Action Buttons (32x32 circles, color-coded, centered) -->
                                                 <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
                                                     <Button Classes="row-btn row-btn-approve" Click="OnRowApproveClicked" Tag="{Binding}"
+                                                            IsEnabled="{Binding !$parent[Window].((vm:ApprovalViewModel)DataContext).IsBusy}"
                                                             ToolTip.Tip="{loc:Loc approval.approve_item_tip}">
                                                         <Viewbox Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
                                                             <Canvas Width="24" Height="24">
@@ -612,6 +630,7 @@
                                                         </Viewbox>
                                                     </Button>
                                                     <Button Classes="row-btn row-btn-dismiss" Click="OnRowDismissClicked" Tag="{Binding}"
+                                                            IsEnabled="{Binding !$parent[Window].((vm:ApprovalViewModel)DataContext).IsBusy}"
                                                             ToolTip.Tip="{loc:Loc approval.dismiss_item_tip}">
                                                         <Viewbox Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
                                                             <Canvas Width="24" Height="24">
@@ -620,6 +639,7 @@
                                                         </Viewbox>
                                                     </Button>
                                                     <Button Classes="row-btn row-btn-revert" Click="OnRowRevertClicked" Tag="{Binding}"
+                                                            IsEnabled="{Binding !$parent[Window].((vm:ApprovalViewModel)DataContext).IsBusy}"
                                                             ToolTip.Tip="{loc:Loc approval.revert_item_tip}">
                                                         <Viewbox Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
                                                             <Canvas Width="24" Height="24">
@@ -646,14 +666,20 @@
                 Padding="16,10" MinHeight="48">
             <Grid ColumnDefinitions="Auto,Auto,*" VerticalAlignment="Center">
                 <CheckBox Grid.Column="0" Content="{loc:Loc approval.select_all}" Click="OnSelectAllToggled"
+                          IsEnabled="{Binding !IsBusy}"
                           VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="0" />
                 <TextBlock Grid.Column="1" Text="{Binding SummaryText}" VerticalAlignment="Center"
                            Margin="20,0,0,0" Foreground="{DynamicResource TextSecondary}" FontSize="13" />
-                <TextBlock Grid.Column="2" Text="{Binding StatusMessage}" VerticalAlignment="Center"
-                           HorizontalAlignment="Right" Margin="16,0,0,0"
-                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
-                           ToolTip.Tip="{Binding StatusMessage}"
-                           Foreground="{DynamicResource Danger}" FontSize="13" FontWeight="SemiBold" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <ProgressBar IsIndeterminate="True" Width="80" Height="4" VerticalAlignment="Center"
+                                 IsVisible="{Binding IsBusy}" />
+                    <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                               ToolTip.Tip="{Binding StatusMessage}"
+                               Classes.danger="{Binding IsStatusError}"
+                               Classes.progress="{Binding !IsStatusError}"
+                               FontSize="13" FontWeight="SemiBold" />
+                </StackPanel>
             </Grid>
         </Border>
 

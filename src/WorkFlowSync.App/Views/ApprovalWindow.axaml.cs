@@ -18,11 +18,13 @@ public partial class ApprovalWindow : Window
 
     private void OnRefreshClicked(object? sender, RoutedEventArgs e)
     {
+        if (Model?.IsBusy == true) return;
         Model?.Load();
     }
 
     private async void OnRowApproveClicked(object? sender, RoutedEventArgs e)
     {
+        if (Model?.IsBusy == true) return;
         if ((sender as Button)?.Tag is ApprovalItemViewModel item && Model is not null)
         {
             await Model.ExecuteDecisionForItemsAsync(new[] { item }, ApprovalViewModel.DecisionKind.Approve);
@@ -31,6 +33,7 @@ public partial class ApprovalWindow : Window
 
     private async void OnRowDismissClicked(object? sender, RoutedEventArgs e)
     {
+        if (Model?.IsBusy == true) return;
         if ((sender as Button)?.Tag is ApprovalItemViewModel item && Model is not null)
         {
             await Model.ExecuteDecisionForItemsAsync(new[] { item }, ApprovalViewModel.DecisionKind.Dismiss);
@@ -39,6 +42,7 @@ public partial class ApprovalWindow : Window
 
     private async void OnRowRevertClicked(object? sender, RoutedEventArgs e)
     {
+        if (Model?.IsBusy == true) return;
         if ((sender as Button)?.Tag is ApprovalItemViewModel item && Model is not null)
         {
             await Model.ExecuteDecisionForItemsAsync(new[] { item }, ApprovalViewModel.DecisionKind.Revert);
@@ -47,7 +51,7 @@ public partial class ApprovalWindow : Window
 
     private async void OnApproveAllClicked(object? sender, RoutedEventArgs e)
     {
-        if (Model is null) return;
+        if (Model is null || Model.IsBusy) return;
         var items = Model.Items.Where(i => i.IsSelected).ToList();
         if (items.Count == 0) items = Model.FilteredItems.ToList();
 
@@ -58,7 +62,7 @@ public partial class ApprovalWindow : Window
 
     private async void OnDismissAllClicked(object? sender, RoutedEventArgs e)
     {
-        if (Model is null) return;
+        if (Model is null || Model.IsBusy) return;
         var items = Model.Items.Where(i => i.IsSelected).ToList();
         if (items.Count == 0) items = Model.FilteredItems.ToList();
 
@@ -69,7 +73,7 @@ public partial class ApprovalWindow : Window
 
     private async void OnRevertAllClicked(object? sender, RoutedEventArgs e)
     {
-        if (Model is null) return;
+        if (Model is null || Model.IsBusy) return;
         var items = Model.Items.Where(i => i.IsSelected).ToList();
         if (items.Count == 0) items = Model.FilteredItems.ToList();
 

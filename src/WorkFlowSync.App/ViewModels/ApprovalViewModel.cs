@@ -255,7 +255,33 @@ public sealed partial class ApprovalViewModel : ObservableObject
     [ObservableProperty] private string _summaryText = "";
     [ObservableProperty] private bool _isCeilingExceeded;
     [ObservableProperty] private string _statusMessage = "";
+    [ObservableProperty] private bool _isStatusError;
     [ObservableProperty] private bool _isBusy;
+
+    public void SetStatus(string message, bool isError = false)
+    {
+        void Apply()
+        {
+            StatusMessage = message;
+            IsStatusError = isError;
+        }
+
+        try
+        {
+            if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+            {
+                Apply();
+            }
+            else
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(Apply);
+            }
+        }
+        catch
+        {
+            Apply();
+        }
+    }
 
     [ObservableProperty] private bool? _isAllPairsSelected = true;
     [ObservableProperty] private bool? _isAllTypesSelected = true;
@@ -507,7 +533,7 @@ public sealed partial class ApprovalViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Помилка завантаження: {ex.Message}";
+            SetStatus($"Помилка завантаження: {ex.Message}", isError: true);
         }
 
         NotifyCountsChanged();
@@ -718,55 +744,81 @@ public sealed partial class ApprovalViewModel : ObservableObject
     public async Task<ApprovalResult> ExecuteDecisionForItemsAsync(IEnumerable<ApprovalItemViewModel> items, DecisionKind decision, CancellationToken ct = default)
     {
         IsBusy = true;
+        SetStatus(I18n.T("approval.processing_generic"), isError: false);
         var totalResult = new ApprovalResult();
+        var itemsList = items.ToList();
+        var totalCount = itemsList.Count;
         var roots = _pairRoots();
-        var now = DateTimeOffset.UtcNow;
+        var statePath = _statePath();
 
         try
         {
-            using var store = new StateStore(_statePath());
-            var service = new ApprovalService(store, new LambdaSyncLog(msg => _log(msg)));
-
-            foreach (var item in items.ToList())
+            await Task.Run(async () =>
             {
-                if (!roots.TryGetValue(item.PairName, out var pairRoot))
-                {
-                    totalResult.Errors.Add($"[{item.PairName}] Корінь пари не налаштовано.");
-                    continue;
-                }
+                using var store = new StateStore(statePath);
+                var service = new ApprovalService(store, new LambdaSyncLog(msg => _log(msg)));
 
-                var pendingId = item.Id;
-                if (decision == DecisionKind.Approve && item.Entry.Change != PendingChange.Deleted && item.Entry.Kind == EntryKind.File)
+                for (int i = 0; i < totalCount; i++)
                 {
-                    var targetFile = Path.Combine(pairRoot.Target, item.Entry.Path);
-                    if (File.Exists(targetFile))
+                    ct.ThrowIfCancellationRequested();
+                    var item = itemsList[i];
+                    var itemLabel = string.IsNullOrEmpty(item.RelativePath) ? item.WasPath : item.RelativePath;
+                    var fileName = Path.GetFileName(itemLabel);
+                    if (string.IsNullOrEmpty(fileName)) fileName = itemLabel;
+
+                    var progressKey = decision switch
                     {
-                        var info = new FileInfo(targetFile);
-                        var curSize = info.Length;
-                        var curMtime = new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero);
-                        if (item.Entry.DstSize != curSize || item.Entry.DstMtimeUtc != curMtime)
+                        DecisionKind.Approve => "approval.processing_approve",
+                        DecisionKind.Dismiss => "approval.processing_dismiss",
+                        DecisionKind.Revert => "approval.processing_revert",
+                        _ => "approval.processing_generic"
+                    };
+                    SetStatus(I18n.T(progressKey, i + 1, totalCount, fileName), isError: false);
+
+                    if (!roots.TryGetValue(item.PairName, out var pairRoot))
+                    {
+                        totalResult.Errors.Add($"[{item.PairName}] Корінь пари не налаштовано.");
+                        continue;
+                    }
+
+                    var pendingId = item.Id;
+                    var now = DateTimeOffset.UtcNow;
+                    if (decision == DecisionKind.Approve && item.Entry.Change != PendingChange.Deleted && item.Entry.Kind == EntryKind.File)
+                    {
+                        var targetFile = Path.Combine(pairRoot.Target, item.Entry.Path);
+                        if (File.Exists(targetFile))
                         {
-                            pendingId = store.Pending.Upsert(item.Entry with { DstSize = curSize, DstMtimeUtc = curMtime, DetectedUtc = now });
+                            var info = new FileInfo(targetFile);
+                            var curSize = info.Length;
+                            var curMtime = new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero);
+                            if (item.Entry.DstSize != curSize || item.Entry.DstMtimeUtc != curMtime)
+                            {
+                                pendingId = store.Pending.Upsert(item.Entry with { DstSize = curSize, DstMtimeUtc = curMtime, DetectedUtc = now });
+                            }
                         }
                     }
+
+                    var res = decision switch
+                    {
+                        DecisionKind.Approve => await service.ApproveAsync(pendingId, pairRoot.Source, pairRoot.Target, now, ct),
+                        DecisionKind.Dismiss => await service.DismissAsync(pendingId, pairRoot.Source, pairRoot.Target, now, ct),
+                        DecisionKind.Revert => await service.RevertAsync(pendingId, pairRoot.Source, pairRoot.Target, now, ct),
+                        _ => new ApprovalResult()
+                    };
+
+                    totalResult.ApprovedCount += res.ApprovedCount;
+                    totalResult.DismissedCount += res.DismissedCount;
+                    totalResult.RevertedCount += res.RevertedCount;
+                    totalResult.StaleCount += res.StaleCount;
+                    totalResult.ConflictCount += res.ConflictCount;
+                    totalResult.UnavailableCount += res.UnavailableCount;
+                    totalResult.Errors.AddRange(res.Errors);
                 }
-
-                var res = decision switch
-                {
-                    DecisionKind.Approve => await service.ApproveAsync(pendingId, pairRoot.Source, pairRoot.Target, now, ct),
-                    DecisionKind.Dismiss => await service.DismissAsync(pendingId, pairRoot.Source, pairRoot.Target, now, ct),
-                    DecisionKind.Revert => await service.RevertAsync(pendingId, pairRoot.Source, pairRoot.Target, now, ct),
-                    _ => new ApprovalResult()
-                };
-
-                totalResult.ApprovedCount += res.ApprovedCount;
-                totalResult.DismissedCount += res.DismissedCount;
-                totalResult.RevertedCount += res.RevertedCount;
-                totalResult.StaleCount += res.StaleCount;
-                totalResult.ConflictCount += res.ConflictCount;
-                totalResult.UnavailableCount += res.UnavailableCount;
-                totalResult.Errors.AddRange(res.Errors);
-            }
+            }, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled
         }
         catch (Exception ex)
         {
@@ -776,7 +828,14 @@ public sealed partial class ApprovalViewModel : ObservableObject
         {
             IsBusy = false;
             Load();
-            StatusMessage = totalResult.Errors.Count > 0 ? totalResult.Errors[0] : string.Empty;
+            if (totalResult.Errors.Count > 0)
+            {
+                SetStatus(totalResult.Errors[0], isError: true);
+            }
+            else
+            {
+                SetStatus(string.Empty, isError: false);
+            }
             Resolved?.Invoke();
         }
 
