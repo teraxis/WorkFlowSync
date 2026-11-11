@@ -396,6 +396,7 @@
                                                             <MenuItem Header="{loc:Loc tasks.edit}" Click="OnEditPair">
                                                                 <MenuItem.Icon><Path Classes="ico" Data="{StaticResource IconPencil}" /></MenuItem.Icon>
                                                             </MenuItem>
+                                                            <MenuItem Header="{loc:Loc tasks.repair_target}" Click="OnRepairPair" />
                                                             <Separator />
                                                             <MenuItem Header="{loc:Loc tasks.delete}" Click="OnDeletePair" Classes="danger">
                                                                 <MenuItem.Icon><Path Classes="ico" Data="{StaticResource IconTrash}" /></MenuItem.Icon>

@@ -1,5 +1,13 @@
 # WorkFlowSync — Project Skill (operational guide for agents)
 
+## Path repair update (2026-11-11)
+
+- Schema v5 stores `target_path`; v4 migration creates `state.db.v4-backup` before changing rows. Do not recompute recorded target names when path settings change.
+- `PathShortener.MapEntries` maps directories independently from sibling filename lengths. `PathLimits` caps the configured limit by Windows and OneDrive constraints.
+- The separate Repair long paths task action previews counts and applies confirmed safe moves. `wfs repair --pair NAME --dry-run` prints counts; CSV export is opt-in via `--report`. The repair plan stays in memory and is cleared when the action completes, while `state.db` remains persistent. Applying repair requires the pair to be paused. Conflicts and untracked items remain untouched. Never test apply against the owner's real pair.
+- A Files On-Demand target that is inactive or has a suspiciously incomplete scan skips the pass; the resident loop retries after two minutes. Cloud placeholders remain metadata-only during scanning and repair planning.
+
+
 Read this before changing project behavior. Product rules live in `docs/product/features/`; this
 file is the "how to work here" companion.
 
@@ -212,4 +220,3 @@ WorkFlowSync is fully bilingual (Ukrainian and English) with dynamic runtime lan
 - Bilingual repository documentation: the root contains both `README.md` (primary English documentation with language switcher) and `README.uk.md` (Ukrainian documentation with language switcher). Keep both in sync for new major and minor releases.
 - Cloud Folder Picker tabs & shortcuts (`CloudFolderPickerDialog`, `CloudFolderPickerViewModel`): Dual-tab navigation for "Мій диск" (personal Drive) and "Спільні документи" (`sharedWithMe = true`). Detects Google Drive shortcuts (`application/vnd.google-apps.shortcut`) and uses `EffectiveFolderId` (`shortcutDetails.targetId`) to enter and select target shared folders; protects virtual shared root from direct selection.
 - Release publication & auto-update assets rule (`gh release create` / `UpdateChecker`): When publishing a release on GitHub, agents MUST upload three assets: `WorkFlowSync-{version}-win-x64.zip`, `WorkFlowSync.exe`, and `wfs.exe`. The built-in auto-updater (`UpdateChecker.cs`) searches GitHub Release assets specifically by exact name (`WorkFlowSync.exe`) to download and seamlessly apply updates. If the raw `WorkFlowSync.exe` binary is missing from the release, running instances will not detect the update.
-

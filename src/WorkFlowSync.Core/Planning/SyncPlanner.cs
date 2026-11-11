@@ -82,7 +82,7 @@ public sealed class SyncPlanner
     {
         var plan = new SyncPlan();
         var mappedSource = GoogleDrive.MapGoogleDocsForExport(source, _googleDocExport, _convertGoogleRecordings, out var targetToSourceMap);
-        if (_shortenLongPaths && !string.IsNullOrEmpty(_targetRoot))
+        if (!string.IsNullOrEmpty(_targetRoot))
         {
             mappedSource = PathShortener.MapEntries(mappedSource, _targetRoot, _shortenLongPaths, _maxPathLength, state, targetToSourceMap, out targetToSourceMap);
         }
@@ -152,8 +152,12 @@ public sealed class SyncPlanner
                     {
                         var admitted = db with
                         {
-                            Status = EntryStatus.Active, StatusChangedUtc = _now, LastSeenUtc = _now,
-                            SourceSize = s.Size, SourceMtimeUtc = s.MtimeUtc, ViaLink = s.ViaLink,
+                            Status = EntryStatus.Active,
+                            StatusChangedUtc = _now,
+                            LastSeenUtc = _now,
+                            SourceSize = s.Size,
+                            SourceMtimeUtc = s.MtimeUtc,
+                            ViaLink = s.ViaLink,
                             RemoteId = sourceRel ?? db.RemoteId,
                         };
                         plan.Actions.Add(new SyncAction(SyncActionKind.CopyFile, path, admitted, SyncSide.Target, sourceRel));

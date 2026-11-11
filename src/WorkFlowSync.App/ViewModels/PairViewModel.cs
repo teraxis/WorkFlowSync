@@ -1,8 +1,12 @@
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
 using WorkFlowSync.Core.I18n;
+using WorkFlowSync.Core.Model;
+using WorkFlowSync.Core.Planning;
+using WorkFlowSync.Core.Scanning;
 
 namespace WorkFlowSync.App.ViewModels;
 
@@ -97,7 +101,8 @@ public sealed partial class PairViewModel : ObservableObject
     [ObservableProperty] private bool _shortenLongPaths;
 
     /// <summary>Maximum allowed full target path length before shortening kicks in.</summary>
-    [ObservableProperty] private int _maxPathLength = 240;
+    [ObservableProperty] private int _maxPathLength = PathShortener.DefaultMaxPathLength;
+    [ObservableProperty] private string _shorteningImpactText = "";
 
     /// <summary>Mirror with memory (default) or full two-way synchronisation.</summary>
     [ObservableProperty] private SyncMode _mode = SyncMode.Mirror;
@@ -394,7 +399,47 @@ public sealed partial class PairViewModel : ObservableObject
         ? I18n.T("pair.rotation_hint")
         : I18n.T("pair.rotation_not_applicable");
 
-    public string ShortenLongPathsHint => I18n.T("pair.shorten_paths_hint");
+    public string ShortenLongPathsHint
+    {
+        get
+        {
+            var hint = I18n.T("pair.shorten_paths_hint");
+            if (!ShortenLongPaths || string.IsNullOrWhiteSpace(Target)) return hint;
+            var effective = PathLimits.Effective(Target, MaxPathLength);
+            return effective < MaxPathLength
+                ? hint + " " + I18n.T("pair.shorten_paths_limit_warning", effective)
+                : hint;
+        }
+    }
+
+    [RelayCommand]
+    private async Task AnalyzeShorteningImpactAsync()
+    {
+        ShorteningImpactText = I18n.T("pair.shorten_paths_analyzing");
+        try
+        {
+            var source = Source;
+            var target = Target;
+            var limit = PathLimits.Effective(target, MaxPathLength);
+            var excludes = ParseExcludes(ExcludeText);
+            var (affected, total) = await Task.Run(() =>
+            {
+                var scan = new TreeScanner(64 * 1024, 4, Links, new ExcludeMatcher(excludes)).Scan(source);
+                if (scan.Warnings.Any(w => w.Contains("cannot list", StringComparison.OrdinalIgnoreCase)))
+                    throw new IOException("incomplete source scan");
+                var files = scan.Entries.Values.Where(e => e.Kind == EntryKind.File).ToList();
+                var count = files.Count(e => Path.Combine(target, e.RelativePath).Length > limit ||
+                    PathShortener.HasInvalidOrLongSegment(e.RelativePath));
+                return (count, files.Count);
+            });
+            ShorteningImpactText = I18n.T("pair.shorten_paths_impact", affected, total) +
+                (total > 0 && affected * 5 > total ? " " + I18n.T("pair.shorten_paths_many") : "");
+        }
+        catch (Exception ex)
+        {
+            ShorteningImpactText = I18n.T("pair.shorten_paths_analysis_failed", ex.Message);
+        }
+    }
 
     public static IReadOnlyList<GoogleDocExportMode> GoogleDocExportModes { get; } = new[]
     {
@@ -821,6 +866,7 @@ public sealed partial class PairViewModel : ObservableObject
     // and with it whether cloud placeholders are even possible for this pair.
     partial void OnSourceChanged(string value)
     {
+        ShorteningImpactText = "";
         RaiseFacts(nameof(SourceKindSummary));
         OnPropertyChanged(nameof(SourceIcon));
         RaiseCloudFiles();
@@ -846,6 +892,8 @@ public sealed partial class PairViewModel : ObservableObject
 
     partial void OnTargetChanged(string value)
     {
+        ShorteningImpactText = "";
+        OnPropertyChanged(nameof(ShortenLongPathsHint));
         RaiseFacts(nameof(TargetKindSummary));
         OnPropertyChanged(nameof(TargetIcon));
         RaiseCloudFiles();
@@ -896,7 +944,12 @@ public sealed partial class PairViewModel : ObservableObject
     }
     partial void OnExcludeTextChanged(string value) => RaiseFacts(nameof(ExcludeCount));
     partial void OnShortenLongPathsChanged(bool value) => RaiseFacts(nameof(ShortenLongPaths));
-    partial void OnMaxPathLengthChanged(int value) => RaiseFacts(nameof(MaxPathLength));
+    partial void OnMaxPathLengthChanged(int value)
+    {
+        ShorteningImpactText = "";
+        OnPropertyChanged(nameof(ShortenLongPathsHint));
+        RaiseFacts(nameof(MaxPathLength));
+    }
 
     private void RaiseFacts(string name)
     {

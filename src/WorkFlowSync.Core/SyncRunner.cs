@@ -105,6 +105,11 @@ public sealed class SyncRunner
         if (onlyPair is not null && selected.Count == 0) _log.Error($"unknown pair: {onlyPair}");
 
         var planScope = PlanScope.For(scope);
+        if (planScope is not null && selected.Count == 1 && selected[0].ShortenLongPaths)
+        {
+            _log.Info($"[{selected[0].Name}] shortened target paths require a full pass for safe state matching");
+            planScope = null;
+        }
         if (planScope is not null && selected.Count != 1)
         {
             // A relative path only means something inside one pair; applying it to several would be guesswork.
@@ -197,6 +202,14 @@ public sealed class SyncRunner
 
         // 1. State (in memory) — the whole pair, or just the scope's subtree.
         var state = scope is null ? store.Load(pair.Name) : store.LoadScope(pair.Name, scope.RelativeDir);
+        var pathSettings = $"{pair.ShortenLongPaths}:{pair.MaxPathLength}";
+        var previousPathSettings = store.GetMeta($"path_settings:{pair.Name}");
+        if (previousPathSettings is not null && previousPathSettings != pathSettings && !dryRun)
+            store.SetMeta($"repair_required:{pair.Name}", "1");
+        if (!dryRun) store.SetMeta($"path_settings:{pair.Name}", pathSettings);
+        var repairRequired = pair.ShortenLongPaths && store.GetMeta($"repair_required:{pair.Name}") == "1";
+        if (repairRequired)
+            _log.Warn($"{tag} existing target names are pinned; review wfs repair --pair \"{pair.Name}\" --dry-run before repair");
         var twoWay = pair.Mode == SyncMode.TwoWay;
         // Never on a scoped pass: an empty scope would look like an empty pair and backdate first_seen for
         // the whole subtree, which would then take the age windows down with it (docs F3).
@@ -234,6 +247,40 @@ public sealed class SyncRunner
         result.SourceScan = source;
         foreach (var w in source.Warnings) _log.Warn($"{tag} source: {w}");
         _log.Info($"{tag} scan source  dirs={source.DirectoryCount} files={source.FileCount} links={source.LinkCount} warnings={source.Warnings.Count} took={source.Elapsed.TotalSeconds:0.0}s");
+        if (source.Warnings.Any(w => w.Contains("cannot list", StringComparison.OrdinalIgnoreCase)))
+        {
+            _log.Warn($"{tag} incomplete source scan; pair skipped to preserve state");
+            result.Skipped = true;
+            result.SkipReason = "incomplete source scan";
+            result.Elapsed = sw.Elapsed;
+            return result;
+        }
+
+        var effectivePathLimit = pair.ShortenLongPaths
+            ? PathLimits.Effective(pair.Target, pair.MaxPathLength)
+            : pair.MaxPathLength;
+        if (pair.ShortenLongPaths)
+        {
+            if (effectivePathLimit < pair.MaxPathLength)
+                _log.Warn($"{tag} configured path limit {pair.MaxPathLength} exceeds an active Windows/OneDrive limit; using {effectivePathLimit}");
+            var files = source.Entries.Values.Where(e => e.Kind == EntryKind.File).ToList();
+            var affected = files.Count(e => Path.Combine(pair.Target, e.RelativePath).Length > effectivePathLimit ||
+                PathShortener.HasInvalidOrLongSegment(e.RelativePath));
+            _log.Info($"{tag} path shortening impact  files={affected}/{files.Count} limit={effectivePathLimit}");
+            if (files.Count > 0 && affected * 5 > files.Count)
+                _log.Warn($"{tag} more than 20% of source files would need shorter paths at limit {effectivePathLimit}");
+        }
+
+        // When offloading is configured, an inactive Files On-Demand root cannot be trusted as a
+        // complete target tree. Skip before listing it or interpreting absent placeholders as deletions.
+        if (pair.FreeUpSpaceAfterCopy && !_cloudPlatform.IsSyncRoot(pair.Target))
+        {
+            _log.Warn($"{tag} waiting for OneDrive / Files On-Demand target: {pair.Target}");
+            result.Skipped = true;
+            result.SkipReason = "waiting for OneDrive";
+            result.Elapsed = sw.Elapsed;
+            return result;
+        }
 
         // Disk quota is independent of cloud offloading. When a full pass starts below the reserve, an
         // explicitly enabled rotation may permanently remove oldest verified copies from any target
@@ -341,6 +388,27 @@ public sealed class SyncRunner
         }
         result.TargetScan = target;
         _log.Info($"{tag} scan target  dirs={target.DirectoryCount} files={target.FileCount} took={target.Elapsed.TotalSeconds:0.0}s");
+        if (target.Warnings.Any(w => w.Contains("cannot list", StringComparison.OrdinalIgnoreCase)))
+        {
+            _log.Warn($"{tag} incomplete target scan; pair skipped to preserve state");
+            result.Skipped = true;
+            result.SkipReason = "incomplete target scan";
+            result.Elapsed = sw.Elapsed;
+            return result;
+        }
+        if (pair.FreeUpSpaceAfterCopy)
+        {
+            var trackedFiles = state.Values.Where(e => e.Kind == EntryKind.File && e.Status == EntryStatus.Active).ToList();
+            var missingFiles = trackedFiles.Count(e => !target.Entries.ContainsKey(e.TargetPath ?? e.RelativePath));
+            if (missingFiles > 100 && missingFiles * 5 > trackedFiles.Count)
+            {
+                _log.Warn($"{tag} target scan missed {missingFiles}/{trackedFiles.Count} recorded files; pair skipped to protect OneDrive placeholders");
+                result.Skipped = true;
+                result.SkipReason = "incomplete OneDrive target scan";
+                result.Elapsed = sw.Elapsed;
+                return result;
+            }
+        }
 
         // 4. Plan (pure).
         FrozenPaths? frozen = null;
@@ -386,8 +454,19 @@ public sealed class SyncRunner
         }
 
         var plan = twoWay
-            ? new TwoWayPlanner(pair.Name, now, scope, frozen, pair.GoogleDocExport, pair.ConvertGoogleRecordings, pair.UploadConvertedDocs, pair.RequireApproval, pair.FreeUpSourceSpaceAfterCopy, pair.Target, pair.ShortenLongPaths, pair.MaxPathLength).Plan(source.Entries, target.Entries, state)
-            : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, pair.KeepLatestFiles, pair.CleanExistingFiles, pair.CleanupFromUtc, scope, pair.GoogleDocExport, pair.ConvertGoogleRecordings, pair.FreeUpSourceSpaceAfterCopy, pair.Target, pair.ShortenLongPaths, pair.MaxPathLength).Plan(source.Entries, target.Entries, state);
+            ? new TwoWayPlanner(pair.Name, now, scope, frozen, pair.GoogleDocExport, pair.ConvertGoogleRecordings, pair.UploadConvertedDocs, pair.RequireApproval, pair.FreeUpSourceSpaceAfterCopy, pair.Target, pair.ShortenLongPaths, effectivePathLimit).Plan(source.Entries, target.Entries, state)
+            : new SyncPlanner(pair.Name, now, backfill, pair.MaxAge, pair.AutoClean, pair.KeepLatestFiles, pair.CleanExistingFiles, pair.CleanupFromUtc, scope, pair.GoogleDocExport, pair.ConvertGoogleRecordings, pair.FreeUpSourceSpaceAfterCopy, pair.Target, pair.ShortenLongPaths, effectivePathLimit).Plan(source.Entries, target.Entries, state);
+        if (repairRequired)
+        {
+            var heldUpdates = plan.Actions.Where(a => a.Kind == SyncActionKind.UpdateFile).ToList();
+            plan.Actions.RemoveAll(a => a.Kind == SyncActionKind.UpdateFile);
+            plan.Stats.Updated -= heldUpdates.Count;
+            plan.Stats.BytesToCopy -= heldUpdates.Sum(a => a.Proposed.SourceSize ?? 0);
+            DeletionGuard.StripRemovals(plan);
+            plan.StateUpdates.RemoveAll(e => e.Status == EntryStatus.Tombstone);
+            plan.Forget.Clear();
+            plan.Stats.Tombstoned = 0;
+        }
         foreach (var w in plan.Warnings) _log.Warn($"{tag} plan: {w}");
         result.Plan = plan.Stats;
         result.PendingNew = plan.PendingUpdates.Count;
@@ -424,7 +503,8 @@ public sealed class SyncRunner
         var prevToken = activeAccount?.AccessToken;
         var exec = new SyncExecutor(pair.Source, pair.Target, _log, dryRun, pair.CloudFiles,
             pair.DiskQuotaEnabled, pair.FreeUpSpaceAfterCopy, pair.FreeUpSourceSpaceAfterCopy, pair.MinFreeSpaceGb, _cloudPlatform,
-            pair.GoogleDocExport, _config.GoogleAuth, activeAccount) { SelfWrites = SelfWrites }
+            pair.GoogleDocExport, _config.GoogleAuth, activeAccount)
+        { SelfWrites = SelfWrites }
             .Execute(plan, tag, ct, dryRun ? null : rows => store.Upsert(rows),
                 progress: (current, total) => OnPairProgress?.Invoke(pair.Name, current, total));
         if (!dryRun && activeAccount is not null && !string.Equals(prevToken, activeAccount.AccessToken, StringComparison.Ordinal) && File.Exists(_configPath))
@@ -456,7 +536,7 @@ public sealed class SyncRunner
         }
 
         result.Elapsed = sw.Elapsed;
-        _log.Info($"{tag} done  copied={exec.FilesCopied} updated={exec.FilesUpdated} mkdir={exec.DirectoriesCreated} recycled={exec.FilesRecycled}+{exec.DirectoriesRecycled}dirs{(result.RotatedFiles > 0 ? $" rotated={result.RotatedFiles}" : "")}{(exec.OnlineOnlyRequested > 0 ? $" online_only={exec.OnlineOnlyRequested}" : "")}{(exec.SourceOnlineOnlyRequested > 0 ? $" src_online_only={exec.SourceOnlineOnlyRequested}" : "")}{(exec.CloudSpaceWaits > 0 ? $" cloud_waits={exec.CloudSpaceWaits}" : "")}{(exec.DiskQuotaStops > 0 ? $" quota_stops={exec.DiskQuotaStops}" : "")}{(exec.Skipped > 0 ? $" skipped={exec.Skipped}" : "")}{(result.HeldBackRemovals > 0 ? $" held_back={result.HeldBackRemovals}" : "")} bytes={SyncExecutor.FormatSize(exec.BytesCopied)} errors={exec.Errors} took={result.Elapsed.TotalSeconds:0.0}s");
+        _log.Info($"{tag} done  copied={exec.FilesCopied} updated={exec.FilesUpdated} shortened={exec.Shortened} mkdir={exec.DirectoriesCreated} recycled={exec.FilesRecycled}+{exec.DirectoriesRecycled}dirs{(result.RotatedFiles > 0 ? $" rotated={result.RotatedFiles}" : "")}{(exec.OnlineOnlyRequested > 0 ? $" online_only={exec.OnlineOnlyRequested}" : "")}{(exec.SourceOnlineOnlyRequested > 0 ? $" src_online_only={exec.SourceOnlineOnlyRequested}" : "")}{(exec.CloudSpaceWaits > 0 ? $" cloud_waits={exec.CloudSpaceWaits}" : "")}{(exec.DiskQuotaStops > 0 ? $" quota_stops={exec.DiskQuotaStops}" : "")}{(exec.Skipped > 0 ? $" skipped={exec.Skipped}" : "")}{(result.HeldBackRemovals > 0 ? $" held_back={result.HeldBackRemovals}" : "")} bytes={SyncExecutor.FormatSize(exec.BytesCopied)} errors={exec.Errors} took={result.Elapsed.TotalSeconds:0.0}s");
         return result;
     }
 }

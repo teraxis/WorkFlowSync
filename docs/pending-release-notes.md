@@ -1,21 +1,19 @@
-# Changes for the Next Release
+# Зміни до наступного випуску
 
-Keep only completed, user-visible changes since the previous release. Adapt headings and entries to
-the product's user-facing language. Do not include implementation details, code symbols, file names,
-commits, or agent attribution.
+Тут зібрано завершені зміни, які побачить користувач у наступному випуску.
 
-## Added
+## Додано
 
-<!-- Add user-visible additions here for the next release -->
+<!-- Додати нові можливості -->
 
-## Changed
+## Змінено
 
-<!-- Add user-visible changes here for the next release -->
+<!-- Додати зміни поведінки -->
 
-## Fixed
+## Виправлено
 
-<!-- Add bug fixes here for the next release -->
+<!-- Додати виправлення -->
 
-## Removed
+## Вилучено
 
-<!-- Add removals here for the next release -->
+<!-- Додати вилучення -->

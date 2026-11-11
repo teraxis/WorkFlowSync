@@ -165,4 +165,14 @@ public sealed class DeletionSafeguardsEndToEndTests : IDisposable
         Assert.True(CloudFiles.Possible(_root));
         Assert.False(CloudFiles.Possible(@"\\server\share"));
     }
+
+    [Fact]
+    public void Cloud_directory_tags_are_not_treated_as_junctions()
+    {
+        Assert.True(CloudFiles.IsCloudReparseTag(0x9000001A));
+        Assert.True(CloudFiles.IsCloudReparseTag(0x9000101A));
+        Assert.True(CloudFiles.IsCloudReparseTag(0x9000F01A));
+        Assert.False(CloudFiles.IsCloudReparseTag(0xA0000003)); // mount point
+        Assert.False(CloudFiles.IsCloudReparseTag(0xA000000C)); // symlink
+    }
 }

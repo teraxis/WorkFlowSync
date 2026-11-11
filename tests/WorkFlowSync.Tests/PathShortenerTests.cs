@@ -1,4 +1,6 @@
 using WorkFlowSync.Core.Config;
+using WorkFlowSync.Core.Execution;
+using WorkFlowSync.Core.Logging;
 using WorkFlowSync.Core.Model;
 using WorkFlowSync.Core.Planning;
 using WorkFlowSync.Core.Scanning;
@@ -330,5 +332,131 @@ public sealed class PathShortenerTests
         Assert.True(mapped.ContainsKey(expectedFile));
         Assert.Equal(dirWithLeadingSpace, map[expectedDir]);
         Assert.Equal(fileUnderDir, map[expectedFile]);
+    }
+
+    [Fact]
+    public void Directory_mapping_is_shared_by_short_and_long_sibling_files()
+    {
+        var dir = "Archive_" + new string('A', 90);
+        var names = new[] { "short.txt", new string('B', 60) + ".txt", new string('C', 150) + ".txt" };
+        var source = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [dir] = new() { RelativePath = dir, Kind = EntryKind.Directory },
+        };
+        foreach (var name in names)
+        {
+            var path = Path.Combine(dir, name);
+            source[path] = new ScanEntry { RelativePath = path, Kind = EntryKind.File };
+        }
+
+        var mapped = PathShortener.MapEntries(source, TargetRoot, true, 200, null, null, out _);
+        var mappedDir = mapped.Values.Single(e => e.Kind == EntryKind.Directory).RelativePath;
+        Assert.All(mapped.Values.Where(e => e.Kind == EntryKind.File), e =>
+        {
+            Assert.Equal(mappedDir, Path.GetDirectoryName(e.RelativePath));
+            Assert.True(Path.Combine(TargetRoot, e.RelativePath).Length <= 200);
+        });
+    }
+
+    [Fact]
+    public void Same_directory_name_in_different_branches_has_different_hash()
+    {
+        var longName = new string('D', 90);
+        var dirs = new[] { Path.Combine("Left", longName), Path.Combine("Right", longName) };
+        var source = dirs.ToDictionary(d => d, d => new ScanEntry { RelativePath = d, Kind = EntryKind.Directory });
+        var mapped = PathShortener.MapEntries(source, TargetRoot, true, 200, null, null, out _);
+        Assert.Equal(2, mapped.Count);
+        Assert.NotEqual(Path.GetFileName(mapped.Values.First().RelativePath),
+            Path.GetFileName(mapped.Values.Last().RelativePath));
+    }
+
+    [Fact]
+    public void Recorded_original_target_path_survives_tighter_limit_and_disabled_shortening()
+    {
+        var original = "A\\" + new string('E', 150) + ".txt";
+        var state = new Dictionary<string, StateEntry>
+        {
+            [original] = new()
+            {
+                PairName = "test",
+                RelativePath = original,
+                TargetPath = original,
+                Kind = EntryKind.File,
+                FirstSeenUtc = DateTimeOffset.UtcNow,
+            }
+        };
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File }
+        };
+        var tightened = PathShortener.MapEntries(source, TargetRoot, true, 120, state, null, out _);
+        var disabled = PathShortener.MapEntries(source, TargetRoot, false, 120, state, null, out _);
+        Assert.True(tightened.ContainsKey(original));
+        Assert.True(disabled.ContainsKey(original));
+    }
+
+    [Fact]
+    public void Effective_limit_respects_windows_and_onedrive_separately()
+    {
+        var root = @"C:\Users\User\OneDrive";
+        Assert.Equal(259, PathLimits.Compute(root, 300, longPathsEnabled: false, root));
+        Assert.Equal(300, PathLimits.Compute(root, 300, longPathsEnabled: true, root));
+        Assert.Equal(root.Length + 1 + 400, PathLimits.Compute(root, 1000, longPathsEnabled: true, root));
+    }
+
+    [Fact]
+    public void Planner_does_not_recopy_recorded_original_after_limit_changes()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var original = "Archive\\" + new string('F', 130) + ".txt";
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 8, MtimeUtc = now }
+        };
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 8, MtimeUtc = now }
+        };
+        var state = new Dictionary<string, StateEntry>
+        {
+            [original] = new()
+            {
+                PairName = "pair",
+                RelativePath = original,
+                TargetPath = original,
+                Kind = EntryKind.File,
+                FirstSeenUtc = now,
+                LastSeenUtc = now,
+                SourceSize = 8,
+                SourceMtimeUtc = now,
+                CopiedSize = 8,
+                CopiedMtimeUtc = now,
+            }
+        };
+        var planner = new SyncPlanner("pair", now, false, targetRoot: TargetRoot,
+            shortenLongPaths: true, maxPathLength: 120);
+        var plan = planner.Plan(source, target, state);
+        Assert.Equal(0, plan.Stats.New);
+        Assert.Equal(1, plan.Stats.Unchanged);
+        Assert.Empty(plan.Actions);
+    }
+
+    [Fact]
+    public void New_shortening_is_reported_in_execution_log_and_summary()
+    {
+        var sourcePath = new string('G', 100) + ".txt";
+        var now = DateTimeOffset.UtcNow;
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [sourcePath] = new() { RelativePath = sourcePath, Kind = EntryKind.File, Size = 3, MtimeUtc = now }
+        };
+        var plan = new SyncPlanner("pair", now, false, targetRoot: TargetRoot,
+            shortenLongPaths: true, maxPathLength: 120)
+            .Plan(source, new Dictionary<string, ScanEntry>(), new Dictionary<string, StateEntry>());
+        var log = new MemorySyncLog();
+        var result = new SyncExecutor(Path.GetTempPath(), Path.GetTempPath(), log, dryRun: true)
+            .Execute(plan, "[pair]");
+        Assert.Equal(1, result.Shortened);
+        Assert.Contains(log.Lines, line => line.Message.Contains("shorten") && line.Message.Contains(sourcePath));
     }
 }

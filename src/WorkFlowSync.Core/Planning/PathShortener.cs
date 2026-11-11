@@ -13,7 +13,7 @@ namespace WorkFlowSync.Core.Planning;
 /// </summary>
 public static class PathShortener
 {
-    public const int DefaultMaxPathLength = 240;
+    public const int DefaultMaxPathLength = 259;
     public const int MinMaxPathLength = 80;
     public const int MaxMaxPathLength = 1000;
     public const int MaxSegmentUtf8Bytes = 240;
@@ -272,21 +272,20 @@ public static class PathShortener
             }
         }
 
-        if (!enabled || source.Count == 0 || maxPathLength <= 0)
+        if (source.Count == 0 || maxPathLength <= 0 ||
+            (!enabled && (state is null || state.Count == 0)))
         {
             return source;
         }
 
-        // Build reverse lookup from state: remote_id (original source path) -> relativePath (target path)
+        // Every recorded copy keeps its physical target path, including copies made before shortening
+        // existed (those rows have no RemoteId). Changing the limit must not remap either kind.
         var stateRemoteToTarget = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (state != null)
         {
             foreach (var (targetRel, entry) in state)
             {
-                if (!string.IsNullOrEmpty(entry.RemoteId))
-                {
-                    stateRemoteToTarget[entry.RemoteId] = targetRel;
-                }
+                stateRemoteToTarget[entry.RemoteId ?? entry.RelativePath] = entry.TargetPath ?? targetRel;
             }
         }
 
@@ -328,7 +327,7 @@ public static class PathShortener
                     mappedParent = parent;
 
                 var candidate = string.IsNullOrEmpty(mappedParent) ? baseDir : Path.Combine(mappedParent, baseDir);
-                targetRel = ShortenDirectoryPath(targetRoot, candidate, maxPathLength);
+                targetRel = enabled ? MapDirectory(targetRoot, candidate, originalSourcePath, maxPathLength) : candidate;
                 dirMap[path] = targetRel;
             }
             else
@@ -343,8 +342,11 @@ public static class PathShortener
                     mappedParent = parent;
 
                 var candidate = string.IsNullOrEmpty(mappedParent) ? fileName : Path.Combine(mappedParent, fileName);
-                targetRel = ShortenFilePath(targetRoot, candidate, maxPathLength);
+                targetRel = enabled ? MapFile(targetRoot, candidate, originalSourcePath, maxPathLength) : candidate;
             }
+
+            if (result.ContainsKey(targetRel))
+                throw new InvalidOperationException($"Path shortening collision at {targetRel}");
 
             if (!string.Equals(targetRel, path, StringComparison.OrdinalIgnoreCase))
             {
@@ -362,5 +364,63 @@ public static class PathShortener
         }
 
         return result;
+    }
+
+    // Reserve room for a useful filename when mapping a directory. This decision depends on the
+    // directory alone, never on whichever child file happened to be scanned first.
+    private const int ReservedFileCharacters = 64;
+
+    private static string MapDirectory(string root, string candidate, string sourcePath, int limit)
+    {
+        var parent = Path.GetDirectoryName(candidate) ?? "";
+        var originalName = Path.GetFileName(candidate);
+        var name = originalName.Trim();
+        var parentLength = Path.Combine(root, parent).Length;
+        var reserved = Math.Min(ReservedFileCharacters, Math.Max(16, limit - parentLength - 16));
+        var budget = limit - reserved - 1;
+        var normalized = Path.Combine(parent, name);
+        if (name.Length > 0 && Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes &&
+            Path.Combine(root, normalized).Length <= budget)
+            return normalized;
+        if (Path.Combine(root, candidate).Length <= budget &&
+            Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes && name.Length > 0 && name == originalName)
+            return candidate;
+
+        var tag = "_#" + ComputeHash(sourcePath);
+        var allowed = budget - Path.Combine(root, parent).Length - (root.Length > 0 || parent.Length > 0 ? 1 : 0);
+        var keep = Math.Min(40, allowed - tag.Length);
+        if (keep < 1)
+            throw new InvalidOperationException($"Cannot fit directory within path limit {limit}: {sourcePath}");
+        var stem = TruncateToUtf8Bytes(name[..Math.Min(name.Length, keep)], MaxSegmentUtf8Bytes - tag.Length)
+            .TrimEnd(' ', '.', '_');
+        if (stem.Length == 0) stem = "_";
+        var mapped = Path.Combine(parent, stem + tag);
+        if (Path.Combine(root, mapped).Length > budget)
+            throw new InvalidOperationException($"Cannot fit directory within path limit {limit}: {sourcePath}");
+        return mapped;
+    }
+
+    private static string MapFile(string root, string candidate, string sourcePath, int limit)
+    {
+        var parent = Path.GetDirectoryName(candidate) ?? "";
+        var name = Path.GetFileName(candidate).Trim();
+        if (Path.Combine(root, candidate).Length <= limit &&
+            Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes && name.Length > 0)
+            return candidate;
+
+        var ext = Path.GetExtension(name);
+        var stem = Path.GetFileNameWithoutExtension(name);
+        var tag = "_#" + ComputeHash(sourcePath);
+        var allowed = limit - Path.Combine(root, parent).Length - (root.Length > 0 || parent.Length > 0 ? 1 : 0);
+        var keep = Math.Min(40, allowed - tag.Length - ext.Length);
+        if (keep < 1 || stem.Length == 0)
+            throw new InvalidOperationException($"Cannot fit filename within path limit {limit}: {sourcePath}");
+        var shortStem = TruncateToUtf8Bytes(stem[..Math.Min(stem.Length, keep)],
+            MaxSegmentUtf8Bytes - Encoding.UTF8.GetByteCount(tag + ext)).TrimEnd(' ', '.', '_');
+        if (shortStem.Length == 0) shortStem = "_";
+        var mapped = Path.Combine(parent, shortStem + tag + ext);
+        if (Path.Combine(root, mapped).Length > limit)
+            throw new InvalidOperationException($"Cannot fit filename within path limit {limit}: {sourcePath}");
+        return mapped;
     }
 }

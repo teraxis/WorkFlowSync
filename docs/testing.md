@@ -30,7 +30,18 @@ Requires .NET SDK 8.0.x on PATH (`C:\Program Files\dotnet`). No other services.
 
 If a command cannot run, record the exact reason and the next step needed.
 
+## Current Status (2026-11-11, v0.3.17 path repair)
+
+- `scripts\build.ps1`: passed with 0 warnings. `dotnet build WorkFlowSync.sln -warnaserror`: passed.
+- `scripts\test.ps1`: 578 passed, 0 failed. E2E category: 73 passed, 0 failed. Rechecked after the in-memory repair preview and opt-in CSV change.
+- Changed-file `dotnet format whitespace --verify-no-changes`: passed. Whole-solution `dotnet format --verify-no-changes` still reports pre-existing formatting issues in untouched files such as `FileKinds.cs` and `SyncPlannerTests.cs`.
+- `scripts\publish.ps1`: produced v0.3.17 GUI and CLI binaries. Archive `publish\WorkFlowSync-0.3.17-win-x64.zip` contains both binaries and README. Published `wfs.exe version` reported 0.3.17; `config validate` passed on a paused temp pair.
+- CLI smoke on a temporary pair copied an original long name, used `repair` to move it, and preserved one target file. Rechecked that `repair --dry-run` prints counts and creates no CSV by default; explicit `--report` writes the expected CSV header. A temp-folder test also moved a path longer than 259 characters.
+- GUI smoke: published executable stayed alive for 6 seconds with a paused temp config, and no crash log appeared; no screenshot or synthetic clicks were used.
+- Not verified against a live OneDrive sync root: placeholder enumeration, hydration behavior during rename/recycle, and the reported large real tree. Do not apply repair to the owner's real pair from an agent session without explicit authorization.
+
 ## Current Status (2026-10-19, F26 — Path Shortener for long paths and OneDrive compatibility)
+
 
 - `scripts\build.ps1`: OK, 0 warnings.
 - `dotnet build WorkFlowSync.sln -warnaserror`: OK, 0 warnings, 0 errors.

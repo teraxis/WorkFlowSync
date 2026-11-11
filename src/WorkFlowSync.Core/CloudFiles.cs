@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace WorkFlowSync.Core;
 
@@ -17,6 +18,46 @@ public static class CloudFiles
     public const FileAttributes RecallOnDataAccess = (FileAttributes)0x400000;
 
     private const FileAttributes RecallFlags = RecallOnOpen | RecallOnDataAccess;
+    private const uint FileFlagOpenReparsePoint = 0x00200000;
+    private const uint FileFlagBackupSemantics = 0x02000000;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct AttributeTagInfo
+    {
+        public uint FileAttributes;
+        public uint ReparseTag;
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle OpenReparsePoint(string path, uint access, FileShare share,
+        IntPtr security, FileMode disposition, uint flags, IntPtr template);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int infoClass,
+        out AttributeTagInfo info, uint size);
+
+    /// <summary>Cloud Files reparse tags CLOUD through CLOUD_F; junctions and symlinks are excluded.</summary>
+    public static bool IsCloudReparseTag(uint tag) => (tag & 0xFFFF0FFF) == 0x9000001A;
+
+    /// <summary>Null means the reparse tag could not be read; callers must not infer absence.</summary>
+    public static bool? IsPlaceholderDirectory(string path, FileAttributes attributes)
+    {
+        if (IsPlaceholder(attributes)) return true;
+        if ((attributes & FileAttributes.ReparsePoint) == 0) return false;
+        if (!OperatingSystem.IsWindows()) return false;
+        var full = Path.GetFullPath(path);
+        if (full.Length >= 259 && !full.StartsWith(@"\\?\", StringComparison.Ordinal))
+            full = full.StartsWith(@"\\", StringComparison.Ordinal)
+                ? @"\\?\UNC\" + full[2..]
+                : @"\\?\" + full;
+        using var handle = OpenReparsePoint(full, 0x80, FileShare.ReadWrite | FileShare.Delete,
+            IntPtr.Zero, FileMode.Open, FileFlagOpenReparsePoint | FileFlagBackupSemantics, IntPtr.Zero);
+        if (handle.IsInvalid) return null;
+        return GetFileInformationByHandleEx(handle, 9, out var info, (uint)Marshal.SizeOf<AttributeTagInfo>())
+            ? IsCloudReparseTag(info.ReparseTag)
+            : null;
+    }
 
     /// <summary>True when the bytes live in the cloud and opening the file would fetch them.</summary>
     public static bool IsPlaceholder(FileAttributes attributes) =>

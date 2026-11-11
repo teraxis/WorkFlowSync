@@ -35,7 +35,7 @@ public sealed class TreeScanner
         {
             BufferSize = Math.Max(4096, bufferSize),
             AttributesToSkip = 0,                 // default skips Hidden|System — FFS copies them, so do we
-            IgnoreInaccessible = true,
+            IgnoreInaccessible = false,          // report incomplete trees; absence must never become a deletion
             RecurseSubdirectories = false,        // we recurse ourselves
             ReturnSpecialDirectories = false,
             MatchType = MatchType.Simple,
@@ -95,38 +95,38 @@ public sealed class TreeScanner
         {
             workers[w] = new Thread(() =>
             {
-              try
-              {
-                var local = new List<ScanEntry>(1024);
-                entries.Add(local);
-                while (WaitToRead(channel.Reader, ct))
+                try
                 {
-                    while (channel.Reader.TryRead(out var item))
+                    var local = new List<ScanEntry>(1024);
+                    entries.Add(local);
+                    while (WaitToRead(channel.Reader, ct))
                     {
-                        try
+                        while (channel.Reader.TryRead(out var item))
                         {
-                            ct.ThrowIfCancellationRequested();
-                            ProcessDirectory(item, local, warnings, channel.Writer, ref pending, ref dirs, ref files, ref links);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            channel.Writer.TryComplete();
-                            throw;
-                        }
-                        catch (Exception ex)
-                        {
-                            warnings.Add($"{item.RelativePath}: {ex.GetType().Name}: {ex.Message}");
-                        }
-                        finally
-                        {
-                            if (Interlocked.Decrement(ref pending) == 0)
+                            try
+                            {
+                                ct.ThrowIfCancellationRequested();
+                                ProcessDirectory(item, local, warnings, channel.Writer, ref pending, ref dirs, ref files, ref links);
+                            }
+                            catch (OperationCanceledException)
+                            {
                                 channel.Writer.TryComplete();
+                                throw;
+                            }
+                            catch (Exception ex)
+                            {
+                                warnings.Add($"{item.RelativePath}: {ex.GetType().Name}: {ex.Message}");
+                            }
+                            finally
+                            {
+                                if (Interlocked.Decrement(ref pending) == 0)
+                                    channel.Writer.TryComplete();
+                            }
                         }
                     }
                 }
-              }
-              catch (OperationCanceledException) { /* Scan() rethrows via the token below */ }
-              catch (Exception ex) { failures.Add(ex); }
+                catch (OperationCanceledException) { /* Scan() rethrows via the token below */ }
+                catch (Exception ex) { failures.Add(ex); }
             })
             {
                 IsBackground = true,
@@ -212,7 +212,13 @@ public sealed class TreeScanner
             var realPath = item.RealPath + "\\" + r.Name;
             var chain = item.Chain;
 
-            if (IsLinkCandidate(r.Attributes))
+            var isCloudDirectory = CloudFiles.IsPlaceholderDirectory(r.FullPath, r.Attributes);
+            if (isCloudDirectory is null)
+            {
+                warnings.Add($"{rel}: cannot list: reparse tag unavailable");
+                continue;
+            }
+            if (IsLinkCandidate(r.Attributes, isCloudDirectory.Value))
             {
                 var target = TryResolveLink(r.FullPath);
                 if (target is not null)
@@ -269,8 +275,8 @@ public sealed class TreeScanner
         path.Equals(ancestor, StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith(ancestor + "\\", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsLinkCandidate(FileAttributes a) =>
-        a.HasFlag(FileAttributes.ReparsePoint) && !CloudFiles.IsPlaceholder(a);
+    private static bool IsLinkCandidate(FileAttributes a, bool isCloudDirectory) =>
+        a.HasFlag(FileAttributes.ReparsePoint) && !isCloudDirectory;
 
     /// <summary>Final target of a symlink/junction, or null when the reparse point is not a link.</summary>
     private static string? TryResolveLink(string fullPath)

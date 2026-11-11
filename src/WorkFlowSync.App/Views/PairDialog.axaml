@@ -287,6 +287,9 @@
                                     <ctl:Stepper Value="{Binding MaxPathLength}" Minimum="80" Maximum="1000" Increment="10" Width="100" />
                                     <TextBlock Text="{loc:Loc common.chars}" VerticalAlignment="Center" Classes="secondary" />
                                 </StackPanel>
+                                <Button Content="{loc:Loc pair.shorten_paths_analyze}" Command="{Binding AnalyzeShorteningImpactCommand}"
+                                        IsEnabled="{Binding ShortenLongPaths}" HorizontalAlignment="Left" Classes="secondary small" />
+                                <TextBlock Text="{Binding ShorteningImpactText}" Classes="caption" TextWrapping="Wrap" />
                             </StackPanel>
                             <TextBlock Grid.Row="2" Grid.Column="1" Classes="caption" TextWrapping="Wrap"
                                        Text="{Binding ShortenLongPathsHint}" />

@@ -43,6 +43,7 @@ internal static class Program
                 "version" => Version(),
                 "config" => ConfigCommand(opts),
                 "sync" => SyncCommand(opts),
+                "repair" => RepairCommand(opts),
                 "status" => StatusCommand(opts),
                 "pending" => PendingCommand(opts),
                 "probe" => ProbeCommand(opts),
@@ -163,6 +164,51 @@ internal static class Program
         }
         var pass = new SyncRunner(cfg, opts.ConfigPath, log).Run(opts.DryRun, opts.Backfill, cts.Token, opts.PairName, opts.Scope);
         return pass.Errors == 0 ? 0 : 1;
+    }
+
+    private static int RepairCommand(Options opts)
+    {
+        var cfg = LoadConfig(opts, out var code);
+        if (cfg is null) return code;
+        if (opts.PairName is null)
+        {
+            Console.Error.WriteLine("repair requires --pair <name>");
+            return 2;
+        }
+        var pair = cfg.Pairs.SingleOrDefault(p => p.Name.Equals(opts.PairName, StringComparison.OrdinalIgnoreCase));
+        if (pair is null || pair.Mode != SyncMode.Mirror || !pair.ShortenLongPaths)
+        {
+            Console.Error.WriteLine("repair requires an existing mirror pair with path shortening enabled");
+            return 2;
+        }
+        if (!opts.DryRun && pair.Enabled)
+        {
+            Console.Error.WriteLine("pause the pair before applying repair");
+            return 2;
+        }
+        using var gate = PassLock.TryAcquire(opts.ConfigPath, pair.Name);
+        if (!gate.Acquired)
+        {
+            Console.Error.WriteLine("another pass is running for this pair");
+            return 4;
+        }
+        var configDir = Path.GetDirectoryName(Path.GetFullPath(opts.ConfigPath))!;
+        var statePath = Path.IsPathRooted(cfg.StatePath) ? cfg.StatePath : Path.Combine(configDir, cfg.StatePath);
+        using var store = new StateStore(statePath);
+        using var plan = TargetRepair.Prepare(pair, cfg, store);
+        if (opts.ReportPath is not null)
+        {
+            TargetRepair.WriteCsv(plan, opts.ReportPath);
+            Console.WriteLine($"repair report: {Path.GetFullPath(opts.ReportPath)}");
+        }
+        Console.WriteLine($"repair plan: actions={plan.ActionCount} unresolved={plan.Conflicts}");
+        if (!opts.DryRun)
+        {
+            TargetRepair.Execute(plan, store);
+            if (plan.Conflicts == 0) store.SetMeta($"repair_required:{pair.Name}", "0");
+            Console.WriteLine("repair applied; wait for cloud synchronization before resuming the pair");
+        }
+        return plan.Conflicts == 0 ? 0 : 1;
     }
 
     /// <summary>
@@ -489,6 +535,8 @@ internal static class Program
               wfs autostart on|off|status [--tray] [--config <path>]   Startup-folder shortcut at logon
                                                               (default: wfs sync --loop; --tray: the app in the notification area)
               wfs task on|off|status [--config <path>]        Task Scheduler task running `sync --once` every <interval>
+              wfs repair --pair <name> --dry-run [--report <csv>]
+              wfs repair --pair <name> [--report <csv>]  (pair must be paused)
               wfs version
 
             options:
@@ -502,6 +550,7 @@ internal static class Program
               --scope <rel>     sync only this folder inside the pair (relative to its root): additions and
                                 updates only, never deletions. Needs one pair; not valid with --loop
               --watch <sec>     probe: listen for change notifications for this many seconds
+              --report <path>   repair: write CSV report here
 
             exit codes: 0 ok, 1 error, 2 usage/config, 3 not implemented, 4 another pass is running
             """);
@@ -534,6 +583,9 @@ internal static class Program
                     break;
                 case "--scope" when i + 1 < list.Count:
                     o.Scope = list[++i];
+                    break;
+                case "--report" when i + 1 < list.Count:
+                    o.ReportPath = list[++i];
                     break;
                 case "--json": o.Json = true; break;
                 case "--all": o.All = true; break;
@@ -568,6 +620,7 @@ internal static class Program
         public string? PairName { get; set; }
         public int? WatchSeconds { get; set; }
         public string? Scope { get; set; }
+        public string? ReportPath { get; set; }
         public List<string> Positional { get; } = new();
     }
 }

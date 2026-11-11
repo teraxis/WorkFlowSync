@@ -30,6 +30,13 @@ Both work under a standard user account; never use `/RL HIGHEST` or "run with hi
 Replace `WorkFlowSync.exe` and `wfs.exe`; `config.json`, `state.db`, `logs\` stay. Schema migrations run
 automatically on first start of a newer version (Stage 1+ records `schema_version` in `meta`).
 
+For v0.3.17, pause pairs with long-path shortening before replacing the binaries. Schema v4→v5 creates
+`state.db.v4-backup`. Once OneDrive is active, use the separate Repair long paths task action and review
+its counts before confirming, or run `wfs repair --pair NAME --dry-run` and then `wfs repair --pair NAME`.
+CSV export requires an explicit `--report <csv>`. Resume the pair after OneDrive has synchronized the renames. The repair
+command leaves conflicts and untracked target items untouched. The previous binary needs the v4 backup,
+not the upgraded database, for a rollback.
+
 ## Release & Publishing
 
 1. Bump `<Version>` in `Directory.Build.props`.

@@ -11,6 +11,9 @@ public sealed record StateEntry
     /// <summary>Logical path relative to the pair root (as seen through links), backslash separated.</summary>
     public required string RelativePath { get; init; }
 
+    /// <summary>Physical relative path of this entry in the target, fixed when first adopted or copied.</summary>
+    public string? TargetPath { get; init; }
+
     public required EntryKind Kind { get; init; }
 
     public EntryStatus Status { get; init; } = EntryStatus.Active;

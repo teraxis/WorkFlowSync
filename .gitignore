@@ -27,4 +27,5 @@ TestResults/
 config.json
 state.db
 state.db-*
+state.db.*-backup
 logs/

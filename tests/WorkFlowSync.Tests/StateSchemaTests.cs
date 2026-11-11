@@ -8,7 +8,7 @@ using WorkFlowSync.Core.State;
 namespace WorkFlowSync.Tests;
 
 /// <summary>
-/// Current schema: integer times, migration from the text-based v1 through v4, scoped reads,
+/// Current schema: integer times, migration from the text-based v1 through v5, scoped reads,
 /// batched writes, copy timestamps and checkpoints. Migration is the one operation here that could lose the whole
 /// history, so it is covered from a hand-built v1 database rather than from anything this build wrote.
 /// </summary>
@@ -83,7 +83,7 @@ public class StateSchemaTests : IDisposable
         Assert.Equal(1234, file.SourceSize);
         Assert.Null(docs[@"Документи"].SourceSize);
 
-        Assert.Equal("4", store.GetMeta("schema_version"));
+        Assert.Equal("5", store.GetMeta("schema_version"));
         Assert.NotNull(store.MigratedFromBackup);
         Assert.True(File.Exists(store.MigratedFromBackup!), "the v1 database must be backed up before it is rewritten");
     }
@@ -98,7 +98,7 @@ public class StateSchemaTests : IDisposable
 
         using var store = new StateStore(DbPath);
 
-        Assert.Equal("4", store.GetMeta("schema_version"));
+        Assert.Equal("5", store.GetMeta("schema_version"));
         Assert.NotNull(store.MigratedFromBackup);
         Assert.EndsWith(".v2-backup", store.MigratedFromBackup, StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(store.MigratedFromBackup), "v2 database must be backed up before v3 migration");
@@ -130,10 +130,37 @@ public class StateSchemaTests : IDisposable
 
         using var store = new StateStore(DbPath);
 
-        Assert.Equal("4", store.GetMeta("schema_version"));
+        Assert.Equal("5", store.GetMeta("schema_version"));
         Assert.EndsWith(".v3-backup", store.MigratedFromBackup, StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(store.MigratedFromBackup));
         Assert.Null(store.Load("docs")["a.txt"].CopiedAtUtc);
+    }
+
+    [Fact]
+    public void V4_database_preserves_physical_names_and_creates_consistent_backup()
+    {
+        var seen = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+        WriteV3Database(("docs", "already-copied.txt", seen, 7));
+        using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+        { DataSource = DbPath, Pooling = false }.ToString()))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "ALTER TABLE entries ADD COLUMN copied_at INTEGER; UPDATE meta SET value = '4' WHERE key = 'schema_version';";
+            cmd.ExecuteNonQuery();
+        }
+
+        using var store = new StateStore(DbPath);
+        Assert.Equal("5", store.GetMeta("schema_version"));
+        Assert.Equal("already-copied.txt", store.Load("docs")["already-copied.txt"].TargetPath);
+        Assert.Equal(DbPath + ".v4-backup", store.MigratedFromBackup);
+        Assert.True(File.Exists(store.MigratedFromBackup));
+        using var backup = new SqliteConnection(new SqliteConnectionStringBuilder
+        { DataSource = store.MigratedFromBackup, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
+        backup.Open();
+        using var version = backup.CreateCommand();
+        version.CommandText = "SELECT value FROM meta WHERE key = 'schema_version'";
+        Assert.Equal("4", version.ExecuteScalar());
     }
 
     private void WriteV2Database(params (string Pair, string RelPath, DateTimeOffset FirstSeen, long? Size)[] rows)
@@ -177,7 +204,7 @@ public class StateSchemaTests : IDisposable
     {
         WriteV2Database(rows);
         using var conn = new SqliteConnection(new SqliteConnectionStringBuilder
-            { DataSource = DbPath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
+        { DataSource = DbPath, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
         conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """

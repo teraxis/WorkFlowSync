@@ -78,7 +78,7 @@ public sealed class TwoWayPlanner
     {
         var plan = new SyncPlan();
         var mappedA = GoogleDrive.MapGoogleDocsForExport(a, _googleDocExport, _convertGoogleRecordings, out var targetToSourceMap);
-        if (_shortenLongPaths && !string.IsNullOrEmpty(_targetRoot))
+        if (!string.IsNullOrEmpty(_targetRoot))
         {
             mappedA = PathShortener.MapEntries(mappedA, _targetRoot, _shortenLongPaths, _maxPathLength, state, targetToSourceMap, out targetToSourceMap);
         }

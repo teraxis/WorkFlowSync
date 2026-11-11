@@ -309,8 +309,8 @@ public sealed class FolderPair
     /// </summary>
     public bool ShortenLongPaths { get; set; }
 
-    /// <summary>Maximum allowed full target path length before shortening kicks in (default 240, range 80..1000).</summary>
-    public int MaxPathLength { get; set; } = 240;
+    /// <summary>Maximum allowed full target path length before shortening kicks in (default 259, range 80..1000).</summary>
+    public int MaxPathLength { get; set; } = Planning.PathShortener.DefaultMaxPathLength;
 
     /// <summary>
     /// Intake filter: copy only items whose appearance date (<c>first_seen</c>) falls within this window;

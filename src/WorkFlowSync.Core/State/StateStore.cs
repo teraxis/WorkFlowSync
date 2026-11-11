@@ -14,7 +14,7 @@ namespace WorkFlowSync.Core.State;
 /// </summary>
 public sealed class StateStore : IDisposable
 {
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
 
     /// <summary>Rows per transaction when writing in batches; also the checkpoint size during a pass.</summary>
     public const int BatchRows = 2000;
@@ -58,7 +58,7 @@ public sealed class StateStore : IDisposable
           first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
           src_size INTEGER, src_mtime INTEGER, copied_size INTEGER, copied_mtime INTEGER, copied_at INTEGER,
           via_link INTEGER NOT NULL DEFAULT 0, status_changed INTEGER,
-          remote_id TEXT, remote_version TEXT,
+          remote_id TEXT, remote_version TEXT, target_path TEXT,
           PRIMARY KEY (pair, path)) STRICT, WITHOUT ROWID;
         """;
 
@@ -96,15 +96,22 @@ public sealed class StateStore : IDisposable
                 MigrateV1ToV2();
                 MigrateV2ToV3(backupRequired: false);
                 MigrateV3ToV4(backupRequired: false);
+                MigrateV4ToV5(backupRequired: false);
                 break;
 
             case 2:
                 MigrateV2ToV3(backupRequired: true);
                 MigrateV3ToV4(backupRequired: false);
+                MigrateV4ToV5(backupRequired: false);
                 break;
 
             case 3:
                 MigrateV3ToV4(backupRequired: true);
+                MigrateV4ToV5(backupRequired: false);
+                break;
+
+            case 4:
+                MigrateV4ToV5(backupRequired: true);
                 break;
 
             case SchemaVersion:
@@ -239,7 +246,28 @@ public sealed class StateStore : IDisposable
 
         if (!ColumnExists("entries", "copied_at"))
             Exec("ALTER TABLE entries ADD COLUMN copied_at INTEGER;");
-        SetMeta("schema_version", SchemaVersion.ToString(CultureInfo.InvariantCulture));
+        SetMeta("schema_version", "4");
+    }
+
+    /// <summary>Pin every legacy row to its recorded physical name before a new algorithm runs.</summary>
+    private void MigrateV4ToV5(bool backupRequired)
+    {
+        if (backupRequired)
+        {
+            var backup = Path + ".v4-backup";
+            if (File.Exists(backup))
+                throw new IOException($"Existing migration backup must be preserved: {backup}");
+            using var vacuum = _conn.CreateCommand();
+            vacuum.CommandText = "VACUUM INTO $dest";
+            vacuum.Parameters.AddWithValue("$dest", backup);
+            vacuum.ExecuteNonQuery();
+            MigratedFromBackup = backup;
+        }
+        if (!ColumnExists("entries", "target_path"))
+            Exec("ALTER TABLE entries ADD COLUMN target_path TEXT;");
+        Exec("UPDATE entries SET target_path = path WHERE target_path IS NULL;");
+        Exec("INSERT OR IGNORE INTO meta(key, value) SELECT 'repair_required:' || pair, '1' FROM entries GROUP BY pair;");
+        SetMeta("schema_version", "5");
     }
 
     private bool ColumnExists(string table, string column)
@@ -273,7 +301,7 @@ public sealed class StateStore : IDisposable
 
     private Dictionary<string, StateEntry> Read(string pair, string? scopeDir)
     {
-        const string Columns = "path, kind, status, first_seen, last_seen, src_size, src_mtime, copied_size, copied_mtime, copied_at, via_link, status_changed, remote_id, remote_version";
+        const string Columns = "path, kind, status, first_seen, last_seen, src_size, src_mtime, copied_size, copied_mtime, copied_at, via_link, status_changed, remote_id, remote_version, target_path";
         var dict = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = scopeDir is null
@@ -312,6 +340,7 @@ public sealed class StateStore : IDisposable
                 StatusChangedUtc = r.IsDBNull(11) ? null : FromUnixMs(r.GetInt64(11)),
                 RemoteId = r.IsDBNull(12) ? null : r.GetString(12),
                 RemoteVersion = r.IsDBNull(13) ? null : r.GetString(13),
+                TargetPath = r.IsDBNull(14) ? null : r.GetString(14),
             };
             dict[e.RelativePath] = e;
         }
@@ -396,17 +425,19 @@ public sealed class StateStore : IDisposable
             cmd.Transaction = tx;
             cmd.CommandText = """
                 INSERT INTO entries (pair, path, kind, status, first_seen, last_seen, src_size, src_mtime,
-                                     copied_size, copied_mtime, copied_at, via_link, status_changed, remote_id, remote_version)
+                                     copied_size, copied_mtime, copied_at, via_link, status_changed, remote_id, remote_version, target_path)
                 VALUES ($pair, $path, $kind, $status, $first_seen, $last_seen, $src_size, $src_mtime,
-                        $copied_size, $copied_mtime, $copied_at, $via_link, $status_changed, $remote_id, $remote_version)
+                        $copied_size, $copied_mtime, $copied_at, $via_link, $status_changed, $remote_id, $remote_version, $target_path)
                 ON CONFLICT(pair, path) DO UPDATE SET
                   kind = excluded.kind, status = excluded.status, first_seen = excluded.first_seen, last_seen = excluded.last_seen,
                   src_size = excluded.src_size, src_mtime = excluded.src_mtime, copied_size = excluded.copied_size,
                   copied_mtime = excluded.copied_mtime, copied_at = excluded.copied_at,
                   via_link = excluded.via_link, status_changed = excluded.status_changed,
-                  remote_id = excluded.remote_id, remote_version = excluded.remote_version
+                  remote_id = excluded.remote_id, remote_version = excluded.remote_version,
+                  target_path = excluded.target_path
                 """;
             var p = AddEntryParameters(cmd);
+            var targetPath = cmd.Parameters.Add("$target_path", SqliteType.Text);
 
             var inBatch = 0;
             foreach (var e in entries)
@@ -426,6 +457,7 @@ public sealed class StateStore : IDisposable
                 p.StatusChanged.Value = e.StatusChangedUtc is { } sc ? ToUnixMs(sc) : DBNull.Value;
                 p.RemoteId.Value = (object?)e.RemoteId ?? DBNull.Value;
                 p.RemoteVersion.Value = (object?)e.RemoteVersion ?? DBNull.Value;
+                targetPath.Value = e.TargetPath ?? e.RelativePath;
                 cmd.ExecuteNonQuery();
 
                 if (++inBatch < BatchRows) continue;
@@ -500,6 +532,23 @@ public sealed class StateStore : IDisposable
             return (int)count;
         }
         return null;
+    }
+
+    /// <summary>Atomically change the physical key after a same-root target move.</summary>
+    public void RelocateTarget(string pair, string oldPath, string newPath, string sourcePath)
+    {
+        using var tx = _conn.BeginTransaction();
+        using var cmd = _conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "UPDATE entries SET path = $new, target_path = $new, remote_id = $source " +
+                          "WHERE pair = $pair AND path = $old";
+        cmd.Parameters.AddWithValue("$pair", pair);
+        cmd.Parameters.AddWithValue("$old", oldPath);
+        cmd.Parameters.AddWithValue("$new", newPath);
+        cmd.Parameters.AddWithValue("$source", sourcePath);
+        if (cmd.ExecuteNonQuery() != 1)
+            throw new InvalidOperationException($"State row disappeared during repair: {pair}/{oldPath}");
+        tx.Commit();
     }
 
     public long FileSizeBytes => File.Exists(Path) ? new FileInfo(Path).Length : 0;

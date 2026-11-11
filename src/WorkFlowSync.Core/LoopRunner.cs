@@ -55,9 +55,30 @@ public sealed class LoopRunner
     /// minutes and a 50 000-folder archive that takes five minutes to scan should not be checked together.
     /// </summary>
     private readonly Dictionary<string, DateTimeOffset> _nextDue = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTimeOffset> _cloudWaitSince = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Interval for one pair: the test override, then the pair's own, then the shared default.</summary>
     private TimeSpan IntervalFor(SyncConfig cfg, FolderPair pair) => IntervalOverride ?? cfg.IntervalFor(pair);
+
+    private void ScheduleNext(SyncConfig cfg, FolderPair pair, PairRunResult? result, DateTimeOffset completed)
+    {
+        lock (_nextDue)
+        {
+            if (result?.SkipReason is "waiting for OneDrive" or "incomplete OneDrive target scan")
+            {
+                if (!_cloudWaitSince.TryGetValue(pair.Name, out var since))
+                    _cloudWaitSince[pair.Name] = since = completed;
+                if (completed - since >= TimeSpan.FromMinutes(30))
+                    _log.Error($"[{pair.Name}] OneDrive / Files On-Demand target has been unavailable for 30 minutes");
+                _nextDue[pair.Name] = completed + TimeSpan.FromMinutes(2);
+            }
+            else
+            {
+                _cloudWaitSince.Remove(pair.Name);
+                _nextDue[pair.Name] = completed + IntervalFor(cfg, pair);
+            }
+        }
+    }
 
     public LoopRunner(string configPath, ISyncLog log, bool dryRun = false)
     {
@@ -117,7 +138,8 @@ public sealed class LoopRunner
                                 Interlocked.Increment(ref _passesRun);
                                 PassCompleted?.Invoke(result);
                                 var completed = DateTimeOffset.UtcNow;
-                                foreach (var pair in due) _nextDue[pair.Name] = completed + IntervalFor(cfg, pair);
+                                foreach (var pair in due)
+                                    ScheduleNext(cfg, pair, result.Pairs.FirstOrDefault(p => p.Pair == pair.Name), completed);
                             }
                             else
                             {
@@ -137,7 +159,7 @@ public sealed class LoopRunner
                                         var result = runner.Run(_dryRun, forceBackfill: false, ct, pair.Name);
                                         Interlocked.Increment(ref _passesRun);
                                         PassCompleted?.Invoke(result);
-                                        _nextDue[pair.Name] = DateTimeOffset.UtcNow + IntervalFor(cfg, pair);
+                                        ScheduleNext(cfg, pair, result.Pairs.FirstOrDefault(), DateTimeOffset.UtcNow);
                                     }
                                 }
                                 else
@@ -158,7 +180,7 @@ public sealed class LoopRunner
                                             var result = runner.Run(_dryRun, forceBackfill: false, ct, pair.Name);
                                             Interlocked.Increment(ref _passesRun);
                                             PassCompleted?.Invoke(result);
-                                            _nextDue[pair.Name] = DateTimeOffset.UtcNow + IntervalFor(cfg, pair);
+                                            ScheduleNext(cfg, pair, result.Pairs.FirstOrDefault(), DateTimeOffset.UtcNow);
                                         }
                                         finally
                                         {

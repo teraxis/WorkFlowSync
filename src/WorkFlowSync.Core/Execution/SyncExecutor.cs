@@ -8,6 +8,7 @@ namespace WorkFlowSync.Core.Execution;
 
 public sealed class ExecutionResult
 {
+    public int Shortened { get; set; }
     public int DirectoriesCreated { get; set; }
     public int FilesCopied { get; set; }
     public int FilesUpdated { get; set; }
@@ -132,6 +133,18 @@ public sealed class SyncExecutor
         var sinceCheckpoint = System.Diagnostics.Stopwatch.StartNew();
         var totalFiles = plan.Actions.Count(a => a.Kind is SyncActionKind.CopyFile or SyncActionKind.UpdateFile);
         progress?.Invoke(0, totalFiles);
+
+        void LogShorten(SyncAction action)
+        {
+            if (action.Kind != SyncActionKind.CopyFile || action.Side != SyncSide.Target ||
+                action.SourceRelativePath is not { } source ||
+                source.Equals(action.RelativePath, StringComparison.OrdinalIgnoreCase) ||
+                GoogleDrive.IsGoogleDoc(source)) return;
+            var before = Path.Combine(_targetRoot, source).Length;
+            var after = Path.Combine(_targetRoot, action.RelativePath).Length;
+            _log.Info($"{prefix}shorten  \\{source} -> \\{action.RelativePath} ({before} -> {after})");
+            result.Shortened++;
+        }
 
         void FlushCheckpoint(bool force)
         {
@@ -282,6 +295,7 @@ public sealed class SyncExecutor
                             }
 
                             if (action.Kind == SyncActionKind.CopyFile) result.FilesCopied++; else result.FilesUpdated++;
+                            LogShorten(action);
                             result.BytesCopied += exportRes.BytesWritten;
                             break;
                         }
@@ -337,6 +351,7 @@ public sealed class SyncExecutor
                             }
                         }
                         if (action.Kind == SyncActionKind.CopyFile) result.FilesCopied++; else result.FilesUpdated++;
+                        LogShorten(action);
                         result.BytesCopied += action.Proposed.SourceSize ?? 0;
                         break;
 

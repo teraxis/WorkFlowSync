@@ -2,6 +2,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using WorkFlowSync.App.ViewModels;
+using WorkFlowSync.Core;
+using WorkFlowSync.Core.Execution;
+using WorkFlowSync.Core.I18n;
+using WorkFlowSync.Core.State;
 
 namespace WorkFlowSync.App.Views;
 
@@ -85,6 +89,51 @@ public partial class MainWindow : Window
     {
         if (PairOf(sender) is not { } pair) return;
         await Vm.RunPairAsync(pair);
+    }
+
+    private async void OnRepairPair(object? sender, RoutedEventArgs e)
+    {
+        if (PairOf(sender) is not { } pair) return;
+        if (pair.Enabled || !pair.ShortenLongPaths)
+        {
+            Vm.StatusText = I18n.T("repair.pause_first");
+            Vm.StatusIsError = true;
+            return;
+        }
+        try
+        {
+            var model = pair.ToModel();
+            var config = Vm.ToConfig();
+            using var plan = await Task.Run(() =>
+            {
+                using var gate = PassLock.TryAcquire(Vm.ConfigPath, model.Name);
+                if (!gate.Acquired) throw new IOException(I18n.T("repair.busy"));
+                using var store = new StateStore(Vm.StateFullPath);
+                return TargetRepair.Prepare(model, config, store);
+            });
+            Vm.StatusText = I18n.T("repair.preview_ready", plan.ActionCount, plan.Conflicts);
+            Vm.StatusIsError = false;
+            if (plan.ActionCount == 0) return;
+            var approved = await ConfirmDialog.ShowAsync(this, I18n.T("tasks.repair_target"),
+                I18n.T("repair.confirm", plan.ActionCount, plan.Conflicts),
+                I18n.T("repair.apply"));
+            if (!approved) return;
+            await Task.Run(() =>
+            {
+                using var gate = PassLock.TryAcquire(Vm.ConfigPath, model.Name);
+                if (!gate.Acquired) throw new IOException(I18n.T("repair.busy"));
+                using var store = new StateStore(Vm.StateFullPath);
+                TargetRepair.Execute(plan, store);
+                if (plan.Conflicts == 0) store.SetMeta($"repair_required:{model.Name}", "0");
+            });
+            Vm.StatusText = I18n.T("repair.completed", plan.ActionCount, plan.Conflicts);
+            Vm.StatusIsError = false;
+        }
+        catch (Exception ex)
+        {
+            Vm.StatusText = I18n.T("repair.failed", ex.Message);
+            Vm.StatusIsError = true;
+        }
     }
 
     private async void OnTogglePair(object? sender, RoutedEventArgs e)
