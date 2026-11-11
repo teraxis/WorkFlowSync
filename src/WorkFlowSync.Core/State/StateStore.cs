@@ -540,6 +540,14 @@ public sealed class StateStore : IDisposable
         using var tx = _conn.BeginTransaction();
         using var cmd = _conn.CreateCommand();
         cmd.Transaction = tx;
+        if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
+        {
+            cmd.CommandText = "DELETE FROM entries WHERE pair = $pair AND path = $new;";
+            cmd.Parameters.AddWithValue("$pair", pair);
+            cmd.Parameters.AddWithValue("$new", newPath);
+            cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+        }
         cmd.CommandText = "UPDATE entries SET path = $new, target_path = $new, remote_id = $source " +
                           "WHERE pair = $pair AND path = $old";
         cmd.Parameters.AddWithValue("$pair", pair);
@@ -549,6 +557,39 @@ public sealed class StateStore : IDisposable
         if (cmd.ExecuteNonQuery() != 1)
             throw new InvalidOperationException($"State row disappeared during repair: {pair}/{oldPath}");
         tx.Commit();
+    }
+
+    /// <summary>Revives a false tombstone back to Active status and updates its target path.</summary>
+    public void ReviveTombstone(string pair, string oldPath, string newPath, string sourcePath)
+    {
+        using var tx = _conn.BeginTransaction();
+        using var cmd = _conn.CreateCommand();
+        cmd.Transaction = tx;
+        if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
+        {
+            cmd.CommandText = "DELETE FROM entries WHERE pair = $pair AND path = $new;";
+            cmd.Parameters.AddWithValue("$pair", pair);
+            cmd.Parameters.AddWithValue("$new", newPath);
+            cmd.ExecuteNonQuery();
+            cmd.Parameters.Clear();
+        }
+        cmd.CommandText = """
+            UPDATE entries
+            SET status = 0, path = $new, target_path = $new, remote_id = $source, status_changed = $now
+            WHERE pair = $pair AND (path = $old OR remote_id = $source);
+            """;
+        cmd.Parameters.AddWithValue("$pair", pair);
+        cmd.Parameters.AddWithValue("$old", oldPath);
+        cmd.Parameters.AddWithValue("$new", newPath);
+        cmd.Parameters.AddWithValue("$source", sourcePath);
+        cmd.Parameters.AddWithValue("$now", ToUnixMs(DateTimeOffset.UtcNow));
+        cmd.ExecuteNonQuery();
+        tx.Commit();
+    }
+
+    public void ClearRepairRequired(string pair)
+    {
+        SetMeta($"repair_required:{pair}", "0");
     }
 
     public long FileSizeBytes => File.Exists(Path) ? new FileInfo(Path).Length : 0;

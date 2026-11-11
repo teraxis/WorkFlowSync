@@ -171,4 +171,85 @@ public sealed class TargetRepairTests : IDisposable
         Assert.False(File.Exists(@"\\?\" + oldFull));
         Assert.True(File.Exists(Path.Combine(targetRoot, move.NewPath)));
     }
+
+    [Fact]
+    public void Tombstone_is_revived_to_active_and_relocated_if_physically_present()
+    {
+        var original = "VeryLongFolder_#1234\\test_doc.docx";
+        var now = DateTimeOffset.UtcNow;
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 10, MtimeUtc = now }
+        };
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 10, MtimeUtc = now }
+        };
+        var targetRoot = Path.Combine(_root, "revive-target");
+        Directory.CreateDirectory(targetRoot);
+        var oldFull = Path.Combine(targetRoot, original);
+        Directory.CreateDirectory(Path.GetDirectoryName(oldFull)!);
+        File.WriteAllText(oldFull, "0123456789");
+        File.SetLastWriteTimeUtc(oldFull, now.UtcDateTime);
+
+        using var store = new StateStore(Path.Combine(_root, "revive-state.db"));
+        store.Upsert(new[] { new StateEntry
+        {
+            PairName = "pair", RelativePath = original, TargetPath = original,
+            Status = EntryStatus.Tombstone, Kind = EntryKind.File,
+            FirstSeenUtc = now, LastSeenUtc = now,
+            CopiedSize = 10, CopiedMtimeUtc = now
+        } });
+
+        var plan = TargetRepair.Build("pair", targetRoot, 200, source, target, store.Load("pair"));
+        Assert.Contains(plan.Rows, r => r.Action is "move" or "adopt-existing");
+
+        TargetRepair.Execute(plan, store);
+        var state = store.Load("pair");
+        var active = Assert.Single(state.Values);
+        Assert.Equal(EntryStatus.Active, active.Status);
+    }
+
+    [Fact]
+    public void Empty_variant_folder_is_scheduled_for_recycle_and_not_untracked()
+    {
+        var targetRoot = Path.Combine(_root, "empty-target");
+        Directory.CreateDirectory(targetRoot);
+        var variantDir = "LongFolder_#123456";
+        var source = new Dictionary<string, ScanEntry>();
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [variantDir] = new() { RelativePath = variantDir, Kind = EntryKind.Directory }
+        };
+        var state = new Dictionary<string, StateEntry>();
+
+        var plan = TargetRepair.Build("pair", targetRoot, 200, source, target, state);
+        var row = Assert.Single(plan.Rows);
+        Assert.Equal("recycle-empty-directory", row.Action);
+        Assert.Equal(0, plan.Conflicts);
+    }
+
+    [Fact]
+    public void Cloud_duplicate_parenthesized_copy_is_recycled()
+    {
+        var targetRoot = Path.Combine(_root, "cloud-dup-target");
+        Directory.CreateDirectory(targetRoot);
+        var orig = "doc_#1234.pdf";
+        var dup = "doc_#1234 (1).pdf";
+        var now = DateTimeOffset.UtcNow;
+        var source = new Dictionary<string, ScanEntry>();
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [orig] = new() { RelativePath = orig, Kind = EntryKind.File, Size = 20, MtimeUtc = now },
+            [dup] = new() { RelativePath = dup, Kind = EntryKind.File, Size = 20, MtimeUtc = now }
+        };
+        var state = new Dictionary<string, StateEntry>
+        {
+            [orig] = new() { PairName = "pair", RelativePath = orig, Kind = EntryKind.File, FirstSeenUtc = now, CopiedSize = 20, CopiedMtimeUtc = now }
+        };
+
+        var plan = TargetRepair.Build("pair", targetRoot, 200, source, target, state);
+        Assert.Contains(plan.Rows, r => r.Action == "recycle-cloud-duplicate" && r.OldPath == dup);
+        Assert.Equal(0, plan.Conflicts);
+    }
 }

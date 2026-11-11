@@ -462,6 +462,14 @@ public sealed class SyncRunner
             plan.Actions.RemoveAll(a => a.Kind == SyncActionKind.UpdateFile);
             plan.Stats.Updated -= heldUpdates.Count;
             plan.Stats.BytesToCopy -= heldUpdates.Sum(a => a.Proposed.SourceSize ?? 0);
+
+            var stateSourceKeys = new HashSet<string>(state.Values.Select(e => e.RemoteId ?? e.RelativePath), StringComparer.OrdinalIgnoreCase);
+            var heldCopies = plan.Actions.Where(a => a.Kind == SyncActionKind.CopyFile &&
+                (stateSourceKeys.Contains(a.Proposed.RemoteId ?? a.RelativePath) || state.ContainsKey(a.RelativePath))).ToList();
+            plan.Actions.RemoveAll(a => heldCopies.Contains(a));
+            plan.Stats.New -= heldCopies.Count;
+            plan.Stats.BytesToCopy -= heldCopies.Sum(a => a.Proposed.SourceSize ?? 0);
+
             DeletionGuard.StripRemovals(plan);
             plan.StateUpdates.RemoveAll(e => e.Status == EntryStatus.Tombstone);
             plan.Forget.Clear();

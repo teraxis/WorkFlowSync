@@ -65,7 +65,8 @@ public sealed class TreeScanner
         var relative = relativeRoot?.Trim().Trim('\\', '/') ?? string.Empty;
         // Everything below walks from here; only the relative paths handed out keep the pair root as origin.
         var start = relative.Length == 0 ? root : Path.Combine(root, relative);
-        if (!Directory.Exists(start)) throw new RootUnavailableException(start);
+        var fsStart = ToFsPath(start);
+        if (!Directory.Exists(fsStart)) throw new RootUnavailableException(start);
 
         var result = new ScanResult();
         var warnings = new ConcurrentBag<string>();
@@ -74,12 +75,12 @@ public sealed class TreeScanner
 
         var channel = Channel.CreateUnbounded<WorkItem>(new UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
         var pending = 1;
-        channel.Writer.TryWrite(new WorkItem(start, relative, start, Array.Empty<string>(), false, 0));
+        channel.Writer.TryWrite(new WorkItem(fsStart, relative, start, Array.Empty<string>(), false, 0));
 
         // Probe the root synchronously so an offline share fails fast and loudly.
         try
         {
-            using var probe = new FileSystemEnumerable<int>(start, (ref FileSystemEntry _) => 0, _options).GetEnumerator();
+            using var probe = new FileSystemEnumerable<int>(fsStart, (ref FileSystemEntry _) => 0, _options).GetEnumerator();
             probe.MoveNext();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -215,8 +216,16 @@ public sealed class TreeScanner
             var isCloudDirectory = CloudFiles.IsPlaceholderDirectory(r.FullPath, r.Attributes);
             if (isCloudDirectory is null)
             {
-                warnings.Add($"{rel}: cannot list: reparse tag unavailable");
-                continue;
+                var linkTarget = TryResolveLink(r.FullPath);
+                if (linkTarget is null)
+                {
+                    isCloudDirectory = true;
+                }
+                else
+                {
+                    warnings.Add($"{rel}: cannot list: reparse tag unavailable");
+                    continue;
+                }
             }
             if (IsLinkCandidate(r.Attributes, isCloudDirectory.Value))
             {
@@ -266,14 +275,19 @@ public sealed class TreeScanner
     /// path was followed from, would recurse forever. Sibling links (two names for one folder) are fine and mirrored twice.</summary>
     private static bool IsCycle(string target, string currentReal, string[] chain)
     {
-        if (IsSameOrAncestor(target, currentReal)) return true;
-        foreach (var c in chain) if (IsSameOrAncestor(target, c)) return true;
+        var normTarget = NormalizePath(target);
+        if (IsSameOrAncestor(normTarget, currentReal)) return true;
+        foreach (var c in chain) if (IsSameOrAncestor(normTarget, c)) return true;
         return false;
     }
 
-    private static bool IsSameOrAncestor(string ancestor, string path) =>
-        path.Equals(ancestor, StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith(ancestor + "\\", StringComparison.OrdinalIgnoreCase);
+    private static bool IsSameOrAncestor(string ancestor, string path)
+    {
+        var a = NormalizePath(ancestor);
+        var p = NormalizePath(path);
+        return p.Equals(a, StringComparison.OrdinalIgnoreCase) ||
+               p.StartsWith(a + "\\", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsLinkCandidate(FileAttributes a, bool isCloudDirectory) =>
         a.HasFlag(FileAttributes.ReparsePoint) && !isCloudDirectory;
@@ -284,11 +298,32 @@ public sealed class TreeScanner
         try
         {
             var target = new DirectoryInfo(fullPath).ResolveLinkTarget(returnFinalTarget: true);
-            return target is null ? null : Path.GetFullPath(target.FullName).TrimEnd('\\', '/');
+            return target is null ? null : NormalizePath(target.FullName);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return null;
         }
+    }
+
+    public static string NormalizePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return path;
+        var p = path;
+        if (p.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+            p = @"\\" + p[8..];
+        else if (p.StartsWith(@"\\?\", StringComparison.OrdinalIgnoreCase))
+            p = p[4..];
+        return Path.GetFullPath(p).TrimEnd('\\', '/');
+    }
+
+    public static string ToFsPath(string path)
+    {
+        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(path)) return path;
+        var full = Path.GetFullPath(path);
+        if (full.StartsWith(@"\\?\", StringComparison.Ordinal)) return full;
+        return full.StartsWith(@"\\", StringComparison.Ordinal)
+            ? @"\\?\UNC\" + full[2..]
+            : @"\\?\" + full;
     }
 }

@@ -292,7 +292,47 @@ public static class PathShortener
         var dirMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<string, ScanEntry>(source.Count, StringComparer.OrdinalIgnoreCase);
 
-        // Process directories first, ordered by depth so parent directories are shortened before children
+        // Pre-map all parent directories deterministically from shallowest to deepest
+        var allDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (path, entry) in source)
+        {
+            if (entry.Kind == EntryKind.Directory)
+                allDirs.Add(path);
+            var p = Path.GetDirectoryName(path);
+            while (!string.IsNullOrEmpty(p))
+            {
+                allDirs.Add(p);
+                p = Path.GetDirectoryName(p);
+            }
+        }
+
+        var sortedDirs = allDirs
+            .OrderBy(d => d.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries).Length)
+            .ThenBy(d => d, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var dir in sortedDirs)
+        {
+            var origDir = existingTargetToSourceMap != null && existingTargetToSourceMap.TryGetValue(dir, out var od) ? od : dir;
+            if (stateRemoteToTarget.TryGetValue(origDir, out var previouslyMappedDir))
+            {
+                dirMap[dir] = previouslyMappedDir;
+            }
+            else
+            {
+                var parent = Path.GetDirectoryName(dir);
+                var baseDir = Path.GetFileName(dir);
+                string mappedParent = "";
+                if (!string.IsNullOrEmpty(parent) && dirMap.TryGetValue(parent, out var mp))
+                    mappedParent = mp;
+                else if (!string.IsNullOrEmpty(parent))
+                    mappedParent = parent;
+
+                var candidate = string.IsNullOrEmpty(mappedParent) ? baseDir : Path.Combine(mappedParent, baseDir);
+                dirMap[dir] = enabled ? MapDirectory(targetRoot, candidate, origDir, maxPathLength) : candidate;
+            }
+        }
+
+        // Process entries ordered by depth
         var ordered = source
             .OrderBy(kvp => kvp.Value.Kind == EntryKind.Directory ? 0 : 1)
             .ThenBy(kvp => kvp.Key.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries).Length)
@@ -310,25 +350,10 @@ public static class PathShortener
             if (stateRemoteToTarget.TryGetValue(originalSourcePath, out var previouslyMapped))
             {
                 targetRel = previouslyMapped;
-                if (entry.Kind == EntryKind.Directory)
-                {
-                    dirMap[path] = targetRel;
-                }
             }
             else if (entry.Kind == EntryKind.Directory)
             {
-                // Map directory
-                var parent = Path.GetDirectoryName(path);
-                var baseDir = Path.GetFileName(path);
-                string mappedParent = "";
-                if (!string.IsNullOrEmpty(parent) && dirMap.TryGetValue(parent, out var mp))
-                    mappedParent = mp;
-                else if (!string.IsNullOrEmpty(parent))
-                    mappedParent = parent;
-
-                var candidate = string.IsNullOrEmpty(mappedParent) ? baseDir : Path.Combine(mappedParent, baseDir);
-                targetRel = enabled ? MapDirectory(targetRoot, candidate, originalSourcePath, maxPathLength) : candidate;
-                dirMap[path] = targetRel;
+                targetRel = dirMap.TryGetValue(path, out var mapped) ? mapped : path;
             }
             else
             {
@@ -376,8 +401,9 @@ public static class PathShortener
         var originalName = Path.GetFileName(candidate);
         var name = originalName.Trim();
         var parentLength = Path.Combine(root, parent).Length;
-        var reserved = Math.Min(ReservedFileCharacters, Math.Max(16, limit - parentLength - 16));
-        var budget = limit - reserved - 1;
+        var remaining = limit - parentLength - 1;
+        var reserved = Math.Clamp(remaining / 3, 12, 32);
+        var budget = limit - reserved;
         var normalized = Path.Combine(parent, name);
         if (name.Length > 0 && Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes &&
             Path.Combine(root, normalized).Length <= budget)
@@ -386,17 +412,17 @@ public static class PathShortener
             Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes && name.Length > 0 && name == originalName)
             return candidate;
 
-        var tag = "_#" + ComputeHash(sourcePath);
-        var allowed = budget - Path.Combine(root, parent).Length - (root.Length > 0 || parent.Length > 0 ? 1 : 0);
-        var keep = Math.Min(40, allowed - tag.Length);
-        if (keep < 1)
-            throw new InvalidOperationException($"Cannot fit directory within path limit {limit}: {sourcePath}");
+        var tag = "_#" + ComputeHash(sourcePath, 8);
+        var allowed = budget - parentLength - 1;
+        if (allowed < tag.Length + 1)
+        {
+            tag = "_#" + ComputeHash(sourcePath, 4);
+        }
+        var keep = Math.Max(1, Math.Min(40, allowed - tag.Length));
         var stem = TruncateToUtf8Bytes(name[..Math.Min(name.Length, keep)], MaxSegmentUtf8Bytes - tag.Length)
             .TrimEnd(' ', '.', '_');
         if (stem.Length == 0) stem = "_";
         var mapped = Path.Combine(parent, stem + tag);
-        if (Path.Combine(root, mapped).Length > budget)
-            throw new InvalidOperationException($"Cannot fit directory within path limit {limit}: {sourcePath}");
         return mapped;
     }
 
@@ -410,17 +436,17 @@ public static class PathShortener
 
         var ext = Path.GetExtension(name);
         var stem = Path.GetFileNameWithoutExtension(name);
-        var tag = "_#" + ComputeHash(sourcePath);
+        var tag = "_#" + ComputeHash(sourcePath, 8);
         var allowed = limit - Path.Combine(root, parent).Length - (root.Length > 0 || parent.Length > 0 ? 1 : 0);
-        var keep = Math.Min(40, allowed - tag.Length - ext.Length);
-        if (keep < 1 || stem.Length == 0)
-            throw new InvalidOperationException($"Cannot fit filename within path limit {limit}: {sourcePath}");
+        if (allowed < tag.Length + ext.Length + 1)
+        {
+            tag = "_#" + ComputeHash(sourcePath, 4);
+        }
+        var keep = Math.Max(1, Math.Min(40, allowed - tag.Length - ext.Length));
         var shortStem = TruncateToUtf8Bytes(stem[..Math.Min(stem.Length, keep)],
             MaxSegmentUtf8Bytes - Encoding.UTF8.GetByteCount(tag + ext)).TrimEnd(' ', '.', '_');
         if (shortStem.Length == 0) shortStem = "_";
         var mapped = Path.Combine(parent, shortStem + tag + ext);
-        if (Path.Combine(root, mapped).Length > limit)
-            throw new InvalidOperationException($"Cannot fit filename within path limit {limit}: {sourcePath}");
         return mapped;
     }
 }
