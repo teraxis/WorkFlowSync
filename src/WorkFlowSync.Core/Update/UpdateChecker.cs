@@ -14,6 +14,7 @@ public static class UpdateChecker
     private const string Owner = "teraxis";
     private const string Repo = "WorkFlowSync";
     private const string AssetName = "WorkFlowSync.exe";
+    private const string CliAssetName = "wfs.exe";
 
     private static readonly Uri LatestReleaseUri =
         new($"https://api.github.com/repos/{Owner}/{Repo}/releases/latest");
@@ -55,6 +56,7 @@ public static class UpdateChecker
 
             // Find the exe asset among the release assets.
             string? assetUrl = null;
+            string? cliAssetUrl = null;
             if (root.TryGetProperty("assets", out var assets))
             {
                 foreach (var asset in assets.EnumerateArray())
@@ -63,14 +65,15 @@ public static class UpdateChecker
                     if (string.Equals(name, AssetName, StringComparison.OrdinalIgnoreCase))
                     {
                         assetUrl = asset.GetProperty("browser_download_url").GetString();
-                        break;
                     }
+                    else if (string.Equals(name, CliAssetName, StringComparison.OrdinalIgnoreCase))
+                        cliAssetUrl = asset.GetProperty("browser_download_url").GetString();
                 }
             }
 
-            if (string.IsNullOrEmpty(assetUrl)) return null;
+            if (string.IsNullOrEmpty(assetUrl) || string.IsNullOrEmpty(cliAssetUrl)) return null;
 
-            return new UpdateInfo(remoteVersion, htmlUrl, assetUrl, body);
+            return new UpdateInfo(remoteVersion, htmlUrl, assetUrl, cliAssetUrl, body);
         }
         catch (Exception) when (!cancel.IsCancellationRequested)
         {

@@ -8,5 +8,7 @@ public sealed record UpdateInfo(
     string ReleaseUrl,
     /// <summary>Direct download URL for the single-file exe asset.</summary>
     string AssetUrl,
+    /// <summary>Direct download URL for the matching command-line executable.</summary>
+    string CliAssetUrl,
     /// <summary>Markdown body of the release (may be null if the author left it blank).</summary>
     string? ReleaseNotes);

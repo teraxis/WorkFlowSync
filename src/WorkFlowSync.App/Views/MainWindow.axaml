@@ -246,6 +246,9 @@
                                                             </StackPanel>
                                                         </Border>
 
+                                                        <Button Content="{loc:Loc repair.button}" Click="OnRepairPair"
+                                                                IsVisible="{Binding RepairRequired}" Height="24" MinWidth="0" Padding="8,2" />
+
                                                         <!-- Toggle switch placed next to status badge -->
                                                         <ToggleSwitch IsChecked="{Binding Enabled}" OnContent="{x:Null}" OffContent="{x:Null}"
                                                                       VerticalAlignment="Center" Margin="0" MinWidth="0" />
@@ -396,7 +399,7 @@
                                                             <MenuItem Header="{loc:Loc tasks.edit}" Click="OnEditPair">
                                                                 <MenuItem.Icon><Path Classes="ico" Data="{StaticResource IconPencil}" /></MenuItem.Icon>
                                                             </MenuItem>
-                                                            <MenuItem Header="{loc:Loc tasks.repair_target}" Click="OnRepairPair" />
+                                                            <MenuItem Header="{loc:Loc troubleshoot.title}" Click="OnRepairPair" />
                                                             <Separator />
                                                             <MenuItem Header="{loc:Loc tasks.delete}" Click="OnDeletePair" Classes="danger">
                                                                 <MenuItem.Icon><Path Classes="ico" Data="{StaticResource IconTrash}" /></MenuItem.Icon>

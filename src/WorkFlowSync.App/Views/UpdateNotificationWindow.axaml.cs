@@ -87,15 +87,25 @@ public partial class UpdateNotificationWindow : Window
             var currentExe = Environment.ProcessPath
                 ?? Path.Combine(AppContext.BaseDirectory, "WorkFlowSync.exe");
             var updateExe = UpdateInstaller.UpdateExePath(currentExe);
+            var updateCliExe = UpdateInstaller.CliUpdateExePath(currentExe);
 
-            // Download with progress
+            // Download both executables before replacing either one.
             await UpdateDownloader.DownloadAsync(
                 _info.AssetUrl,
                 updateExe,
                 percent => Dispatcher.UIThread.Post(() =>
                 {
-                    progressBar.Value = percent;
-                    progressText.Text = I18n.T("update.downloading", percent);
+                    progressBar.Value = percent / 2;
+                    progressText.Text = I18n.T("update.downloading", percent / 2);
+                }),
+                _downloadCts.Token);
+            await UpdateDownloader.DownloadAsync(
+                _info.CliAssetUrl,
+                updateCliExe,
+                percent => Dispatcher.UIThread.Post(() =>
+                {
+                    progressBar.Value = 50 + percent / 2;
+                    progressText.Text = I18n.T("update.downloading", 50 + percent / 2);
                 }),
                 _downloadCts.Token);
 

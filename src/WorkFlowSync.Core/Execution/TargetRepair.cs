@@ -8,6 +8,8 @@ using WorkFlowSync.Core.State;
 
 namespace WorkFlowSync.Core.Execution;
 
+public sealed record RepairProgress(string Stage, int Completed = 0, int Total = 0);
+
 /// <summary>Plans same-root target moves from observed files and recorded source identities.</summary>
 public static class TargetRepair
 {
@@ -19,8 +21,20 @@ public static class TargetRepair
         public required string TargetRoot { get; init; }
         public List<Row> Rows { get; } = new();
         internal List<(Row Row, string Source, StateEntry State)> Work { get; } = new();
-        public int ActionCount => Work.Count;
-        public int Conflicts => Rows.Count(r => r.Action is "conflict" or "missing");
+        public int ActionCount => Work.Count + Rows.Count(r => r.Action is "recycle-cloud-duplicate" or "recycle-empty-directory");
+        public int Conflicts => Rows.Count(r => r.Action is "conflict" or "missing" or "untracked");
+        public int SourceFileCount { get; internal set; }
+        public int KeepFiles { get; internal set; }
+        public long KeepBytes { get; internal set; }
+        public int RenameFiles => Work.Count(w => w.State.Kind == EntryKind.File && w.Row.Action == "move");
+        public long RenameBytes => Work.Where(w => w.State.Kind == EntryKind.File && w.Row.Action == "move")
+            .Sum(w => w.State.CopiedSize ?? 0);
+        public int RecycleFiles => Work.Count(w => w.State.Kind == EntryKind.File &&
+            w.Row.Action is "recycle-duplicate" or "recycle-duplicate-state") +
+            Rows.Count(r => r.Action == "recycle-cloud-duplicate");
+        public long RecycleBytes => Work.Where(w => w.State.Kind == EntryKind.File &&
+            w.Row.Action is "recycle-duplicate" or "recycle-duplicate-state")
+            .Sum(w => w.State.CopiedSize ?? 0);
 
         public void Dispose()
         {
@@ -29,7 +43,8 @@ public static class TargetRepair
         }
     }
 
-    public static Plan Prepare(FolderPair pair, SyncConfig config, StateStore store)
+    public static Plan Prepare(FolderPair pair, SyncConfig config, StateStore store,
+        IProgress<RepairProgress>? progress = null)
     {
         if (pair.Mode != SyncMode.Mirror || !pair.ShortenLongPaths)
             throw new InvalidOperationException("Target repair requires a mirror pair with shortening enabled");
@@ -38,25 +53,38 @@ public static class TargetRepair
         var state = store.Load(pair.Name);
         bool TombstoneDir(string rel) => state.TryGetValue(rel, out var e) &&
             e.Kind == EntryKind.Directory && e.Status == EntryStatus.Tombstone;
+        progress?.Report(new RepairProgress("scan_source"));
         var source = new TreeScanner(config.ScanBufferSize, config.ScanParallelism, pair.Links,
             new ExcludeMatcher(pair.Exclude), TombstoneDir).Scan(pair.Source);
+        progress?.Report(new RepairProgress("scan_target"));
         var target = new TreeScanner(config.ScanBufferSize, config.ScanParallelism, LinkMode.Skip,
             new ExcludeMatcher(pair.Exclude)).Scan(pair.Target);
         if (source.Warnings.Any(w => w.Contains("cannot list", StringComparison.OrdinalIgnoreCase)) ||
             target.Warnings.Any(w => w.Contains("cannot list", StringComparison.OrdinalIgnoreCase)))
             throw new IOException("Repair stopped because a directory could not be scanned completely");
+        progress?.Report(new RepairProgress("build"));
         return Build(pair.Name, pair.Target, PathLimits.Effective(pair.Target, pair.MaxPathLength),
-            source.Entries, target.Entries, state);
+            source.Entries, target.Entries, state, progress);
     }
 
     public static Plan Build(string pair, string targetRoot, int limit,
         IReadOnlyDictionary<string, ScanEntry> source,
         IReadOnlyDictionary<string, ScanEntry> target,
-        IReadOnlyDictionary<string, StateEntry> state)
+        IReadOnlyDictionary<string, StateEntry> state,
+        IProgress<RepairProgress>? progress = null)
     {
-        var plan = new Plan { Pair = pair, TargetRoot = Path.GetFullPath(targetRoot) };
+        var plan = new Plan
+        {
+            Pair = pair,
+            TargetRoot = Path.GetFullPath(targetRoot),
+            SourceFileCount = source.Values.Count(e => e.Kind == EntryKind.File)
+        };
         var canonical = PathShortener.MapEntries(source, targetRoot, true, limit, null, null, out var mappedToSource);
         var sourceToCanonical = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var targetFilesBySize = target.Where(kvp => kvp.Value.Kind == EntryKind.File)
+            .GroupBy(kvp => kvp.Value.Size).ToDictionary(g => g.Key, g => g.ToList());
+        var sourceFilesBySize = source.Where(kvp => kvp.Value.Kind == EntryKind.File)
+            .GroupBy(kvp => kvp.Value.Size).ToDictionary(g => g.Key, g => g.ToList());
         foreach (var path in canonical.Keys)
             sourceToCanonical[mappedToSource.GetValueOrDefault(path) ?? path] = path;
 
@@ -71,9 +99,12 @@ public static class TargetRepair
         }
 
         var plannedDestinations = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
+        var processed = 0;
         foreach (var entry in state.Values.OrderBy(e => e.Kind == EntryKind.Directory ? 1 : 0)
                      .ThenBy(e => e.RelativePath, StringComparer.OrdinalIgnoreCase))
         {
+            if (++processed % 5000 == 0)
+                progress?.Report(new RepairProgress("build", processed, state.Count));
             var sourcePath = entry.RemoteId ?? entry.RelativePath;
             var oldPath = entry.TargetPath ?? entry.RelativePath;
 
@@ -112,7 +143,7 @@ public static class TargetRepair
                 var oldName = Path.GetFileName(oldPath);
                 var oldStem = Path.GetFileNameWithoutExtension(oldPath);
 
-                var candidate = target.FirstOrDefault(kvp => kvp.Value.Kind == EntryKind.File &&
+                var candidate = targetFilesBySize.GetValueOrDefault(entry.CopiedSize ?? -1)?.FirstOrDefault(kvp =>
                     Matches(kvp.Value, entry) &&
                     !tracked.Contains(kvp.Key) &&
                     (Path.GetFileName(kvp.Key).Equals(oldName, StringComparison.OrdinalIgnoreCase) ||
@@ -188,7 +219,9 @@ public static class TargetRepair
                 if (dupMatch.Success)
                 {
                     var orig = dupMatch.Groups[1].Value + dupMatch.Groups[2].Value;
-                    if (target.TryGetValue(orig, out var origItem) && origItem.Size == item.Size)
+                    if (target.TryGetValue(orig, out var origItem) && origItem.Kind == EntryKind.File &&
+                        origItem.Size == item.Size &&
+                        Math.Abs((origItem.MtimeUtc - item.MtimeUtc).TotalSeconds) <= 2)
                     {
                         plan.Rows.Add(new Row(path, "", "recycle-cloud-duplicate", "cloud duplicate"));
                         continue;
@@ -202,8 +235,7 @@ public static class TargetRepair
                     var cleanStem = hashIdx > 0 ? stem[..hashIdx] : stem;
 
                     var dirName = Path.GetDirectoryName(path);
-                    var matchedSource = source.FirstOrDefault(s => s.Value.Kind == EntryKind.File &&
-                        s.Value.Size == item.Size &&
+                    var matchedSource = sourceFilesBySize.GetValueOrDefault(item.Size)?.FirstOrDefault(s =>
                         (Path.GetFileName(s.Key).Contains(cleanStem, StringComparison.OrdinalIgnoreCase) ||
                          (dirName is not null && (string.Equals(Path.GetDirectoryName(s.Key), dirName, StringComparison.OrdinalIgnoreCase) ||
                                                   Path.GetDirectoryName(s.Key)?.Contains(Path.GetFileName(dirName) ?? "", StringComparison.OrdinalIgnoreCase) == true)))).Key;
@@ -262,13 +294,32 @@ public static class TargetRepair
                 !Regex.IsMatch(path, "_#[0-9a-f]{4,8}(?:\\.|\\\\|$)", RegexOptions.IgnoreCase)) continue;
             plan.Rows.Add(new Row(path, "", "untracked", item.Kind.ToString()));
         }
+        var touched = plan.Work.Where(w => w.State.Kind == EntryKind.File)
+            .Select(w => w.Source).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var kept = source.Where(kvp => kvp.Value.Kind == EntryKind.File && !touched.Contains(kvp.Key) &&
+            sourceToCanonical.TryGetValue(kvp.Key, out var canonicalPath) &&
+            target.TryGetValue(canonicalPath, out var observed) && observed.Kind == EntryKind.File &&
+            observed.Size == kvp.Value.Size).ToList();
+        plan.KeepFiles = kept.Count;
+        plan.KeepBytes = kept.Sum(kvp => kvp.Value.Size);
+        progress?.Report(new RepairProgress("build", state.Count, state.Count));
         return plan;
     }
 
-    public static void Execute(Plan plan, StateStore store)
+    public static void Execute(Plan plan, StateStore store,
+        IProgress<RepairProgress>? progress = null, Action<Row>? completed = null)
     {
         if (!RecycleBin.IsAvailableFor(plan.TargetRoot))
             throw new InvalidOperationException("Target repair requires a local Recycle Bin");
+
+        var total = plan.ActionCount;
+        var done = 0;
+        void Report(Row row)
+        {
+            completed?.Invoke(row);
+            if (++done % 50 == 0 || done == total)
+                progress?.Report(new RepairProgress("apply", done, total));
+        }
 
         foreach (var (row, source, recorded) in plan.Work.Where(w => w.State.Kind == EntryKind.File))
         {
@@ -323,6 +374,7 @@ public static class TargetRepair
                 else
                     store.RelocateTarget(plan.Pair, row.OldPath, row.NewPath, source);
             }
+            Report(row);
         }
 
         foreach (var (row, source, _) in plan.Work.Where(w => w.State.Kind == EntryKind.Directory)
@@ -331,11 +383,13 @@ public static class TargetRepair
             if (row.Action == "drop-duplicate-directory-state")
             {
                 store.Delete(plan.Pair, new[] { row.OldPath });
+                Report(row);
                 continue;
             }
             var newFull = Path.Combine(plan.TargetRoot, row.NewPath);
             Directory.CreateDirectory(FsPath(newFull));
             store.RelocateTarget(plan.Pair, row.OldPath, row.NewPath, source);
+            Report(row);
         }
 
         foreach (var row in plan.Work.Where(w => w.State.Kind == EntryKind.Directory)
@@ -350,7 +404,17 @@ public static class TargetRepair
         {
             var oldFull = Path.Combine(plan.TargetRoot, row.OldPath);
             if (File.Exists(FsPath(oldFull)))
+            {
+                var match = Regex.Match(row.OldPath, @"^(.*) \(\d+\)(\.[^.\\]*)$");
+                var original = Path.Combine(plan.TargetRoot, match.Groups[1].Value + match.Groups[2].Value);
+                var oldInfo = new FileInfo(FsPath(oldFull));
+                var originalInfo = new FileInfo(FsPath(original));
+                if (!match.Success || !originalInfo.Exists || oldInfo.Length != originalInfo.Length ||
+                    Math.Abs((oldInfo.LastWriteTimeUtc - originalInfo.LastWriteTimeUtc).TotalSeconds) > 2)
+                    throw new IOException($"Repair duplicate changed after planning: {oldFull}");
                 RecycleLongPath(plan.TargetRoot, oldFull, directory: false);
+            }
+            Report(row);
         }
 
         foreach (var row in plan.Rows.Where(r => r.Action == "recycle-empty-directory")
@@ -363,14 +427,12 @@ public static class TargetRepair
                 if (entries.All(e => Path.GetFileName(e).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)))
                 {
                     foreach (var e in entries)
-                    {
-                        try { RecycleLongPath(plan.TargetRoot, e, directory: false); }
-                        catch { try { File.Delete(FsPath(e)); } catch { } }
-                    }
+                        RecycleLongPath(plan.TargetRoot, e, directory: false);
                 }
                 if (!Directory.EnumerateFileSystemEntries(FsPath(oldFull)).Any())
                     RecycleLongPath(plan.TargetRoot, oldFull, directory: true);
             }
+            Report(row);
         }
 
         if (plan.Conflicts == 0)

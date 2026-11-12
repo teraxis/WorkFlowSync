@@ -29,14 +29,30 @@ public sealed class StateStore : IDisposable
     /// <summary>Set when the database was migrated from an older schema on open; points at the backup copy.</summary>
     public string? MigratedFromBackup { get; private set; }
 
-    public StateStore(string path)
+    public StateStore(string path, bool readOnly = false)
     {
         Path = System.IO.Path.GetFullPath(path);
         var dir = System.IO.Path.GetDirectoryName(Path);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if (!readOnly && !string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         // Pooling=false: release the file handle on Dispose (otherwise the pool keeps state.db open after a pass).
-        _conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path, Mode = SqliteOpenMode.ReadWriteCreate, Pooling = false }.ToString());
+        _conn = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path,
+            Mode = readOnly ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWriteCreate,
+            Pooling = false
+        }.ToString());
         _conn.Open();
+        if (readOnly)
+        {
+            Exec("PRAGMA busy_timeout=5000; PRAGMA query_only=ON;");
+            if (ReadSchemaVersion() != SchemaVersion)
+            {
+                _conn.Dispose();
+                throw new InvalidOperationException($"Repair preview requires state schema {SchemaVersion}; open the new application once to migrate the database");
+            }
+            Pending = new PendingStore(_conn);
+            return;
+        }
         Exec("""
             PRAGMA busy_timeout=5000;
             PRAGMA journal_mode=WAL;

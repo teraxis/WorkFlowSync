@@ -161,6 +161,7 @@ public sealed partial class PairViewModel : ObservableObject
     [ObservableProperty] private DateTimeOffset? _lastSyncTime;
     [ObservableProperty] private int _lastSyncFilesCount;
     [ObservableProperty] private int _lastSyncErrors;
+    [ObservableProperty] private bool _repairRequired;
     [ObservableProperty] private int _pendingApprovalsCount;
     public bool HasPendingApprovals => PendingApprovalsCount > 0;
 
@@ -235,7 +236,7 @@ public sealed partial class PairViewModel : ObservableObject
 
     public bool IsPaused => !Enabled;
     public bool IsActiveAndIdle => Enabled && !IsBusy;
-    public bool IsUpToDate => Enabled && !IsBusy && !HasPendingApprovals && LastSyncTime is not null && LastSyncErrors == 0;
+    public bool IsUpToDate => Enabled && !RepairRequired && !IsBusy && !HasPendingApprovals && LastSyncTime is not null && LastSyncErrors == 0;
     public bool HasError => Enabled && !IsBusy && LastSyncErrors > 0;
 
     public string StatusBadgeText
@@ -246,6 +247,7 @@ public sealed partial class PairViewModel : ObservableObject
             {
                 return I18n.T("pair.badge_syncing");
             }
+            if (RepairRequired) return I18n.T("repair.status_required");
             return Enabled
                 ? I18n.T("pair.badge_active")
                 : I18n.T("pair.badge_paused");
@@ -259,6 +261,7 @@ public sealed partial class PairViewModel : ObservableObject
         get
         {
             if (IsBusy) return I18n.T("tasks.status_syncing");
+            if (RepairRequired) return I18n.T("repair.status_required");
             if (!Enabled) return I18n.T("tasks.status_paused");
             if (HasPendingApprovals) return I18n.T("tasks.status_pending_approval");
             if (LastSyncErrors > 0) return I18n.T("tasks.status_error");
@@ -281,6 +284,7 @@ public sealed partial class PairViewModel : ObservableObject
                     ? I18n.T("tasks.status_processed_files", LastSyncFilesCount.ToString("N0", I18n.Instance.Culture))
                     : I18n.T("tasks.status_processing");
             }
+            if (RepairRequired) return I18n.T("repair.status_hint");
             if (!Enabled) return I18n.T("tasks.status_auto_disabled");
             if (HasPendingApprovals)
             {
@@ -541,6 +545,8 @@ public sealed partial class PairViewModel : ObservableObject
         ? (SyncTotalFiles > 0
             ? $"{I18n.T("pair.state_checking")} ({SyncCurrentFiles}/{SyncTotalFiles}, {SyncProgressPercent}%)"
             : I18n.T("pair.state_checking"))
+        : RepairRequired
+            ? I18n.T("repair.status_required")
         : Enabled
             ? I18n.T("pair.state_running")
             : I18n.T("pair.state_paused");
@@ -950,6 +956,8 @@ public sealed partial class PairViewModel : ObservableObject
         OnPropertyChanged(nameof(ShortenLongPathsHint));
         RaiseFacts(nameof(MaxPathLength));
     }
+
+    partial void OnRepairRequiredChanged(bool value) => RaiseSyncState();
 
     private void RaiseFacts(string name)
     {

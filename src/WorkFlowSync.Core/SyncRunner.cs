@@ -17,6 +17,7 @@ public sealed class PairRunResult
     public string? Scope { get; init; }
 
     public bool Skipped { get; set; }
+    public bool RepairRequired { get; set; }
     public string? SkipReason { get; set; }
     public ScanResult? SourceScan { get; set; }
     public ScanResult? TargetScan { get; set; }
@@ -208,6 +209,7 @@ public sealed class SyncRunner
             store.SetMeta($"repair_required:{pair.Name}", "1");
         if (!dryRun) store.SetMeta($"path_settings:{pair.Name}", pathSettings);
         var repairRequired = pair.ShortenLongPaths && store.GetMeta($"repair_required:{pair.Name}") == "1";
+        result.RepairRequired = repairRequired;
         if (repairRequired)
             _log.Warn($"{tag} existing target names are pinned; review wfs repair --pair \"{pair.Name}\" --dry-run before repair");
         var twoWay = pair.Mode == SyncMode.TwoWay;
@@ -538,8 +540,11 @@ public sealed class SyncRunner
             }
             store.SetMeta($"last_run_{pair.Name}", StateStore.Fmt(DateTimeOffset.UtcNow));
             store.SetMeta($"last_files_{pair.Name}", (exec.FilesCopied + exec.FilesUpdated).ToString(System.Globalization.CultureInfo.InvariantCulture));
-            store.SetMeta($"last_source_files_{pair.Name}", source.FileCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            store.SetMeta($"last_target_files_{pair.Name}", target.FileCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (scope is null)
+            {
+                store.SetMeta($"last_full_source_files_{pair.Name}", source.FileCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                store.SetMeta($"last_full_target_files_{pair.Name}", target.FileCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
             store.SetMeta($"last_errors_{pair.Name}", exec.Errors.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 

@@ -1,5 +1,18 @@
 # Testing
 
+## Current Status (2026-11-12, sync troubleshooting)
+
+- `scripts\test.ps1`: 583 passed, 0 failed; E2E category: 74 passed, 0 failed. New tests classify missing, tombstoned, excluded, and target-only files; the E2E test verifies that resync requires tombstone opt-in and never overwrites a file that appeared after planning.
+- `dotnet build WorkFlowSync.sln -warnaserror`: passed with 0 warnings. Changed-file `dotnet format --verify-no-changes`: passed. `scripts\publish.ps1`: produced both 0.3.19 portable executables.
+- GUI smoke with a paused temporary configuration: process stayed alive for six seconds; no crash log. The troubleshooting dialog itself was not clicked automatically. A real OneDrive tree and placeholders during recovery remain unverified.
+
+## Поточний стан (2026-11-12, v0.3.19)
+
+- `scripts\build.ps1`: успішно, 0 попереджень; `dotnet build WorkFlowSync.sln -warnaserror`: успішно.
+- `scripts\test.ps1`: 581 пройшов, 0 помилок. Категорія E2E: 73 пройшли, 0 помилок.
+- `dotnet format WorkFlowSync.sln --verify-no-changes --include ...` для змінених файлів ремонту: успішно. `scripts\publish.ps1`: зібрав обидва portable exe; `wfs.exe version` показав 0.3.19.
+- Справжня пара OneDrive, інтерактивне натискання кнопки ремонту та поведінка хмарних заглушок під час переміщення залишаються неперевіреними.
+
 ## Commands
 
 ```powershell

@@ -186,26 +186,21 @@ internal static class Program
             Console.Error.WriteLine("pause the pair before applying repair");
             return 2;
         }
-        using var gate = PassLock.TryAcquire(opts.ConfigPath, pair.Name);
-        if (!gate.Acquired)
-        {
-            Console.Error.WriteLine("another pass is running for this pair");
-            return 4;
-        }
         var configDir = Path.GetDirectoryName(Path.GetFullPath(opts.ConfigPath))!;
         var statePath = Path.IsPathRooted(cfg.StatePath) ? cfg.StatePath : Path.Combine(configDir, cfg.StatePath);
-        using var store = new StateStore(statePath);
-        using var plan = TargetRepair.Prepare(pair, cfg, store);
+        var logPath = Path.IsPathRooted(cfg.LogPath) ? cfg.LogPath : Path.Combine(configDir, cfg.LogPath);
+        using var log = new FileSyncLog(logPath, keepDays: cfg.LogKeepDays);
+        var runner = new RepairRunner(pair, cfg, opts.ConfigPath, statePath, log);
+        using var plan = runner.Prepare();
         if (opts.ReportPath is not null)
         {
             TargetRepair.WriteCsv(plan, opts.ReportPath);
             Console.WriteLine($"repair report: {Path.GetFullPath(opts.ReportPath)}");
         }
-        Console.WriteLine($"repair plan: actions={plan.ActionCount} unresolved={plan.Conflicts}");
+        Console.WriteLine($"repair plan: keep={plan.KeepFiles} rename={plan.RenameFiles} recycle={plan.RecycleFiles} unresolved={plan.Conflicts}");
         if (!opts.DryRun)
         {
-            TargetRepair.Execute(plan, store);
-            if (plan.Conflicts == 0) store.SetMeta($"repair_required:{pair.Name}", "0");
+            runner.Apply(plan);
             Console.WriteLine("repair applied; wait for cloud synchronization before resuming the pair");
         }
         return plan.Conflicts == 0 ? 0 : 1;

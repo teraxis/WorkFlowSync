@@ -429,8 +429,9 @@ public partial class App : Application
         var currentExe = Environment.ProcessPath
             ?? Path.Combine(AppContext.BaseDirectory, "WorkFlowSync.exe");
         var updateExe = UpdateInstaller.UpdateExePath(currentExe);
+        var updateCliExe = UpdateInstaller.CliUpdateExePath(currentExe);
 
-        UpdateInstaller.LaunchAndExit(currentExe, updateExe);
+        UpdateInstaller.LaunchAndExit(currentExe, updateExe, updateCliExe);
 
         // Shut down the application so the script can replace the exe.
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

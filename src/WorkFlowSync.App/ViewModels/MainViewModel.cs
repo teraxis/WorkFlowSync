@@ -5,6 +5,7 @@ using WorkFlowSync.App.Services;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Config;
 using WorkFlowSync.Core.I18n;
+using WorkFlowSync.Core.Scanning;
 using WorkFlowSync.Core.State;
 
 namespace WorkFlowSync.App.ViewModels;
@@ -398,11 +399,12 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 pairVm.IsBusy = false;
                 pairVm.ResetProgress();
-                if (pr.SourceScan is not null)
+                pairVm.RepairRequired = pr.RepairRequired;
+                if (pr.Scope is null && pr.SourceScan is not null)
                 {
                     pairVm.SourceFilesCount = pr.SourceScan.FileCount;
                 }
-                if (pr.TargetScan is not null)
+                if (pr.Scope is null && pr.TargetScan is not null)
                 {
                     pairVm.TargetFilesCount = pr.TargetScan.FileCount;
                 }
@@ -568,24 +570,17 @@ public sealed partial class MainViewModel : ObservableObject
                     {
                         pair.LastSyncFilesCount = f;
                     }
-                    var pSrcFiles = store.GetMeta($"last_source_files_{pair.Name}");
+                    var pSrcFiles = store.GetMeta($"last_full_source_files_{pair.Name}");
                     if (pSrcFiles is not null && int.TryParse(pSrcFiles, out var sf))
                     {
                         pair.SourceFilesCount = sf;
                     }
-                    else if (store.GetActiveFilesCount(pair.Name) is { } fallbackCount)
-                    {
-                        pair.SourceFilesCount = fallbackCount;
-                    }
-                    var pDstFiles = store.GetMeta($"last_target_files_{pair.Name}");
+                    var pDstFiles = store.GetMeta($"last_full_target_files_{pair.Name}");
                     if (pDstFiles is not null && int.TryParse(pDstFiles, out var df))
                     {
                         pair.TargetFilesCount = df;
                     }
-                    else if (pair.SourceFilesCount.HasValue)
-                    {
-                        pair.TargetFilesCount = pair.SourceFilesCount;
-                    }
+                    pair.RepairRequired = store.GetMeta($"repair_required:{pair.Name}") == "1";
                     var pErrors = store.GetMeta($"last_errors_{pair.Name}");
                     if (pErrors is not null && int.TryParse(pErrors, out var e))
                     {
@@ -605,32 +600,41 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void PopulateMissingFileCountsInBackground()
     {
+        var cfg = ToConfig();
+        var pairs = Pairs.Select(pair => (
+            ViewModel: pair,
+            Source: pair.Source,
+            Target: pair.Target,
+            NeedSource: !pair.SourceFilesCount.HasValue,
+            NeedTarget: !pair.TargetFilesCount.HasValue)).ToArray();
         Task.Run(() =>
         {
-            foreach (var pair in Pairs.ToList())
+            foreach (var pair in pairs)
             {
-                if (!pair.SourceFilesCount.HasValue && Directory.Exists(pair.Source))
+                if (pair.NeedSource && Directory.Exists(pair.Source))
                 {
                     try
                     {
-                        var count = Directory.EnumerateFiles(pair.Source, "*", SearchOption.AllDirectories).Count();
-                        OnUi(() =>
+                        var scan = new TreeScanner(cfg.ScanBufferSize, cfg.ScanParallelism, LinkMode.Skip).Scan(pair.Source);
+                        if (!scan.Warnings.Any(w => w.Contains("cannot list", StringComparison.OrdinalIgnoreCase)))
+                            OnUi(() =>
                         {
-                            pair.SourceFilesCount = count;
-                            pair.RaiseSyncState();
+                            pair.ViewModel.SourceFilesCount = scan.FileCount;
+                            pair.ViewModel.RaiseSyncState();
                         });
                     }
                     catch { }
                 }
-                if (!pair.TargetFilesCount.HasValue && Directory.Exists(pair.Target))
+                if (pair.NeedTarget && Directory.Exists(pair.Target))
                 {
                     try
                     {
-                        var count = Directory.EnumerateFiles(pair.Target, "*", SearchOption.AllDirectories).Count();
-                        OnUi(() =>
+                        var scan = new TreeScanner(cfg.ScanBufferSize, cfg.ScanParallelism, LinkMode.Skip).Scan(pair.Target);
+                        if (!scan.Warnings.Any(w => w.Contains("cannot list", StringComparison.OrdinalIgnoreCase)))
+                            OnUi(() =>
                         {
-                            pair.TargetFilesCount = count;
-                            pair.RaiseSyncState();
+                            pair.ViewModel.TargetFilesCount = scan.FileCount;
+                            pair.ViewModel.RaiseSyncState();
                         });
                     }
                     catch { }
@@ -812,10 +816,11 @@ public sealed partial class MainViewModel : ObservableObject
                     var pFiles = store.GetMeta($"last_files_{pair.Name}");
                     if (pFiles is not null && int.TryParse(pFiles, out var f))
                         pair.LastSyncFilesCount = f;
-                    var pSrcFiles = store.GetMeta($"last_source_files_{pair.Name}");
+                    var pSrcFiles = store.GetMeta($"last_full_source_files_{pair.Name}");
                     if (pSrcFiles is not null && int.TryParse(pSrcFiles, out var sf))
                         pair.SourceFilesCount = sf;
-                    var pDstFiles = store.GetMeta($"last_target_files_{pair.Name}");
+                    var pDstFiles = store.GetMeta($"last_full_target_files_{pair.Name}");
+                    pair.RepairRequired = store.GetMeta($"repair_required:{pair.Name}") == "1";
                     if (pDstFiles is not null && int.TryParse(pDstFiles, out var df))
                         pair.TargetFilesCount = df;
                 }

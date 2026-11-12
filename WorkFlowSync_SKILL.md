@@ -1,5 +1,16 @@
 # WorkFlowSync — Project Skill (operational guide for agents)
 
+## Troubleshooting workflow (2026-11-12)
+
+- The modal troubleshooting action captures the pair's original enabled state, pauses an active pair by saving config, waits for its pass lock, and restores the original state in `finally`. A previously paused pair remains paused. Do not call UI view-model properties from `Task.Run` closures.
+- Keep the long-path action visible even when disabled, with the reason. If repair is required and path repair is available, select only that option by default. The plan button does not apply changes; automatic passes can resume after the workflow closes.
+- Missing-file audit reads the state database without writes and distinguishes active missing, tombstone, policy-excluded, conflicts, and target-only files. Resync is mirror-only and explicitly opts into tombstones. Recovery copies use `SyncExecutor` with no-overwrite mode; do not relax this safeguard or reintroduce automatic tombstone copying in ordinary sync.
+
+## Repair follow-up (2026-11-12)
+
+- Repair preview reads `state.db` in read-only mode and does not mutate target or state. The GUI does all planning and apply work off the UI thread, with progress and FileSyncLog entries. CSV export in preview is opt-in.
+- Full scan counts have their own state keys; scoped passes must not replace them. The auto-updater needs both GUI and CLI release assets.
+
 ## Path repair update (2026-11-11)
 
 - Schema v5 stores `target_path`; v4 migration creates `state.db.v4-backup` before changing rows. Do not recompute recorded target names when path settings change.

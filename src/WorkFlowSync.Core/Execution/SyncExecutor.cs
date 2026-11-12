@@ -68,6 +68,7 @@ public sealed class SyncExecutor
     private bool _cloudSourceFailureReported;
     private bool _cloudRequestFailed;
     private bool _quotaBlocked;
+    private readonly bool _neverOverwriteCopies;
 
     private readonly GoogleDocExportMode _googleDocExport;
     private readonly GoogleAuthConfig? _googleAuth;
@@ -90,12 +91,14 @@ public sealed class SyncExecutor
         bool freeUpSourceSpaceAfterCopy = false,
         int minFreeSpaceGb = 5, ICloudFilePlatform? cloudPlatform = null,
         GoogleDocExportMode googleDocExport = GoogleDocExportMode.Office, GoogleAuthConfig? googleAuth = null,
-        CloudAccount? account = null, IGoogleDriveExporter? googleDriveExporter = null)
+        CloudAccount? account = null, IGoogleDriveExporter? googleDriveExporter = null,
+        bool neverOverwriteCopies = false)
     {
         _sourceRoot = Path.GetFullPath(sourceRoot).TrimEnd('\\', '/');
         _targetRoot = Path.GetFullPath(targetRoot).TrimEnd('\\', '/');
         _log = log;
         _dryRun = dryRun;
+        _neverOverwriteCopies = neverOverwriteCopies;
         _cloudFiles = cloudFiles;
         _diskQuotaEnabled = diskQuotaEnabled;
         _freeUpSpaceAfterCopy = freeUpSpaceAfterCopy;
@@ -301,7 +304,8 @@ public sealed class SyncExecutor
                         }
                         else
                         {
-                            var copied = CopyPreservingTime(src, dst, action.Proposed.SourceMtimeUtc);
+                            var copied = CopyPreservingTime(src, dst, action.Proposed.SourceMtimeUtc, _neverOverwriteCopies,
+                                action.Proposed.SourceSize);
                             var copiedAt = DateTimeOffset.UtcNow;
                             // Refresh the side we wrote: that is the copy later passes compare against.
                             result.Completed.Add(back
@@ -550,14 +554,19 @@ public sealed class SyncExecutor
     }
 
     /// <summary>Copy via a temp name then rename, keep the source mtime, and read back the attributes we will compare against later.</summary>
-    private static (long Size, DateTimeOffset Mtime) CopyPreservingTime(string src, string dst, DateTimeOffset? sourceMtime)
+    private static (long Size, DateTimeOffset Mtime) CopyPreservingTime(string src, string dst, DateTimeOffset? sourceMtime,
+        bool neverOverwrite = false, long? expectedSize = null)
     {
+        if (neverOverwrite && (File.Exists(dst) || Directory.Exists(dst)))
+            throw new IOException($"Destination appeared before recovery copy: {dst}");
         var dir = Path.GetDirectoryName(dst);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var dstFileName = Path.GetFileName(dst);
         var tmp = System.Text.Encoding.UTF8.GetByteCount(dstFileName) > PathShortener.MaxSegmentUtf8Bytes && !string.IsNullOrEmpty(dir)
             ? Path.Combine(dir, $".~wfs-{PathShortener.ComputeHash(dstFileName, 12)}.wfs-tmp")
             : dst + ".wfs-tmp";
+        if (neverOverwrite && !string.IsNullOrEmpty(dir))
+            tmp = Path.Combine(dir, $".~wfs-recovery-{Guid.NewGuid():N}.tmp");
         try
         {
             for (var attempt = 0; attempt < 6; attempt++)
@@ -565,13 +574,24 @@ public sealed class SyncExecutor
                 try
                 {
                     if (!string.IsNullOrEmpty(dir) && attempt > 0) Directory.CreateDirectory(dir);
-                    File.Copy(src, tmp, overwrite: true);
+                    File.Copy(src, tmp, overwrite: !neverOverwrite);
                     break;
                 }
                 catch (Exception ex) when (ex is IOException or DirectoryNotFoundException && attempt < 5)
                 {
                     Thread.Sleep(50 * (attempt + 1));
                 }
+            }
+
+            if (neverOverwrite)
+            {
+                var sourceInfo = new FileInfo(src);
+                var temporaryInfo = new FileInfo(tmp);
+                if (!sourceInfo.Exists || !temporaryInfo.Exists || sourceInfo.Length != expectedSize ||
+                    temporaryInfo.Length != expectedSize ||
+                    sourceMtime is not { } expectedMtime ||
+                    Math.Abs((sourceInfo.LastWriteTimeUtc - expectedMtime.UtcDateTime).TotalSeconds) > 2)
+                    throw new IOException($"Recovery source changed after planning: {src}");
             }
 
             // File.Copy keeps the mtime on Windows; re-apply from the listing (no extra network stat) to be sure.
@@ -584,7 +604,7 @@ public sealed class SyncExecutor
             {
                 try
                 {
-                    File.Move(tmp, dst, overwrite: true);
+                    File.Move(tmp, dst, overwrite: !neverOverwrite);
                     break;
                 }
                 catch (Exception ex) when (ex is IOException or FileNotFoundException && attempt < 5)

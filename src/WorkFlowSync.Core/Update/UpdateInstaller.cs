@@ -21,11 +21,14 @@ public static class UpdateInstaller
     /// <param name="currentExePath">Full path to the running WorkFlowSync.exe.</param>
     /// <param name="updateExePath">Full path to the downloaded WorkFlowSync.update.exe.</param>
     /// <param name="restartArgs">Optional arguments to pass when restarting (e.g. "--tray").</param>
-    public static void LaunchAndExit(string currentExePath, string updateExePath, string? restartArgs = null)
+    public static void LaunchAndExit(string currentExePath, string updateExePath, string updateCliPath,
+        string? restartArgs = null)
     {
         var dir = Path.GetDirectoryName(currentExePath)!;
         var oldName = Path.GetFileNameWithoutExtension(currentExePath) + ".old" + Path.GetExtension(currentExePath);
         var oldPath = Path.Combine(dir, oldName);
+        var cliPath = Path.Combine(dir, "wfs.exe");
+        var oldCliPath = Path.Combine(dir, "wfs.old.exe");
         var scriptPath = Path.Combine(dir, "wfs-update.cmd");
         var pid = Environment.ProcessId;
 
@@ -49,11 +52,25 @@ public static class UpdateInstaller
         script.AppendLine("goto :wait");
         script.AppendLine(":proceed");
         script.AppendLine($"if exist \"{oldPath}\" del /f /q \"{oldPath}\"");
+        script.AppendLine($"if exist \"{oldCliPath}\" del /f /q \"{oldCliPath}\"");
+        script.AppendLine("ver >nul");
+        script.AppendLine($"if exist \"{cliPath}\" move /y \"{cliPath}\" \"{oldCliPath}\"");
+        script.AppendLine("if errorlevel 1 goto rollback");
         script.AppendLine($"move /y \"{currentExePath}\" \"{oldPath}\"");
+        script.AppendLine("if errorlevel 1 goto rollback");
         script.AppendLine($"move /y \"{updateExePath}\" \"{currentExePath}\"");
+        script.AppendLine("if errorlevel 1 goto rollback");
+        script.AppendLine($"move /y \"{updateCliPath}\" \"{cliPath}\"");
+        script.AppendLine("if errorlevel 1 goto rollback");
         script.AppendLine($"start \"\" \"{currentExePath}\" {restartArgs ?? ""}");
         script.AppendLine("timeout /t 2 /nobreak >nul");
         script.AppendLine($"if exist \"{oldPath}\" del /f /q \"{oldPath}\"");
+        script.AppendLine($"if exist \"{oldCliPath}\" del /f /q \"{oldCliPath}\"");
+        script.AppendLine("goto cleanup");
+        script.AppendLine(":rollback");
+        script.AppendLine($"if exist \"{oldPath}\" move /y \"{oldPath}\" \"{currentExePath}\"");
+        script.AppendLine($"if exist \"{oldCliPath}\" move /y \"{oldCliPath}\" \"{cliPath}\"");
+        script.AppendLine(":cleanup");
         // Self-delete: "del" of the running batch is allowed on Windows because cmd.exe
         // reads the file line by line.
         script.AppendLine($"del /f /q \"{scriptPath}\"");
@@ -83,6 +100,9 @@ public static class UpdateInstaller
         return Path.Combine(dir, name);
     }
 
+    public static string CliUpdateExePath(string currentExePath) =>
+        Path.Combine(Path.GetDirectoryName(currentExePath)!, "wfs.update.exe");
+
     /// <summary>
     /// Cleans up leftover files from a previous update (called on startup).
     /// </summary>
@@ -92,8 +112,10 @@ public static class UpdateInstaller
         {
             var dir = Path.GetDirectoryName(currentExePath)!;
             var oldPath = Path.Combine(dir, Path.GetFileNameWithoutExtension(currentExePath) + ".old" + Path.GetExtension(currentExePath));
+            var oldCliPath = Path.Combine(dir, "wfs.old.exe");
             var scriptPath = Path.Combine(dir, "wfs-update.cmd");
             if (File.Exists(oldPath)) File.Delete(oldPath);
+            if (File.Exists(oldCliPath)) File.Delete(oldCliPath);
             if (File.Exists(scriptPath)) File.Delete(scriptPath);
         }
         catch

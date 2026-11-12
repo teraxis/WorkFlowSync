@@ -1,16 +1,18 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using WorkFlowSync.App.ViewModels;
 using WorkFlowSync.Core;
 using WorkFlowSync.Core.Execution;
 using WorkFlowSync.Core.I18n;
-using WorkFlowSync.Core.State;
+using WorkFlowSync.Core.Logging;
 
 namespace WorkFlowSync.App.Views;
 
 public partial class MainWindow : Window
 {
+    private bool _repairRunning;
     public MainWindow()
     {
         InitializeComponent();
@@ -94,45 +96,135 @@ public partial class MainWindow : Window
     private async void OnRepairPair(object? sender, RoutedEventArgs e)
     {
         if (PairOf(sender) is not { } pair) return;
-        if (pair.Enabled || !pair.ShortenLongPaths)
+        if (_repairRunning)
         {
-            Vm.StatusText = I18n.T("repair.pause_first");
+            Vm.StatusText = I18n.T("repair.busy");
             Vm.StatusIsError = true;
             return;
         }
+        var wasEnabled = pair.Enabled;
+        var options = await TroubleshootingOptionsWindow.ShowAsync(this,
+            pair.Mode == WorkFlowSync.Core.Config.SyncMode.Mirror,
+            pair.ShortenLongPaths, pair.RepairRequired, wasEnabled);
+        if (options is null) return;
+        if (options.AuditMissing && pair.Mode != WorkFlowSync.Core.Config.SyncMode.Mirror)
+        {
+            Vm.StatusText = I18n.T("troubleshoot.requires_mirror");
+            Vm.StatusIsError = true;
+            return;
+        }
+        _repairRunning = true;
+        RepairProgressWindow? progressWindow = null;
+        FileSyncLog? log = null;
+        var pausedByUs = false;
         try
         {
+            var configPath = Vm.ConfigPath;
+            var pairName = pair.Name;
+            var statePath = Vm.StateFullPath;
+            var logPath = Vm.LogFullPath;
+            Action<string> appendLog = Vm.Run.AppendLog;
+            log = new FileSyncLog(logPath, (_, line) => appendLog(line), keepDays: Vm.LogKeepDays);
+            log.Info($"[{pair.Name}] troubleshoot start was_enabled={wasEnabled} paths={options.RepairPaths} audit={options.AuditMissing} restore={options.RestoreMissing}");
+            if (wasEnabled)
+            {
+                pair.Enabled = false;
+                if (!Vm.SaveNow()) throw new IOException("Could not pause task before troubleshooting");
+                pausedByUs = true;
+            }
+            Vm.StatusText = I18n.T("troubleshoot.waiting");
+            var deadline = DateTimeOffset.UtcNow.AddMinutes(2);
+            var available = false;
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                available = await Task.Run(() =>
+                {
+                    using var gate = PassLock.TryAcquire(configPath, pairName);
+                    return gate.Acquired;
+                });
+                if (available) break;
+                await Task.Delay(500);
+            }
+            if (!available) throw new IOException("Timed out waiting for current task pass to stop");
+            pair.IsBusy = true;
             var model = pair.ToModel();
             var config = Vm.ToConfig();
-            using var plan = await Task.Run(() =>
+            var runner = new RepairRunner(model, config, configPath, statePath, log);
+
+            if (options.RepairPaths)
             {
-                using var gate = PassLock.TryAcquire(Vm.ConfigPath, model.Name);
-                if (!gate.Acquired) throw new IOException(I18n.T("repair.busy"));
-                using var store = new StateStore(Vm.StateFullPath);
-                return TargetRepair.Prepare(model, config, store);
-            });
-            Vm.StatusText = I18n.T("repair.preview_ready", plan.ActionCount, plan.Conflicts);
-            Vm.StatusIsError = false;
-            if (plan.ActionCount == 0) return;
-            var approved = await ConfirmDialog.ShowAsync(this, I18n.T("tasks.repair_target"),
-                I18n.T("repair.confirm", plan.ActionCount, plan.Conflicts),
-                I18n.T("repair.apply"));
-            if (!approved) return;
-            await Task.Run(() =>
+                progressWindow = new RepairProgressWindow();
+                var scanWindow = progressWindow;
+                var scanProgress = new Progress<RepairProgress>(p => Dispatcher.UIThread.Post(() => scanWindow.Update(p)));
+                progressWindow.Show(this);
+                using var plan = await Task.Run(() => runner.Prepare(scanProgress));
+                progressWindow.Close();
+                progressWindow = null;
+                Vm.StatusText = I18n.T("repair.preview_ready", plan.ActionCount, plan.Conflicts);
+                Vm.StatusIsError = false;
+                if (plan.ActionCount > 0 && await RepairPreviewWindow.ShowAsync(this, plan))
+                {
+                    progressWindow = new RepairProgressWindow();
+                    var applyWindow = progressWindow;
+                    var applyProgress = new Progress<RepairProgress>(p => Dispatcher.UIThread.Post(() => applyWindow.Update(p)));
+                    progressWindow.Show(this);
+                    await Task.Run(() => runner.Apply(plan, applyProgress));
+                    progressWindow.Close();
+                    progressWindow = null;
+                    pair.RepairRequired = plan.Conflicts > 0;
+                }
+            }
+            var restored = 0;
+            var errors = 0;
+            var skipped = 0;
+            if (options.AuditMissing)
             {
-                using var gate = PassLock.TryAcquire(Vm.ConfigPath, model.Name);
-                if (!gate.Acquired) throw new IOException(I18n.T("repair.busy"));
-                using var store = new StateStore(Vm.StateFullPath);
-                TargetRepair.Execute(plan, store);
-                if (plan.Conflicts == 0) store.SetMeta($"repair_required:{model.Name}", "0");
-            });
-            Vm.StatusText = I18n.T("repair.completed", plan.ActionCount, plan.Conflicts);
-            Vm.StatusIsError = false;
+                progressWindow = new RepairProgressWindow();
+                var auditWindow = progressWindow;
+                var auditProgress = new Progress<RepairProgress>(p => Dispatcher.UIThread.Post(() => auditWindow.Update(p)));
+                progressWindow.Show(this);
+                var audit = await Task.Run(() => runner.PrepareMissing(auditProgress));
+                progressWindow.Close();
+                progressWindow = null;
+                var decision = await RecoveryPreviewWindow.ShowAsync(this, audit, options.RestoreMissing);
+                if (decision?.Apply == true)
+                {
+                    progressWindow = new RepairProgressWindow();
+                    var restoreWindow = progressWindow;
+                    var restoreProgress = new Progress<RepairProgress>(p => Dispatcher.UIThread.Post(() => restoreWindow.Update(p)));
+                    progressWindow.Show(this);
+                    var result = await Task.Run(() => runner.ApplyMissing(audit, decision.RestoreDeleted, restoreProgress));
+                    restored = result.FilesCopied;
+                    errors = result.Errors;
+                    skipped = result.Skipped;
+                    progressWindow.Close();
+                    progressWindow = null;
+                }
+            }
+            Vm.StatusText = I18n.T("troubleshoot.completed", restored, errors, skipped);
+            Vm.StatusIsError = errors > 0 || skipped > 0;
         }
         catch (Exception ex)
         {
-            Vm.StatusText = I18n.T("repair.failed", ex.Message);
+            log?.Error($"repair ERROR {ex}");
+            Vm.StatusText = I18n.T("repair.failed_log");
             Vm.StatusIsError = true;
+        }
+        finally
+        {
+            progressWindow?.Close();
+            log?.Dispose();
+            pair.IsBusy = false;
+            if (pausedByUs || (wasEnabled && !pair.Enabled))
+            {
+                pair.Enabled = true;
+                if (!Vm.SaveNow())
+                {
+                    Vm.StatusText = I18n.T("troubleshoot.resume_failed");
+                    Vm.StatusIsError = true;
+                }
+            }
+            _repairRunning = false;
         }
     }
 
