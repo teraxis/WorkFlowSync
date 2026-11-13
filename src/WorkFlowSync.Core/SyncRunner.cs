@@ -205,10 +205,16 @@ public sealed class SyncRunner
         var state = scope is null ? store.Load(pair.Name) : store.LoadScope(pair.Name, scope.RelativeDir);
         var pathSettings = $"{pair.ShortenLongPaths}:{pair.MaxPathLength}";
         var previousPathSettings = store.GetMeta($"path_settings:{pair.Name}");
-        if (previousPathSettings is not null && previousPathSettings != pathSettings && !dryRun)
+        if (pair.Mode == SyncMode.Mirror && previousPathSettings is not null &&
+            previousPathSettings != pathSettings && !dryRun)
             store.SetMeta($"repair_required:{pair.Name}", "1");
         if (!dryRun) store.SetMeta($"path_settings:{pair.Name}", pathSettings);
-        var repairRequired = pair.ShortenLongPaths && store.GetMeta($"repair_required:{pair.Name}") == "1";
+        // Two-way pairs retain their recorded physical paths through PathShortener. The mirror-only
+        // repair cannot run on them; clear flags left by older versions instead of holding sync actions.
+        if (pair.Mode == SyncMode.TwoWay && !dryRun && store.GetMeta($"repair_required:{pair.Name}") == "1")
+            store.ClearRepairRequired(pair.Name);
+        var repairRequired = pair.Mode == SyncMode.Mirror && pair.ShortenLongPaths &&
+            store.GetMeta($"repair_required:{pair.Name}") == "1";
         result.RepairRequired = repairRequired;
         if (repairRequired)
             _log.Warn($"{tag} existing target names are pinned; review wfs repair --pair \"{pair.Name}\" --dry-run before repair");

@@ -580,7 +580,8 @@ public sealed partial class MainViewModel : ObservableObject
                     {
                         pair.TargetFilesCount = df;
                     }
-                    pair.RepairRequired = store.GetMeta($"repair_required:{pair.Name}") == "1";
+                    pair.RepairRequired = pair.Mode == SyncMode.Mirror && pair.ShortenLongPaths &&
+                        store.GetMeta($"repair_required:{pair.Name}") == "1";
                     var pErrors = store.GetMeta($"last_errors_{pair.Name}");
                     if (pErrors is not null && int.TryParse(pErrors, out var e))
                     {
@@ -820,7 +821,8 @@ public sealed partial class MainViewModel : ObservableObject
                     if (pSrcFiles is not null && int.TryParse(pSrcFiles, out var sf))
                         pair.SourceFilesCount = sf;
                     var pDstFiles = store.GetMeta($"last_full_target_files_{pair.Name}");
-                    pair.RepairRequired = store.GetMeta($"repair_required:{pair.Name}") == "1";
+                    pair.RepairRequired = pair.Mode == SyncMode.Mirror && pair.ShortenLongPaths &&
+                        store.GetMeta($"repair_required:{pair.Name}") == "1";
                     if (pDstFiles is not null && int.TryParse(pDstFiles, out var df))
                         pair.TargetFilesCount = df;
                 }

@@ -59,6 +59,33 @@ public sealed class EndToEndTests : IDisposable
     }
 
     [Fact]
+    public void Two_way_pair_with_legacy_repair_flag_keeps_syncing_both_directions()
+    {
+        _config.Pairs[0].Mode = SyncMode.TwoWay;
+        _config.Pairs[0].ShortenLongPaths = true;
+        WriteSrc("from-source.txt", "original");
+        Assert.Equal(0, Pass().Errors);
+
+        using (var store = new StateStore(Path.Combine(_root, "state.db")))
+        {
+            store.SetMeta("repair_required:t", "1");
+            store.SetMeta("path_settings:t", "True:240");
+        }
+        _config.Pairs[0].MaxPathLength = 200;
+        WriteSrc("from-source.txt", "updated source with a different size");
+        File.WriteAllText(Path.Combine(_dst, "from-target.txt"), "new target file");
+
+        var result = Pass();
+
+        Assert.Equal(0, result.Errors);
+        Assert.False(result.Pairs[0].RepairRequired);
+        Assert.Equal("updated source with a different size", ReadDst("from-source.txt"));
+        Assert.Equal("new target file", File.ReadAllText(Path.Combine(_src, "from-target.txt")));
+        using var verified = new StateStore(Path.Combine(_root, "state.db"));
+        Assert.Equal("0", verified.GetMeta("repair_required:t"));
+    }
+
+    [Fact]
     public void Rules_1_2_3_end_to_end()
     {
         WriteSrc(@"2026\звіт.docx", "v1", new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc));

@@ -4,6 +4,12 @@ This is the immutable archive of published user-facing changes. During a release
 entries from `docs/pending-release-notes.md` under a new `vX.Y.Z (YYYY-MM-DD)` heading, omit empty
 sections, and reset the pending file for the next cycle.
 
+## v0.3.21 (2026-11-13)
+
+### Виправлено
+
+- Двобічне завдання більше не застрягає у стані «Потрібне виправлення» після зміни параметрів скорочення шляхів. Застаріла позначка очищається під час проходу, синхронізація змін в обох напрямках відновлюється, а наявні копії зберігають свої прив’язані шляхи.
+
 ## v0.3.20 (2026-11-13)
 
 ### Виправлено
