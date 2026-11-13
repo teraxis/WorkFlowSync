@@ -1,5 +1,12 @@
 # Testing
 
+## Current Status (2026-11-13, path repair collision)
+
+- `scripts\build.ps1`: passed with 0 warnings; `dotnet build WorkFlowSync.sln -warnaserror`: passed.
+- `scripts\test.ps1`: 593 passed, 0 failed. E2E category: 74 passed, 0 failed.
+- Changed-file `dotnet format WorkFlowSync.sln --verify-no-changes --include ...`: passed after formatting. `scripts\publish.ps1`: produced both portable executables after the smoke GUI process was stopped. The script now fails on either `dotnet publish` error. `wfs.exe version` reported 0.3.20; `wfs config validate --config config.example.json` passed. The release archive contains the GUI, CLI, and README.
+- Synthetic decision tests cover 54 long sibling files, 5,000 similar names and case-only names, an unmappable path retained as a conflict, and reuse of two legacy target sets. The user's live OneDrive tree and placeholder rename/recycle behavior remain unverified.
+
 ## Current Status (2026-11-12, sync troubleshooting)
 
 - `scripts\test.ps1`: 583 passed, 0 failed; E2E category: 74 passed, 0 failed. New tests classify missing, tombstoned, excluded, and target-only files; the E2E test verifies that resync requires tombstone opt-in and never overwrites a file that appeared after planning.

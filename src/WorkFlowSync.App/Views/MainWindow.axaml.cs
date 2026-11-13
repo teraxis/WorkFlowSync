@@ -162,7 +162,7 @@ public partial class MainWindow : Window
                 progressWindow = null;
                 Vm.StatusText = I18n.T("repair.preview_ready", plan.ActionCount, plan.Conflicts);
                 Vm.StatusIsError = false;
-                if (plan.ActionCount > 0 && await RepairPreviewWindow.ShowAsync(this, plan))
+                if (await RepairPreviewWindow.ShowAsync(this, plan) && plan.ActionCount > 0)
                 {
                     progressWindow = new RepairProgressWindow();
                     var applyWindow = progressWindow;

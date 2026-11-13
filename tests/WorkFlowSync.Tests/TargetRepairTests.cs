@@ -18,6 +18,176 @@ public sealed class TargetRepairTests : IDisposable
     }
 
     [Fact]
+    public void Unmappable_file_becomes_a_plan_conflict_without_hiding_safe_work()
+    {
+        var targetRoot = @"C:\" + new string('R', 225);
+        var safe = "safe.txt";
+        var impossible = new string('L', 80) + ".xlsx";
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [safe] = new() { RelativePath = safe, Kind = EntryKind.File },
+            [impossible] = new() { RelativePath = impossible, Kind = EntryKind.File },
+        };
+
+        var plan = TargetRepair.Build("pair", targetRoot, 240, source,
+            new Dictionary<string, ScanEntry>(), new Dictionary<string, StateEntry>());
+
+        Assert.Equal(1, plan.Conflicts);
+        Assert.Contains(plan.Rows, row => row.Action == "conflict" && row.OldPath == impossible);
+        Assert.Equal(1, plan.CheckedPaths);
+        Assert.Equal(0, plan.TooLongPaths);
+        Assert.Equal(0, plan.ShortHashes);
+    }
+
+    [Fact]
+    public void Untracked_legacy_hash_copy_is_recycled_after_tracked_copy_moves()
+    {
+        var original = new string('C', 100) + ".txt";
+        var legacy = "CCC_#12345678.txt";
+        var now = DateTimeOffset.UtcNow;
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [original] = new()
+            {
+                RelativePath = original,
+                Kind = EntryKind.File,
+                Size = 5,
+                MtimeUtc = now
+            }
+        };
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [original] = new()
+            {
+                RelativePath = original,
+                Kind = EntryKind.File,
+                Size = 5,
+                MtimeUtc = now
+            },
+            [legacy] = new()
+            {
+                RelativePath = legacy,
+                Kind = EntryKind.File,
+                Size = 5,
+                MtimeUtc = now
+            },
+        };
+        var state = new Dictionary<string, StateEntry>
+        {
+            [original] = new()
+            {
+                PairName = "pair",
+                RelativePath = original,
+                TargetPath = original,
+                Kind = EntryKind.File,
+                FirstSeenUtc = now,
+                CopiedSize = 5,
+                CopiedMtimeUtc = now
+            }
+        };
+
+        var plan = TargetRepair.Build("pair", _root, _root.Length + 40, source, target, state);
+        Assert.Single(plan.Rows, r => r.Action == "move");
+        Assert.Single(plan.Rows, r => r.Action == "recycle-duplicate-untracked");
+        Assert.Equal(0, plan.Conflicts);
+        Assert.Equal(1, plan.RecycleFiles);
+    }
+
+    [Fact]
+    public void Fifty_four_files_reuse_existing_full_copies_and_recycle_old_hash_variants()
+    {
+        var targetRoot = @"C:\" + new string('R', 62);
+        var ancestor = string.Join("\\", new string('A', 17), new string('B', 70),
+            new string('C', 19), new string('D', 19));
+        var fullDir = ancestor + "\\" + new string('E', 56);
+        var oldDir = ancestor + "\\EEE_#123456";
+        var now = DateTimeOffset.UtcNow;
+        var source = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
+        var target = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [fullDir] = new() { RelativePath = fullDir, Kind = EntryKind.Directory },
+            [oldDir] = new() { RelativePath = oldDir, Kind = EntryKind.Directory },
+        };
+        var state = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < 54; i++)
+        {
+            var name = new string('F', 41) + $"_{2017 + i / 12:D4}_{i % 12 + 1:D2}.xlsx";
+            var original = fullDir + "\\" + name;
+            var legacy = oldDir + "\\FFF_#" + i.ToString("x8") + ".xlsx";
+            source[original] = new ScanEntry
+            {
+                RelativePath = original,
+                Kind = EntryKind.File,
+                Size = 1000 + i,
+                MtimeUtc = now
+            };
+            target[original] = new ScanEntry
+            {
+                RelativePath = original,
+                Kind = EntryKind.File,
+                Size = 1000 + i,
+                MtimeUtc = now
+            };
+            target[legacy] = new ScanEntry
+            {
+                RelativePath = legacy,
+                Kind = EntryKind.File,
+                Size = 1000 + i,
+                MtimeUtc = now
+            };
+            state[original] = new StateEntry
+            {
+                PairName = "pair",
+                RelativePath = original,
+                TargetPath = original,
+                Kind = EntryKind.File,
+                FirstSeenUtc = now,
+                CopiedSize = 1000 + i,
+                CopiedMtimeUtc = now
+            };
+        }
+
+        var plan = TargetRepair.Build("pair", targetRoot, 240, source, target, state);
+        Assert.Equal(54, plan.RenameFiles);
+        Assert.Equal(54, plan.RecycleFiles);
+        Assert.Equal(2, plan.Rows.Count(r => r.Action == "recycle-empty-directory"));
+        Assert.Equal(0, plan.Conflicts);
+        Assert.Equal(0, plan.TooLongPaths);
+        Assert.Equal(0, plan.ShortHashes);
+    }
+
+    [Fact]
+    public void Ambiguous_legacy_copy_is_reported_without_recycling()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var names = new[] { new string('A', 100) + "1.txt", new string('A', 100) + "2.txt" };
+        var source = names.ToDictionary(n => n, n => new ScanEntry
+        {
+            RelativePath = n,
+            Kind = EntryKind.File,
+            Size = 7,
+            MtimeUtc = now
+        });
+        var legacy = "AAA_#12345678.txt";
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [legacy] = new()
+            {
+                RelativePath = legacy,
+                Kind = EntryKind.File,
+                Size = 7,
+                MtimeUtc = now
+            }
+        };
+
+        var plan = TargetRepair.Build("pair", _root, _root.Length + 40, source, target,
+            new Dictionary<string, StateEntry>());
+
+        Assert.Contains(plan.Rows, r => r.Action == "conflict" && r.OldPath == legacy);
+        Assert.Equal(0, plan.RecycleFiles);
+    }
+
+    [Fact]
     public void Dry_run_plan_does_not_change_target_or_state_and_apply_moves_without_copying()
     {
         var targetRoot = Path.Combine(_root, "target");

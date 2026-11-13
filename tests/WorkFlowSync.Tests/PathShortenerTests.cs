@@ -12,6 +12,167 @@ public sealed class PathShortenerTests
     private const string TargetRoot = @"C:\Users\teraxis\OneDrive - SuperLongOrganizationName\Documents\SyncedShare";
 
     [Fact]
+    public void Deep_sibling_files_keep_eight_character_hashes_and_share_shortened_ancestors()
+    {
+        var root = @"C:\" + new string('R', 62);
+        var directories = new[] { new string('A', 17), new string('B', 70),
+            new string('C', 19), new string('D', 19), new string('E', 56) };
+        var parent = string.Join("\\", directories);
+        var source = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < 54; i++)
+        {
+            var path = parent + "\\" + new string('F', 41) + $"_{2017 + i / 12:D4}_{i % 12 + 1:D2}.xlsx";
+            source[path] = new ScanEntry { RelativePath = path, Kind = EntryKind.File };
+        }
+
+        var mapped = PathShortener.MapEntries(source, root, true, 240, null, null, out _);
+        Assert.Equal(54, mapped.Count);
+        Assert.All(mapped.Keys, path =>
+        {
+            Assert.True(Path.Combine(root, path).Length <= 240, path);
+            Assert.Matches(@"_#[0-9a-f]{8}\.xlsx$", path);
+            Assert.DoesNotMatch(@"_#[0-9a-f]{1,7}(?:\.|\\|$)", path);
+        });
+        Assert.Single(mapped.Keys.Select(Path.GetDirectoryName).Distinct(StringComparer.OrdinalIgnoreCase));
+        Assert.Contains("_#", Path.GetDirectoryName(mapped.Keys.First())!);
+    }
+
+    [Fact]
+    public void Directory_ancestor_longer_than_limit_shortens_multiple_levels()
+    {
+        var root = @"C:\" + new string('R', 62);
+        var relative = string.Join("\\", new string('A', 90), new string('B', 90),
+            new string('C', 90), new string('D', 50), new string('E', 40) + ".txt");
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [relative] = new() { RelativePath = relative, Kind = EntryKind.File }
+        };
+
+        var mapped = PathShortener.MapEntries(source, root, true, 240, null, null, out _);
+        var path = Assert.Single(mapped.Keys);
+        Assert.True(Path.Combine(root, path).Length <= 240);
+        Assert.True(path.Split('\\').Take(3).Count(p => p.Contains("_#")) >= 2);
+        Assert.DoesNotMatch(@"_#[0-9a-f]{1,7}(?:\.|\\|$)", path);
+    }
+
+    [Fact]
+    public void Five_thousand_similar_names_and_case_only_names_map_uniquely_and_repeatably()
+    {
+        var root = @"C:\" + new string('R', 62);
+        var parent = new string('A', 80) + "\\" + new string('B', 70);
+        var source = new Dictionary<string, ScanEntry>(StringComparer.Ordinal);
+        for (var i = 0; i < 5000; i++)
+        {
+            var path = parent + "\\" + new string('C', 41) + $"_{i:D4}.xlsx";
+            source[path] = new ScanEntry { RelativePath = path, Kind = EntryKind.File };
+        }
+        foreach (var name in new[] { "Case.xlsx", "case.xlsx" })
+        {
+            var path = parent + "\\" + name;
+            source[path] = new ScanEntry { RelativePath = path, Kind = EntryKind.File };
+        }
+
+        var first = PathShortener.MapEntries(source, root, true, 240, null, null, out var firstOwners);
+        var second = PathShortener.MapEntries(source, root, true, 240, null, null, out var secondOwners);
+        var reversedSource = source.Reverse().ToDictionary(kvp => kvp.Key, kvp => kvp.Value,
+            StringComparer.Ordinal);
+        var reversed = PathShortener.MapEntries(reversedSource, root, true, 240, null, null,
+            out var reversedOwners);
+        Assert.Equal(source.Count, first.Count);
+        Assert.Equal(first.Keys.Order(StringComparer.OrdinalIgnoreCase),
+            second.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(first.Keys.Order(StringComparer.OrdinalIgnoreCase),
+            reversed.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(firstOwners.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase),
+            secondOwners.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(firstOwners.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase),
+            reversedOwners.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Directory_hash_collision_uses_a_longer_hash()
+    {
+        var root = @"C:\" + new string('R', 62);
+        var names = new[]
+        {
+            "ABCDEFG007144" + new string('X', 40),
+            "ABCDEFG044148" + new string('X', 40),
+        };
+        var source = names.ToDictionary(n => n, n => new ScanEntry
+        {
+            RelativePath = n,
+            Kind = EntryKind.Directory
+        });
+
+        var mapped = PathShortener.MapEntries(source, root, true, 115, null, null, out _);
+
+        Assert.Equal(2, mapped.Count);
+        Assert.All(mapped.Keys, path => Assert.True(Path.Combine(root, path).Length <= 115));
+        Assert.Contains(mapped.Keys, path => System.Text.RegularExpressions.Regex.IsMatch(path,
+            @"_#[0-9a-f]{12}$"));
+    }
+
+    [Fact]
+    public void File_hash_collision_uses_a_longer_hash()
+    {
+        var root = @"C:\" + new string('R', 62);
+        var names = new[]
+        {
+            "ABCDEFG054205" + new string('X', 40) + ".xlsx",
+            "ABCDEFG074589" + new string('X', 40) + ".xlsx",
+        };
+        var source = names.ToDictionary(n => n, n => new ScanEntry
+        {
+            RelativePath = n,
+            Kind = EntryKind.File
+        });
+
+        var mapped = PathShortener.MapEntries(source, root, true, 88, null, null, out _);
+
+        Assert.Equal(2, mapped.Count);
+        Assert.All(mapped.Keys, path => Assert.True(Path.Combine(root, path).Length <= 88));
+        Assert.Contains(mapped.Keys, path => System.Text.RegularExpressions.Regex.IsMatch(path,
+            @"_#[0-9a-f]{12}\.xlsx$"));
+    }
+
+    [Fact]
+    public void New_file_does_not_claim_a_target_path_pinned_to_another_source()
+    {
+        var root = @"C:\" + new string('R', 62);
+        var first = "ABCDEFG" + new string('X', 40) + ".xlsx";
+        var second = "HIJKLMN" + new string('Y', 40) + ".xlsx";
+        var firstOnly = new Dictionary<string, ScanEntry>
+        {
+            [first] = new() { RelativePath = first, Kind = EntryKind.File }
+        };
+        var claimed = PathShortener.MapEntries(firstOnly, root, true, 88, null, null,
+            out _).Keys.Single();
+        var source = new Dictionary<string, ScanEntry>(firstOnly)
+        {
+            [second] = new() { RelativePath = second, Kind = EntryKind.File }
+        };
+        var state = new Dictionary<string, StateEntry>
+        {
+            [claimed] = new()
+            {
+                PairName = "pair",
+                RelativePath = claimed,
+                TargetPath = claimed,
+                RemoteId = second,
+                Kind = EntryKind.File,
+                FirstSeenUtc = DateTimeOffset.UtcNow
+            }
+        };
+
+        var mapped = PathShortener.MapEntries(source, root, true, 88, state, null, out var owners);
+
+        Assert.Equal(2, mapped.Count);
+        Assert.Equal(second, owners[claimed]);
+        Assert.Contains(mapped.Keys, path => !path.Equals(claimed, StringComparison.OrdinalIgnoreCase) &&
+            System.Text.RegularExpressions.Regex.IsMatch(path, @"_#[0-9a-f]{12}\.xlsx$"));
+    }
+
+    [Fact]
     public void ShortenFilePath_WhenWithinLimit_ReturnsUnchanged()
     {
         var relPath = @"Subfolder\RegularFile.docx";

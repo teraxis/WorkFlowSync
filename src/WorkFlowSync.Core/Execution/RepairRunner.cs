@@ -31,6 +31,9 @@ public sealed class RepairRunner
             if (!gate.Acquired) throw new IOException("Another pass is running for this pair");
             using var store = new StateStore(_statePath, readOnly: true);
             var plan = TargetRepair.Prepare(_pair, _config, store, progress);
+            _log.Info($"[{_pair.Name}] repair check paths={plan.CheckedPaths} too_long={plan.TooLongPaths} duplicates={plan.DuplicatePaths} short_hash={plan.ShortHashes}");
+            foreach (var row in plan.Rows.Where(r => r.Action == "conflict"))
+                _log.Warn($"[{_pair.Name}] repair conflict source={row.OldPath} target={row.NewPath} detail={row.Detail}");
             _log.Info($"[{_pair.Name}] repair plan keep={plan.KeepFiles} rename={plan.RenameFiles} recycle={plan.RecycleFiles} conflicts={plan.Conflicts}");
             return plan;
         }

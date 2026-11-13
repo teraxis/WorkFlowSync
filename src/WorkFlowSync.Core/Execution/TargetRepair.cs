@@ -24,16 +24,20 @@ public static class TargetRepair
         public int ActionCount => Work.Count + Rows.Count(r => r.Action is "recycle-cloud-duplicate" or "recycle-empty-directory");
         public int Conflicts => Rows.Count(r => r.Action is "conflict" or "missing" or "untracked");
         public int SourceFileCount { get; internal set; }
+        public int CheckedPaths { get; internal set; }
+        public int TooLongPaths { get; internal set; }
+        public int DuplicatePaths { get; internal set; }
+        public int ShortHashes { get; internal set; }
         public int KeepFiles { get; internal set; }
         public long KeepBytes { get; internal set; }
         public int RenameFiles => Work.Count(w => w.State.Kind == EntryKind.File && w.Row.Action == "move");
         public long RenameBytes => Work.Where(w => w.State.Kind == EntryKind.File && w.Row.Action == "move")
             .Sum(w => w.State.CopiedSize ?? 0);
         public int RecycleFiles => Work.Count(w => w.State.Kind == EntryKind.File &&
-            w.Row.Action is "recycle-duplicate" or "recycle-duplicate-state") +
+            w.Row.Action is "recycle-duplicate" or "recycle-duplicate-state" or "recycle-duplicate-untracked") +
             Rows.Count(r => r.Action == "recycle-cloud-duplicate");
         public long RecycleBytes => Work.Where(w => w.State.Kind == EntryKind.File &&
-            w.Row.Action is "recycle-duplicate" or "recycle-duplicate-state")
+            w.Row.Action is "recycle-duplicate" or "recycle-duplicate-state" or "recycle-duplicate-untracked")
             .Sum(w => w.State.CopiedSize ?? 0);
 
         public void Dispose()
@@ -79,12 +83,25 @@ public static class TargetRepair
             TargetRoot = Path.GetFullPath(targetRoot),
             SourceFileCount = source.Values.Count(e => e.Kind == EntryKind.File)
         };
-        var canonical = PathShortener.MapEntries(source, targetRoot, true, limit, null, null, out var mappedToSource);
+        var canonical = PathShortener.MapEntries(source, targetRoot, true, limit, null, null,
+            out var mappedToSource, (path, detail) => plan.Rows.Add(new Row(path, "", "conflict", detail)));
+        plan.CheckedPaths = canonical.Count;
+        plan.TooLongPaths = canonical.Keys.Count(p => Path.Combine(targetRoot, p).Length > limit ||
+            p.Split('\\', '/').Any(s => s.EndsWith(' ') || s.EndsWith('.')));
+        const string shortHashPattern = @"_#[0-9a-f]{1,7}(?:\.|\\|$)";
+        plan.ShortHashes = canonical.Keys.Count(p =>
+            Regex.IsMatch(p, shortHashPattern, RegexOptions.IgnoreCase) &&
+            !Regex.IsMatch(mappedToSource.GetValueOrDefault(p) ?? p, shortHashPattern,
+                RegexOptions.IgnoreCase));
+        plan.DuplicatePaths = canonical.Count - canonical.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        if (plan.TooLongPaths != 0 || plan.ShortHashes != 0 || plan.DuplicatePaths != 0)
+            throw new InvalidOperationException("Repair canonical path self-check failed");
         var sourceToCanonical = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var targetFilesBySize = target.Where(kvp => kvp.Value.Kind == EntryKind.File)
             .GroupBy(kvp => kvp.Value.Size).ToDictionary(g => g.Key, g => g.ToList());
-        var sourceFilesBySize = source.Where(kvp => kvp.Value.Kind == EntryKind.File)
-            .GroupBy(kvp => kvp.Value.Size).ToDictionary(g => g.Key, g => g.ToList());
+        var sourceFilesBySignature = source.Where(kvp => kvp.Value.Kind == EntryKind.File)
+            .GroupBy(kvp => FileSignature(kvp.Key, kvp.Value.Size))
+            .ToDictionary(g => g.Key, g => g.ToList());
         foreach (var path in canonical.Keys)
             sourceToCanonical[mappedToSource.GetValueOrDefault(path) ?? path] = path;
 
@@ -208,7 +225,9 @@ public static class TargetRepair
                 tracked.Add(newPath);
         }
 
-        foreach (var (path, item) in target)
+        HashSet<string>? plannedRemovedFiles = null;
+        HashSet<string>? remainingDirectories = null;
+        foreach (var (path, item) in target.OrderBy(kvp => kvp.Value.Kind == EntryKind.Directory ? 1 : 0))
         {
             if (tracked.Contains(path)) continue;
             if (Path.GetFileName(path).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
@@ -228,17 +247,17 @@ public static class TargetRepair
                     }
                 }
 
-                if (Regex.IsMatch(path, "_#[0-9a-f]{4,8}(?:\\.|\\\\|$)"))
+                if (Regex.IsMatch(path, "_#[0-9a-f]{4,64}(?:\\.|\\\\|$)"))
                 {
-                    var stem = Path.GetFileNameWithoutExtension(path);
-                    var hashIdx = stem.IndexOf("_#", StringComparison.Ordinal);
-                    var cleanStem = hashIdx > 0 ? stem[..hashIdx] : stem;
-
-                    var dirName = Path.GetDirectoryName(path);
-                    var matchedSource = sourceFilesBySize.GetValueOrDefault(item.Size)?.FirstOrDefault(s =>
-                        (Path.GetFileName(s.Key).Contains(cleanStem, StringComparison.OrdinalIgnoreCase) ||
-                         (dirName is not null && (string.Equals(Path.GetDirectoryName(s.Key), dirName, StringComparison.OrdinalIgnoreCase) ||
-                                                  Path.GetDirectoryName(s.Key)?.Contains(Path.GetFileName(dirName) ?? "", StringComparison.OrdinalIgnoreCase) == true)))).Key;
+                    var matches = sourceFilesBySignature.GetValueOrDefault(FileSignature(path, item.Size))?.Where(s =>
+                        Math.Abs((s.Value.MtimeUtc - item.MtimeUtc).TotalSeconds) <= 2 &&
+                        LooksLikeShortenedCopy(path, s.Key)).Take(2).ToArray() ?? Array.Empty<KeyValuePair<string, ScanEntry>>();
+                    if (matches.Length > 1)
+                    {
+                        plan.Rows.Add(new Row(path, "", "conflict", "Legacy copy matches multiple source files"));
+                        continue;
+                    }
+                    var matchedSource = matches.Length == 1 ? matches[0].Key : null;
 
                     if (matchedSource is not null && sourceToCanonical.TryGetValue(matchedSource, out var canonPath))
                     {
@@ -252,6 +271,8 @@ public static class TargetRepair
                             Status = EntryStatus.Active,
                             FirstSeenUtc = item.MtimeUtc,
                             LastSeenUtc = item.MtimeUtc,
+                            SourceSize = item.Size,
+                            SourceMtimeUtc = item.MtimeUtc,
                             CopiedSize = item.Size,
                             CopiedMtimeUtc = item.MtimeUtc,
                         };
@@ -264,13 +285,35 @@ public static class TargetRepair
                             tracked.Add(path);
                             continue;
                         }
-                        else if (!target.ContainsKey(canonPath))
+                        else if (target.TryGetValue(canonPath, out var present) && !Matches(present, fakeEntry))
+                        {
+                            plan.Rows.Add(new Row(path, canonPath, "conflict", "Canonical destination differs from legacy copy"));
+                            continue;
+                        }
+                        else if (plannedDestinations.TryGetValue(canonPath, out var planned) &&
+                                 (planned.CopiedSize != fakeEntry.CopiedSize ||
+                                  planned.CopiedMtimeUtc is not { } plannedTime ||
+                                  Math.Abs((plannedTime - item.MtimeUtc).TotalSeconds) > 2))
+                        {
+                            plan.Rows.Add(new Row(path, canonPath, "conflict", "Planned canonical copy differs from legacy copy"));
+                            continue;
+                        }
+                        else if (target.ContainsKey(canonPath) || plannedDestinations.ContainsKey(canonPath))
+                        {
+                            var row = new Row(path, canonPath, "recycle-duplicate-untracked", "matched source metadata and name");
+                            plan.Rows.Add(row);
+                            plan.Work.Add((row, matchedSource, fakeEntry));
+                            tracked.Add(path);
+                            continue;
+                        }
+                        else
                         {
                             var row = new Row(path, canonPath, "move", "adopt-untracked");
                             plan.Rows.Add(row);
                             plan.Work.Add((row, matchedSource, fakeEntry));
                             tracked.Add(path);
                             tracked.Add(canonPath);
+                            plannedDestinations[canonPath] = fakeEntry;
                             continue;
                         }
                     }
@@ -278,12 +321,25 @@ public static class TargetRepair
             }
             else if (item.Kind == EntryKind.Directory)
             {
-                var prefix = path + "\\";
-                var hasTrackedChildren = target.Any(kvp => kvp.Value.Kind == EntryKind.File &&
-                    kvp.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-                    tracked.Contains(kvp.Key) &&
-                    !Path.GetFileName(kvp.Key).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase));
-                if (!hasTrackedChildren)
+                plannedRemovedFiles ??= plan.Work.Where(w => w.State.Kind == EntryKind.File &&
+                    w.Row.Action is "move" or "recycle-duplicate" or "recycle-duplicate-state" or "recycle-duplicate-untracked")
+                    .Select(w => w.Row.OldPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (remainingDirectories is null)
+                {
+                    remainingDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var file in target.Where(kvp => kvp.Value.Kind == EntryKind.File &&
+                                 !plannedRemovedFiles.Contains(kvp.Key) &&
+                                 !Path.GetFileName(kvp.Key).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        var parent = Path.GetDirectoryName(file.Key);
+                        while (!string.IsNullOrEmpty(parent))
+                        {
+                            remainingDirectories.Add(parent);
+                            parent = Path.GetDirectoryName(parent);
+                        }
+                    }
+                }
+                if (!remainingDirectories.Contains(path))
                 {
                     plan.Rows.Add(new Row(path, "", "recycle-empty-directory", "empty directory"));
                     continue;
@@ -291,7 +347,7 @@ public static class TargetRepair
             }
 
             if (Path.Combine(targetRoot, path).Length <= limit &&
-                !Regex.IsMatch(path, "_#[0-9a-f]{4,8}(?:\\.|\\\\|$)", RegexOptions.IgnoreCase)) continue;
+                !Regex.IsMatch(path, "_#[0-9a-f]{4,64}(?:\\.|\\\\|$)", RegexOptions.IgnoreCase)) continue;
             plan.Rows.Add(new Row(path, "", "untracked", item.Kind.ToString()));
         }
         var touched = plan.Work.Where(w => w.State.Kind == EntryKind.File)
@@ -337,6 +393,9 @@ public static class TargetRepair
                 {
                     if (recorded.Status == EntryStatus.Tombstone)
                         store.ReviveTombstone(plan.Pair, row.OldPath, row.NewPath, source);
+                    else if (row.Detail == "adopt-untracked")
+                        store.Upsert(new[] { recorded with { RelativePath = row.NewPath,
+                            TargetPath = row.NewPath, RemoteId = source } });
                     else
                         store.RelocateTarget(plan.Pair, row.OldPath, row.NewPath, source);
                 }
@@ -346,7 +405,7 @@ public static class TargetRepair
                     throw;
                 }
             }
-            else if (row.Action is "recycle-duplicate" or "recycle-duplicate-state")
+            else if (row.Action is "recycle-duplicate" or "recycle-duplicate-state" or "recycle-duplicate-untracked")
             {
                 // Recheck metadata immediately before removal; neither an unrelated file nor a changed
                 // placeholder may be removed based on an earlier scan.
@@ -356,12 +415,15 @@ public static class TargetRepair
                     Math.Abs((old.LastWriteTimeUtc - newer.LastWriteTimeUtc).TotalSeconds) > 2)
                     throw new IOException($"Repair duplicate changed after planning: {oldFull}");
                 RecycleLongPath(plan.TargetRoot, oldFull, directory: false);
-                if (row.Action == "recycle-duplicate-state")
-                    store.Delete(plan.Pair, new[] { row.OldPath });
-                else if (recorded.Status == EntryStatus.Tombstone)
-                    store.ReviveTombstone(plan.Pair, row.OldPath, row.NewPath, source);
-                else
-                    store.RelocateTarget(plan.Pair, row.OldPath, row.NewPath, source);
+                if (row.Action != "recycle-duplicate-untracked")
+                {
+                    if (row.Action == "recycle-duplicate-state")
+                        store.Delete(plan.Pair, new[] { row.OldPath });
+                    else if (recorded.Status == EntryStatus.Tombstone)
+                        store.ReviveTombstone(plan.Pair, row.OldPath, row.NewPath, source);
+                    else
+                        store.RelocateTarget(plan.Pair, row.OldPath, row.NewPath, source);
+                }
             }
             else if (row.Action == "drop-stale-state")
                 store.Delete(plan.Pair, new[] { row.OldPath });
@@ -371,6 +433,9 @@ public static class TargetRepair
                     throw new IOException($"Repair destination disappeared after planning: {newFull}");
                 if (recorded.Status == EntryStatus.Tombstone)
                     store.ReviveTombstone(plan.Pair, row.OldPath, row.NewPath, source);
+                else if (row.Detail == "adopt-untracked")
+                    store.Upsert(new[] { recorded with { RelativePath = row.NewPath,
+                        TargetPath = row.NewPath, RemoteId = source } });
                 else
                     store.RelocateTarget(plan.Pair, row.OldPath, row.NewPath, source);
             }
@@ -449,6 +514,38 @@ public static class TargetRepair
     }
 
     private static string Csv(string value) => "\"" + value.Replace("\"", "\"\"") + "\"";
+
+    private static bool LooksLikeShortenedCopy(string targetPath, string sourcePath)
+    {
+        var targetParts = targetPath.Split('\\', '/');
+        var sourceParts = sourcePath.Split('\\', '/');
+        if (targetParts.Length != sourceParts.Length) return false;
+        for (var i = 0; i < targetParts.Length; i++)
+        {
+            var targetPart = targetParts[i];
+            var sourcePart = sourceParts[i];
+            var tag = Regex.Match(targetPart, @"_#[0-9a-f]{4,64}(?=\.|$)", RegexOptions.IgnoreCase);
+            if (!tag.Success)
+            {
+                if (!targetPart.Equals(sourcePart, StringComparison.OrdinalIgnoreCase)) return false;
+                continue;
+            }
+            var prefix = targetPart[..tag.Index];
+            if (!sourcePart.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
+            if (i == targetParts.Length - 1 &&
+                !Path.GetExtension(targetPart).Equals(Path.GetExtension(sourcePart),
+                    StringComparison.OrdinalIgnoreCase)) return false;
+        }
+        return true;
+    }
+
+    private static (long Size, int Depth, string Extension, string Prefix) FileSignature(string path, long size)
+    {
+        var name = Path.GetFileName(path);
+        return (size, path.Count(c => c is '\\' or '/') + 1,
+            Path.GetExtension(name).ToLowerInvariant(),
+            name[..Math.Min(3, name.Length)].ToLowerInvariant());
+    }
 
     private static bool Matches(ScanEntry actual, StateEntry recorded) =>
         actual.Kind == EntryKind.File && actual.Size == recorded.CopiedSize &&

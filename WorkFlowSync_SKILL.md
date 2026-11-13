@@ -14,9 +14,10 @@
 ## Path repair update (2026-11-11)
 
 - Schema v5 stores `target_path`; v4 migration creates `state.db.v4-backup` before changing rows. Do not recompute recorded target names when path settings change.
-- `PathShortener.MapEntries` maps directories independently from sibling filename lengths. `PathLimits` caps the configured limit by Windows and OneDrive constraints.
+- `PathShortener.MapEntries` reserves each directory's deepest descendant tail before mapping it. Generated hashes have at least eight hex characters; a file collision gets a longer exact-case hash. `PathLimits` caps the configured limit by Windows and OneDrive constraints.
 - The separate Repair long paths task action previews counts and applies confirmed safe moves. `wfs repair --pair NAME --dry-run` prints counts; CSV export is opt-in via `--report`. The repair plan stays in memory and is cleared when the action completes, while `state.db` remains persistent. Applying repair requires the pair to be paused. Conflicts and untracked items remain untouched. Never test apply against the owner's real pair.
 - A Files On-Demand target that is inactive or has a suspiciously incomplete scan skips the pass; the resident loop retries after two minutes. Cloud placeholders remain metadata-only during scanning and repair planning.
+- `TargetRepair.Build` collects per-entry mapping failures as plan conflicts and logs a canonical-path self-check through `RepairRunner`. Untracked legacy copies may be reused only when path shape, name prefix, size, and mtime agree uniquely; duplicate removal rechecks metadata immediately before sending to the Recycle Bin. Keep ambiguous candidates untouched.
 
 
 Read this before changing project behavior. Product rules live in `docs/product/features/`; this

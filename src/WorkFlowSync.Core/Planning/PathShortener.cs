@@ -141,7 +141,7 @@ public static class PathShortener
         var availableForFileName = maxPathLength - currentDirFull.Length - 1;
 
         var availableForBase = availableForFileName - hashTag.Length - ext.Length;
-        if (availableForBase >= 1)
+        if (availableForBase >= 3)
         {
             var keepLen = Math.Min(baseName.Length, availableForBase);
             var shortenedBase = TruncateToUtf8Bytes(baseName[..keepLen], maxBaseUtf8Bytes).TrimEnd(' ', '.', '_');
@@ -150,10 +150,7 @@ public static class PathShortener
             return string.IsNullOrEmpty(targetDir) ? newFileName : Path.Combine(targetDir, newFileName);
         }
 
-        // Extreme length constraint: drop hashTag prefix if strictly necessary or truncate ext
-        var emergencyBase = TruncateToUtf8Bytes(baseName[..Math.Min(baseName.Length, Math.Max(1, availableForFileName - 6))], MaxSegmentUtf8Bytes - 10);
-        var emergencyFileName = emergencyBase + "_#" + hash[..4];
-        return string.IsNullOrEmpty(targetDir) ? emergencyFileName : Path.Combine(targetDir, emergencyFileName);
+        throw new InvalidOperationException($"Path cannot fit with an eight-character hash: {relativePath}");
     }
 
     /// <summary>
@@ -186,7 +183,7 @@ public static class PathShortener
 
             if (Encoding.UTF8.GetByteCount(seg) > MaxSegmentUtf8Bytes)
             {
-                var segHash = "_#" + ComputeHash(cumulative[i], 6); // 8 ASCII bytes
+                var segHash = "_#" + ComputeHash(cumulative[i], 8);
                 var maxBaseBytes = Math.Max(4, MaxSegmentUtf8Bytes - segHash.Length);
                 var shortenedBase = TruncateToUtf8Bytes(seg, maxBaseBytes).TrimEnd(' ', '.', '_');
                 if (shortenedBase.Length == 0) shortenedBase = seg[..1];
@@ -207,8 +204,8 @@ public static class PathShortener
             var seg = segments[i];
             if (seg.Length <= 12) continue;
 
-            var segHash = "_#" + ComputeHash(cumulative[i], 6); // 8 chars
-            var canReduce = seg.Length - 4 - segHash.Length; // keep at least 4 chars of folder name
+            var segHash = "_#" + ComputeHash(cumulative[i], 8);
+            var canReduce = seg.Length - 3 - segHash.Length;
             if (canReduce <= 0) continue;
 
             var toReduce = Math.Min(excess, canReduce);
@@ -222,30 +219,8 @@ public static class PathShortener
             }
         }
 
-        // Second pass: if still excess, reduce any segment down to 2 chars + hash
         if (excess > 0)
-        {
-            for (var i = segments.Length - 1; i >= 0 && excess > 0; i--)
-            {
-                var seg = segments[i];
-                if (seg.Length <= 8) continue;
-
-                var segHash = "_#" + ComputeHash(cumulative[i], 4); // 6 chars
-                var canReduce = seg.Length - 2 - segHash.Length;
-                if (canReduce <= 0) continue;
-
-                var toReduce = Math.Min(excess, canReduce);
-                var keepLen = Math.Max(2, seg.Length - toReduce - segHash.Length);
-                var newSeg = seg[..keepLen].TrimEnd(' ', '.', '_') + segHash;
-                var achieved = seg.Length - newSeg.Length;
-                if (achieved > 0)
-                {
-                    segments[i] = newSeg;
-                    excess -= achieved;
-                }
-            }
-        }
-
+            throw new InvalidOperationException($"Directory cannot fit with eight-character hashes: {directoryRelativePath}");
         return string.Join("\\", segments);
     }
 
@@ -261,7 +236,8 @@ public static class PathShortener
         int maxPathLength,
         IReadOnlyDictionary<string, StateEntry>? state,
         Dictionary<string, string>? existingTargetToSourceMap,
-        out Dictionary<string, string> targetToSourceMap)
+        out Dictionary<string, string> targetToSourceMap,
+        Action<string, string>? onConflict = null)
     {
         targetToSourceMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (existingTargetToSourceMap != null)
@@ -281,15 +257,25 @@ public static class PathShortener
         // Every recorded copy keeps its physical target path, including copies made before shortening
         // existed (those rows have no RemoteId). Changing the limit must not remap either kind.
         var stateRemoteToTarget = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var pinnedTargets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var pinnedDirectories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (state != null)
         {
             foreach (var (targetRel, entry) in state)
             {
-                stateRemoteToTarget[entry.RemoteId ?? entry.RelativePath] = entry.TargetPath ?? targetRel;
+                var sourcePath = entry.RemoteId ?? entry.RelativePath;
+                var physicalPath = entry.TargetPath ?? targetRel;
+                stateRemoteToTarget[sourcePath] = physicalPath;
+                pinnedTargets.TryAdd(physicalPath, sourcePath);
+                if (entry.Kind == EntryKind.Directory)
+                    pinnedDirectories.TryAdd(physicalPath, sourcePath);
             }
         }
 
         var dirMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var invalidDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var invalidDirReasons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var mappedDirOwners = new Dictionary<string, string>(pinnedDirectories, StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<string, ScanEntry>(source.Count, StringComparer.OrdinalIgnoreCase);
 
         // Pre-map all parent directories deterministically from shallowest to deepest
@@ -308,27 +294,90 @@ public static class PathShortener
 
         var sortedDirs = allDirs
             .OrderBy(d => d.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries).Length)
-            .ThenBy(d => d, StringComparer.OrdinalIgnoreCase);
+            .ThenBy(d => d, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(d => d, StringComparer.Ordinal).ToArray();
+
+        // Reserve enough space for the deepest descendant before mapping any directory. Otherwise
+        // a directory mapped for a short child can leave no room for a later long file name.
+        var requiredTail = sortedDirs.ToDictionary(d => d, _ => 0, StringComparer.OrdinalIgnoreCase);
+        foreach (var (path, entry) in source)
+        {
+            if (entry.Kind == EntryKind.Directory) continue;
+            var parent = Path.GetDirectoryName(path);
+            if (parent is null || !requiredTail.ContainsKey(parent)) continue;
+            var extension = Path.GetExtension(path);
+            requiredTail[parent] = Math.Max(requiredTail[parent], 1 + 3 + 2 + 16 + extension.Length);
+        }
+        foreach (var dir in sortedDirs.AsEnumerable().Reverse())
+        {
+            var parent = Path.GetDirectoryName(dir);
+            if (parent is not null && requiredTail.ContainsKey(parent))
+                requiredTail[parent] = Math.Max(requiredTail[parent], 1 + 3 + 2 + 16 + requiredTail[dir]);
+        }
 
         foreach (var dir in sortedDirs)
         {
-            var origDir = existingTargetToSourceMap != null && existingTargetToSourceMap.TryGetValue(dir, out var od) ? od : dir;
-            if (stateRemoteToTarget.TryGetValue(origDir, out var previouslyMappedDir))
+            var parent = Path.GetDirectoryName(dir);
+            if (parent is not null && invalidDirs.Contains(parent))
             {
-                dirMap[dir] = previouslyMappedDir;
+                invalidDirs.Add(dir);
+                invalidDirReasons[dir] = invalidDirReasons[parent];
+                continue;
             }
-            else
+            var origDir = existingTargetToSourceMap != null && existingTargetToSourceMap.TryGetValue(dir, out var od) ? od : dir;
+            try
             {
-                var parent = Path.GetDirectoryName(dir);
-                var baseDir = Path.GetFileName(dir);
-                string mappedParent = "";
-                if (!string.IsNullOrEmpty(parent) && dirMap.TryGetValue(parent, out var mp))
-                    mappedParent = mp;
-                else if (!string.IsNullOrEmpty(parent))
-                    mappedParent = parent;
+                if (stateRemoteToTarget.TryGetValue(origDir, out var previouslyMappedDir))
+                {
+                    dirMap[dir] = previouslyMappedDir;
+                }
+                else
+                {
+                    var baseDir = Path.GetFileName(dir);
+                    string mappedParent = "";
+                    if (!string.IsNullOrEmpty(parent) && dirMap.TryGetValue(parent, out var mp))
+                        mappedParent = mp;
+                    else if (!string.IsNullOrEmpty(parent))
+                        mappedParent = parent;
 
-                var candidate = string.IsNullOrEmpty(mappedParent) ? baseDir : Path.Combine(mappedParent, baseDir);
-                dirMap[dir] = enabled ? MapDirectory(targetRoot, candidate, origDir, maxPathLength) : candidate;
+                    var candidate = string.IsNullOrEmpty(mappedParent) ? baseDir : Path.Combine(mappedParent, baseDir);
+                    dirMap[dir] = enabled ? MapDirectory(targetRoot, candidate, origDir,
+                        maxPathLength - Math.Max(requiredTail[dir], 32)) : candidate;
+                }
+                if (mappedDirOwners.TryGetValue(dirMap[dir], out var owner) &&
+                    !owner.Equals(origDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    var collision = dirMap[dir];
+                    if (stateRemoteToTarget.ContainsKey(origDir))
+                        throw new InvalidOperationException(
+                            $"Directory shortening collision: {owner} and {origDir} -> {collision}");
+                    var mappedParent = parent is not null && dirMap.TryGetValue(parent, out var mp)
+                        ? mp : parent ?? "";
+                    var candidate = string.IsNullOrEmpty(mappedParent)
+                        ? Path.GetFileName(dir) : Path.Combine(mappedParent, Path.GetFileName(dir));
+                    foreach (var hashLength in new[] { 12, 16 })
+                    {
+                        try
+                        {
+                            var alternative = MapDirectory(targetRoot, candidate, origDir,
+                                maxPathLength - Math.Max(requiredTail[dir], 32), hashLength, forceShorten: true);
+                            if (mappedDirOwners.ContainsKey(alternative)) continue;
+                            dirMap[dir] = alternative;
+                            break;
+                        }
+                        catch (InvalidOperationException) { }
+                    }
+                    if (mappedDirOwners.ContainsKey(dirMap[dir]))
+                        throw new InvalidOperationException(
+                            $"Directory shortening collision: {owner} and {origDir} -> {collision}");
+                }
+                mappedDirOwners[dirMap[dir]] = origDir;
+            }
+            catch (Exception ex) when (onConflict is not null &&
+                                       ex is InvalidOperationException or ArgumentException or PathTooLongException)
+            {
+                invalidDirs.Add(dir);
+                invalidDirReasons[dir] = ex.Message;
             }
         }
 
@@ -336,42 +385,89 @@ public static class PathShortener
         var ordered = source
             .OrderBy(kvp => kvp.Value.Kind == EntryKind.Directory ? 0 : 1)
             .ThenBy(kvp => kvp.Key.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries).Length)
-            .ThenBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase);
+            .ThenBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(kvp => kvp.Key, StringComparer.Ordinal);
+        bool OccupiedByOther(string targetPath, string sourcePath) =>
+            result.ContainsKey(targetPath) ||
+            (pinnedTargets.TryGetValue(targetPath, out var owner) &&
+             !owner.Equals(sourcePath, StringComparison.OrdinalIgnoreCase));
 
         foreach (var (path, entry) in ordered)
         {
+            var sourceDir = entry.Kind == EntryKind.Directory ? path : Path.GetDirectoryName(path);
+            if (sourceDir is not null && invalidDirs.Contains(sourceDir))
+            {
+                onConflict?.Invoke(path, invalidDirReasons[sourceDir]);
+                continue;
+            }
             var originalSourcePath = existingTargetToSourceMap != null && existingTargetToSourceMap.TryGetValue(path, out var orig)
                 ? orig
                 : path;
 
             string targetRel;
-
-            // 1. Check if state already has a recorded mapping for this source path
-            if (stateRemoteToTarget.TryGetValue(originalSourcePath, out var previouslyMapped))
+            try
             {
-                targetRel = previouslyMapped;
-            }
-            else if (entry.Kind == EntryKind.Directory)
-            {
-                targetRel = dirMap.TryGetValue(path, out var mapped) ? mapped : path;
-            }
-            else
-            {
-                // Map file
-                var parent = Path.GetDirectoryName(path);
-                var fileName = Path.GetFileName(path);
-                string mappedParent = "";
-                if (!string.IsNullOrEmpty(parent) && dirMap.TryGetValue(parent, out var mp))
-                    mappedParent = mp;
-                else if (!string.IsNullOrEmpty(parent))
-                    mappedParent = parent;
 
-                var candidate = string.IsNullOrEmpty(mappedParent) ? fileName : Path.Combine(mappedParent, fileName);
-                targetRel = enabled ? MapFile(targetRoot, candidate, originalSourcePath, maxPathLength) : candidate;
-            }
+                // 1. Check if state already has a recorded mapping for this source path
+                if (stateRemoteToTarget.TryGetValue(originalSourcePath, out var previouslyMapped))
+                {
+                    targetRel = previouslyMapped;
+                }
+                else if (entry.Kind == EntryKind.Directory)
+                {
+                    targetRel = dirMap.TryGetValue(path, out var mapped) ? mapped : path;
+                }
+                else
+                {
+                    // Map file
+                    var parent = Path.GetDirectoryName(path);
+                    var fileName = Path.GetFileName(path);
+                    string mappedParent = "";
+                    if (!string.IsNullOrEmpty(parent) && dirMap.TryGetValue(parent, out var mp))
+                        mappedParent = mp;
+                    else if (!string.IsNullOrEmpty(parent))
+                        mappedParent = parent;
 
-            if (result.ContainsKey(targetRel))
-                throw new InvalidOperationException($"Path shortening collision at {targetRel}");
+                    var candidate = string.IsNullOrEmpty(mappedParent) ? fileName : Path.Combine(mappedParent, fileName);
+                    targetRel = enabled ? MapFile(targetRoot, candidate, originalSourcePath, maxPathLength) : candidate;
+                }
+
+                if (OccupiedByOther(targetRel, originalSourcePath) && entry.Kind == EntryKind.File && enabled &&
+                    !stateRemoteToTarget.ContainsKey(originalSourcePath))
+                {
+                    var parent = Path.GetDirectoryName(targetRel) ?? "";
+                    var candidate = string.IsNullOrEmpty(parent)
+                        ? Path.GetFileName(path) : Path.Combine(parent, Path.GetFileName(path));
+                    foreach (var hashLength in new[] { 12, 16, 24, 32, 64 })
+                    {
+                        var alternative = MapFile(targetRoot, candidate, originalSourcePath, maxPathLength,
+                            hashLength, forceShorten: true, exactCaseHash: true);
+                        if (!OccupiedByOther(alternative, originalSourcePath))
+                        {
+                            targetRel = alternative;
+                            break;
+                        }
+                    }
+                }
+                if (OccupiedByOther(targetRel, originalSourcePath))
+                {
+                    var otherSource = targetToSourceMap.GetValueOrDefault(targetRel) ??
+                        pinnedTargets.GetValueOrDefault(targetRel) ?? result[targetRel].RelativePath;
+                    throw new InvalidOperationException(
+                        $"Path shortening collision: {otherSource} and {originalSourcePath} -> {targetRel}");
+                }
+                if (!stateRemoteToTarget.ContainsKey(originalSourcePath) &&
+                    (Path.Combine(targetRoot, targetRel).Length > maxPathLength ||
+                    targetRel.Split('\\', '/').Any(s => s.EndsWith(' ') || s.EndsWith('.')))
+                    )
+                    throw new InvalidOperationException($"Invalid mapped target path: {originalSourcePath} -> {targetRel}");
+            }
+            catch (Exception ex) when (onConflict is not null &&
+                                       ex is InvalidOperationException or ArgumentException or PathTooLongException)
+            {
+                onConflict(path, ex.Message);
+                continue;
+            }
 
             if (!string.Equals(targetRel, path, StringComparison.OrdinalIgnoreCase))
             {
@@ -391,34 +487,29 @@ public static class PathShortener
         return result;
     }
 
-    // Reserve room for a useful filename when mapping a directory. This decision depends on the
-    // directory alone, never on whichever child file happened to be scanned first.
-    private const int ReservedFileCharacters = 64;
-
-    private static string MapDirectory(string root, string candidate, string sourcePath, int limit)
+    private static string MapDirectory(string root, string candidate, string sourcePath, int budget,
+        int hashLength = 8, bool forceShorten = false)
     {
         var parent = Path.GetDirectoryName(candidate) ?? "";
         var originalName = Path.GetFileName(candidate);
         var name = originalName.Trim();
         var parentLength = Path.Combine(root, parent).Length;
-        var remaining = limit - parentLength - 1;
-        var reserved = Math.Clamp(remaining / 3, 12, 32);
-        var budget = limit - reserved;
         var normalized = Path.Combine(parent, name);
-        if (name.Length > 0 && Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes &&
+        if (!forceShorten && name.Length > 0 && Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes &&
             Path.Combine(root, normalized).Length <= budget)
             return normalized;
-        if (Path.Combine(root, candidate).Length <= budget &&
+        if (!forceShorten && Path.Combine(root, candidate).Length <= budget &&
             Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes && name.Length > 0 && name == originalName)
             return candidate;
 
-        var tag = "_#" + ComputeHash(sourcePath, 8);
+        var tag = "_#" + (forceShorten
+            ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sourcePath.Replace('/', '\\'))))
+                .ToLowerInvariant()[..hashLength]
+            : ComputeHash(sourcePath, hashLength));
         var allowed = budget - parentLength - 1;
-        if (allowed < tag.Length + 1)
-        {
-            tag = "_#" + ComputeHash(sourcePath, 4);
-        }
-        var keep = Math.Max(1, Math.Min(40, allowed - tag.Length));
+        if (allowed < tag.Length + 3)
+            throw new InvalidOperationException($"Directory cannot fit with an eight-character hash: {sourcePath}");
+        var keep = Math.Max(3, Math.Min(40, allowed - tag.Length));
         var stem = TruncateToUtf8Bytes(name[..Math.Min(name.Length, keep)], MaxSegmentUtf8Bytes - tag.Length)
             .TrimEnd(' ', '.', '_');
         if (stem.Length == 0) stem = "_";
@@ -426,23 +517,25 @@ public static class PathShortener
         return mapped;
     }
 
-    private static string MapFile(string root, string candidate, string sourcePath, int limit)
+    private static string MapFile(string root, string candidate, string sourcePath, int limit,
+        int hashLength = 8, bool forceShorten = false, bool exactCaseHash = false)
     {
         var parent = Path.GetDirectoryName(candidate) ?? "";
         var name = Path.GetFileName(candidate).Trim();
-        if (Path.Combine(root, candidate).Length <= limit &&
+        if (!forceShorten && Path.Combine(root, candidate).Length <= limit &&
             Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes && name.Length > 0)
             return candidate;
 
         var ext = Path.GetExtension(name);
         var stem = Path.GetFileNameWithoutExtension(name);
-        var tag = "_#" + ComputeHash(sourcePath, 8);
+        var tag = "_#" + (exactCaseHash
+            ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sourcePath.Replace('/', '\\'))))
+                .ToLowerInvariant()[..hashLength]
+            : ComputeHash(sourcePath, hashLength));
         var allowed = limit - Path.Combine(root, parent).Length - (root.Length > 0 || parent.Length > 0 ? 1 : 0);
-        if (allowed < tag.Length + ext.Length + 1)
-        {
-            tag = "_#" + ComputeHash(sourcePath, 4);
-        }
-        var keep = Math.Max(1, Math.Min(40, allowed - tag.Length - ext.Length));
+        if (allowed < tag.Length + ext.Length + 3)
+            throw new InvalidOperationException($"File cannot fit with an eight-character hash: {sourcePath}");
+        var keep = Math.Max(3, Math.Min(40, allowed - tag.Length - ext.Length));
         var shortStem = TruncateToUtf8Bytes(stem[..Math.Min(stem.Length, keep)],
             MaxSegmentUtf8Bytes - Encoding.UTF8.GetByteCount(tag + ext)).TrimEnd(' ', '.', '_');
         if (shortStem.Length == 0) shortStem = "_";

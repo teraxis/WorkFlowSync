@@ -5,6 +5,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $root "publish\portable"
 dotnet publish "$root\src\WorkFlowSync.App\WorkFlowSync.App.csproj" -c Release -r win-x64 -o $out --nologo
+if ($LASTEXITCODE -ne 0) { throw "GUI publish failed with exit code $LASTEXITCODE" }
 dotnet publish "$root\src\WorkFlowSync.Cli\WorkFlowSync.Cli.csproj" -c Release -r win-x64 -o $out --nologo
+if ($LASTEXITCODE -ne 0) { throw "CLI publish failed with exit code $LASTEXITCODE" }
 # Do not include config.example.json in the release package (config.json is auto-generated on first launch)
 Get-ChildItem $out | Select-Object Name, @{n="MB";e={[math]::Round($_.Length/1MB,1)}}
