@@ -4,6 +4,13 @@ This is the immutable archive of published user-facing changes. During a release
 entries from `docs/pending-release-notes.md` under a new `vX.Y.Z (YYYY-MM-DD)` heading, omit empty
 sections, and reset the pending file for the next cycle.
 
+## v0.3.23 (2026-11-16)
+
+### Виправлено
+
+- Виправлено скорочення глибоких шляхів для файлів із довгим розширенням: план більше не зупиняється через нестачу одного символу в батьківській теці.
+- Теки зі збереженими копіями файлів більше не позначаються як невідстежені лише через стару хешовану назву.
+
 ## v0.3.22 (2026-11-16)
 
 ### Виправлено

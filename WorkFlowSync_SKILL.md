@@ -13,6 +13,7 @@
 
 ## Path repair update (2026-11-11)
 
+- The later repair-plan fix reserves a file separator plus the longest full extension in each directory branch, in addition to the three-character stem and eight-character hash. A fixed 32-character file reserve was insufficient for multi-dot long suffixes. Directories containing retained state-tracked files are not reported as untracked merely because an old hashed ancestor remains; target-only files remain untouched.
 - The 2026-11-16 repair-plan fix reserves only the minimum hashed segment (3 stem + `_#` + 8 hex) per deeper directory plus a stable file allowance. Clamp each directory budget to its own minimum physical length so an impossible descendant does not invalidate an entire root. `TargetRepair` never revives tombstones, preserves unrelated empty folders, and blocks apply when at least 100 mapping failures exceed 20% of scanned source entries. Test against temporary trees only; the user's CSV is diagnostic evidence, not an apply plan.
 
 - Schema v5 stores `target_path`; v4 migration creates `state.db.v4-backup` before changing rows. Do not recompute recorded target names when path settings change.

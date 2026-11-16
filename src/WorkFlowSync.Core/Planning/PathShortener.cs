@@ -297,9 +297,18 @@ public static class PathShortener
             .ThenBy(d => d, StringComparer.OrdinalIgnoreCase)
             .ThenBy(d => d, StringComparer.Ordinal).ToArray();
 
-        // Reserve the minimum hashed name for each deeper directory and a stable file-name allowance.
-        // Reserving a longer collision hash at every level makes otherwise valid deep trees impossible.
+        // Reserve the minimum hashed name for each deeper directory and enough room for the
+        // longest file extension in that branch. A fixed allowance can strand a file whose
+        // extension alone exceeds it, even when shortening its ancestors would make it fit.
         var requiredTail = sortedDirs.ToDictionary(d => d, _ => 32, StringComparer.OrdinalIgnoreCase);
+        foreach (var (path, entry) in source)
+        {
+            if (entry.Kind != EntryKind.File) continue;
+            var parent = Path.GetDirectoryName(path);
+            if (parent is null || !requiredTail.ContainsKey(parent)) continue;
+            var extension = Path.GetExtension(Path.GetFileName(path).Trim());
+            requiredTail[parent] = Math.Max(requiredTail[parent], 1 + 3 + 10 + extension.Length);
+        }
         foreach (var dir in sortedDirs.AsEnumerable().Reverse())
         {
             var parent = Path.GetDirectoryName(dir);

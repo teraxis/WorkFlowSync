@@ -487,9 +487,14 @@ public sealed class TargetRepairTests : IDisposable
         {
             [original] = new()
             {
-                PairName = "pair", RelativePath = original, TargetPath = original,
-                Status = EntryStatus.Tombstone, Kind = EntryKind.File,
-                FirstSeenUtc = now, CopiedSize = 5, CopiedMtimeUtc = now
+                PairName = "pair",
+                RelativePath = original,
+                TargetPath = original,
+                Status = EntryStatus.Tombstone,
+                Kind = EntryKind.File,
+                FirstSeenUtc = now,
+                CopiedSize = 5,
+                CopiedMtimeUtc = now
             }
         };
 
@@ -532,6 +537,38 @@ public sealed class TargetRepairTests : IDisposable
 
         Assert.Equal(0, plan.ActionCount);
         Assert.DoesNotContain(plan.Rows, row => row.Action == "recycle-empty-directory");
+    }
+
+    [Fact]
+    public void Parent_of_retained_copy_is_not_reported_as_untracked()
+    {
+        var directory = "Legacy_#12345678";
+        var file = directory + "\\retained.txt";
+        var now = DateTimeOffset.UtcNow;
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [directory] = new() { RelativePath = directory, Kind = EntryKind.Directory },
+            [file] = new() { RelativePath = file, Kind = EntryKind.File, Size = 4, MtimeUtc = now }
+        };
+        var state = new Dictionary<string, StateEntry>
+        {
+            [file] = new()
+            {
+                PairName = "pair",
+                RelativePath = file,
+                Kind = EntryKind.File,
+                Status = EntryStatus.Active,
+                FirstSeenUtc = now,
+                CopiedSize = 4,
+                CopiedMtimeUtc = now
+            }
+        };
+
+        var plan = TargetRepair.Build("pair", _root, 200,
+            new Dictionary<string, ScanEntry>(), target, state);
+
+        Assert.DoesNotContain(plan.Rows, row => row.OldPath == directory && row.Action == "untracked");
+        Assert.Equal(0, plan.Conflicts);
     }
 
     [Fact]

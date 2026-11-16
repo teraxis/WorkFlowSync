@@ -38,6 +38,37 @@ public sealed class PathShortenerTests
     }
 
     [Fact]
+    public void Deep_file_with_long_extension_reserves_enough_room_in_parent_directories()
+    {
+        var root = @"C:\" + new string('R', 62);
+        var parent = string.Join("\\", new string('A', 17), new string('B', 54),
+            new string('C', 11), new string('D', 9), new string('E', 11), new string('F', 32));
+        var extension = "." + new string('Z', 60);
+        var file = parent + "\\" + new string('G', 64) + extension;
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [file] = new() { RelativePath = file, Kind = EntryKind.File }
+        };
+        var directory = parent;
+        while (!string.IsNullOrEmpty(directory))
+        {
+            source[directory] = new() { RelativePath = directory, Kind = EntryKind.Directory };
+            directory = Path.GetDirectoryName(directory) ?? "";
+        }
+        var conflicts = new List<string>();
+
+        var mapped = PathShortener.MapEntries(source, root, true, 240, null, null,
+            out _, (_, reason) => conflicts.Add(reason));
+
+        Assert.True(conflicts.Count == 0, string.Join("; ", conflicts) + " mapped=" +
+            string.Join(" | ", mapped.Keys.Select(p => Path.Combine(root, p).Length)));
+        var path = Assert.Single(mapped.Where(kvp => kvp.Value.Kind == EntryKind.File).Select(kvp => kvp.Key));
+        Assert.True(Path.Combine(root, path).Length <= 240, path);
+        Assert.EndsWith(extension, path);
+        Assert.Matches(@"_#[0-9a-f]{8}\.", Path.GetFileName(path));
+    }
+
+    [Fact]
     public void Directory_ancestor_longer_than_limit_shortens_multiple_levels()
     {
         var root = @"C:\" + new string('R', 62);

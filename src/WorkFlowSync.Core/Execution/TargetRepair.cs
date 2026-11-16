@@ -223,6 +223,7 @@ public static class TargetRepair
 
         HashSet<string>? plannedRemovedFiles = null;
         HashSet<string>? remainingDirectories = null;
+        HashSet<string>? trackedFileDirectories = null;
         foreach (var (path, item) in target.OrderBy(kvp => kvp.Value.Kind == EntryKind.Directory ? 1 : 0))
         {
             if (tracked.Contains(path)) continue;
@@ -323,6 +324,7 @@ public static class TargetRepair
                 if (remainingDirectories is null)
                 {
                     remainingDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    trackedFileDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var file in target.Where(kvp => kvp.Value.Kind == EntryKind.File &&
                                  !plannedRemovedFiles.Contains(kvp.Key) &&
                                  !Path.GetFileName(kvp.Key).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)))
@@ -331,6 +333,7 @@ public static class TargetRepair
                         while (!string.IsNullOrEmpty(parent))
                         {
                             remainingDirectories.Add(parent);
+                            if (tracked.Contains(file.Key)) trackedFileDirectories.Add(parent);
                             parent = Path.GetDirectoryName(parent);
                         }
                     }
@@ -343,6 +346,9 @@ public static class TargetRepair
                         plan.Rows.Add(new Row(path, "", "recycle-empty-directory", "empty directory"));
                     continue;
                 }
+                // A directory containing a retained, recorded copy is part of that copy's
+                // physical path. Source deletion does not make the parent an orphan.
+                if (trackedFileDirectories!.Contains(path)) continue;
             }
 
             if (Path.Combine(targetRoot, path).Length <= limit &&
