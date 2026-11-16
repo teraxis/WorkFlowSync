@@ -392,10 +392,121 @@ public sealed class TargetRepairTests : IDisposable
         };
 
         var plan = TargetRepair.Build("pair", _root, _root.Length + 40, source, target, state);
-        Assert.Equal(2, plan.ActionCount);
+        Assert.Equal(1, plan.ActionCount);
         Assert.Single(plan.Rows, r => r.Action == "move");
         Assert.Single(plan.Rows, r => r.Action == "recycle-duplicate-state");
+        plan.IncludeDuplicateCleanup = true;
+        Assert.Equal(2, plan.ActionCount);
         Assert.Equal(0, plan.Conflicts);
+    }
+
+    [Fact]
+    public void Default_repair_moves_long_target_file_but_leaves_duplicate_and_its_state_untouched()
+    {
+        var targetRoot = Path.Combine(_root, "cleanup-opt-in");
+        Directory.CreateDirectory(targetRoot);
+        var sourcePath = new string('C', 90) + ".txt";
+        var targetOnly = new string('U', 90) + ".txt";
+        var oldDuplicate = "CCC_#12345678.txt";
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [sourcePath] = new() { RelativePath = sourcePath, Kind = EntryKind.File }
+        };
+        var mapped = PathShortener.MapEntries(source, targetRoot, true, targetRoot.Length + 45,
+            null, null, out _);
+        var canonical = Assert.Single(mapped.Keys);
+        File.WriteAllText(Path.Combine(targetRoot, canonical), "known");
+        File.WriteAllText(Path.Combine(targetRoot, oldDuplicate), "known");
+        File.WriteAllText(Path.Combine(targetRoot, targetOnly), "other");
+        ScanEntry Observe(string path) => new()
+        {
+            RelativePath = path,
+            Kind = EntryKind.File,
+            Size = new FileInfo(Path.Combine(targetRoot, path)).Length,
+            MtimeUtc = new DateTimeOffset(File.GetLastWriteTimeUtc(Path.Combine(targetRoot, path)), TimeSpan.Zero)
+        };
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [canonical] = Observe(canonical),
+            [oldDuplicate] = Observe(oldDuplicate),
+            [targetOnly] = Observe(targetOnly)
+        };
+        using var store = new StateStore(Path.Combine(_root, "cleanup-opt-in.db"));
+        store.Upsert(new[] { canonical, oldDuplicate }.Select(path => new StateEntry
+        {
+            PairName = "pair",
+            RelativePath = path,
+            TargetPath = path,
+            RemoteId = sourcePath,
+            Kind = EntryKind.File,
+            Status = EntryStatus.Active,
+            FirstSeenUtc = target[path].MtimeUtc,
+            CopiedSize = target[path].Size,
+            CopiedMtimeUtc = target[path].MtimeUtc
+        }));
+
+        var plan = TargetRepair.Build("pair", targetRoot, targetRoot.Length + 45,
+            source, target, store.Load("pair"));
+        Assert.Single(plan.Rows, r => r.Action == "recycle-duplicate-state");
+        var move = Assert.Single(plan.Rows, r => r.Action == "move-target-only");
+        Assert.False(plan.IncludeDuplicateCleanup);
+        Assert.Equal(1, plan.ActionCount);
+        var report = Path.Combine(_root, "cleanup-opt-in.csv");
+        TargetRepair.WriteCsv(plan, report);
+        Assert.Contains("skip-recycle-duplicate-state", File.ReadAllText(report));
+        TargetRepair.Execute(plan, store);
+        Assert.True(File.Exists(Path.Combine(targetRoot, oldDuplicate)));
+        Assert.True(File.Exists(Path.Combine(targetRoot, canonical)));
+        Assert.Equal("other", File.ReadAllText(Path.Combine(targetRoot, move.NewPath)));
+        Assert.Equal(2, store.Load("pair").Count);
+    }
+
+    [Fact]
+    public void Missing_canonical_copy_is_not_planned_as_duplicate_recycle()
+    {
+        var sourcePath = new string('C', 90) + ".txt";
+        var oldDuplicate = "CCC_#12345678.txt";
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [sourcePath] = new() { RelativePath = sourcePath, Kind = EntryKind.File }
+        };
+        var mapped = PathShortener.MapEntries(source, _root, true, _root.Length + 45,
+            null, null, out _);
+        var canonical = Assert.Single(mapped.Keys);
+        var now = DateTimeOffset.UtcNow;
+        var state = new Dictionary<string, StateEntry>
+        {
+            [canonical] = new()
+            {
+                PairName = "pair",
+                RelativePath = canonical,
+                RemoteId = sourcePath,
+                Kind = EntryKind.File,
+                Status = EntryStatus.Active,
+                FirstSeenUtc = now,
+                CopiedSize = 5,
+                CopiedMtimeUtc = now
+            },
+            [oldDuplicate] = new()
+            {
+                PairName = "pair",
+                RelativePath = oldDuplicate,
+                RemoteId = sourcePath,
+                Kind = EntryKind.File,
+                Status = EntryStatus.Active,
+                FirstSeenUtc = now,
+                CopiedSize = 5,
+                CopiedMtimeUtc = now
+            }
+        };
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [oldDuplicate] = new() { RelativePath = oldDuplicate, Kind = EntryKind.File, Size = 5, MtimeUtc = now }
+        };
+
+        var plan = TargetRepair.Build("pair", _root, _root.Length + 45, source, target, state);
+        Assert.DoesNotContain(plan.Rows, r => TargetRepair.IsCleanupAction(r.Action));
+        Assert.Contains(plan.Rows, r => r.OldPath == oldDuplicate && r.Action == "conflict");
     }
 
     [Fact]

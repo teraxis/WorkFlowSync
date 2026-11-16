@@ -4,6 +4,13 @@ This is the immutable archive of published user-facing changes. During a release
 entries from `docs/pending-release-notes.md` under a new `vX.Y.Z (YYYY-MM-DD)` heading, omit empty
 sections, and reset the pending file for the next cycle.
 
+## v0.3.25 (2026-11-16)
+
+### Виправлено
+
+- Під час ремонту довгих шляхів прибирання дублікатів і порожніх тек до Кошика потребує окремого прапорця, вимкненого за замовчуванням. Консольна команда вимагає `--recycle-duplicates`.
+- План не позначає файл дублікатом, якщо канонічна копія відсутня й її перенесення не заплановане.
+
 ## v0.3.24 (2026-11-16)
 
 ### Виправлено

@@ -46,7 +46,7 @@ public sealed class RepairRunner
 
     public void Apply(TargetRepair.Plan plan, IProgress<RepairProgress>? progress = null)
     {
-        _log.Info($"[{_pair.Name}] repair start phase=apply actions={plan.ActionCount}");
+        _log.Info($"[{_pair.Name}] repair start phase=apply actions={plan.ActionCount} recycle_duplicates={plan.IncludeDuplicateCleanup}");
         try
         {
             if (_pair.Enabled) throw new InvalidOperationException("Pause the pair before applying repair");

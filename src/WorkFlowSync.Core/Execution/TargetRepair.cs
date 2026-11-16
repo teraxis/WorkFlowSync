@@ -15,13 +15,23 @@ public static class TargetRepair
 {
     public sealed record Row(string OldPath, string NewPath, string Action, string? Detail = null);
 
+    public static bool IsCleanupAction(string action) => action.StartsWith("recycle-", StringComparison.Ordinal);
+
     public sealed class Plan : IDisposable
     {
         public required string Pair { get; init; }
         public required string TargetRoot { get; init; }
+        public required int MaxPathLength { get; init; }
+        public bool IncludeDuplicateCleanup { get; set; }
         public List<Row> Rows { get; } = new();
         internal List<(Row Row, string Source, StateEntry State)> Work { get; } = new();
-        public int ActionCount => Work.Count + Rows.Count(r => r.Action is "recycle-cloud-duplicate" or "recycle-empty-directory");
+        public int ActionCount => Work.Count(w => IncludeDuplicateCleanup || !IsCleanupAction(w.Row.Action)) +
+            (IncludeDuplicateCleanup ? Rows.Count(r => r.Action is "recycle-cloud-duplicate" or "recycle-empty-directory") : 0);
+        public bool SkippedCleanupNeedsRepair => !IncludeDuplicateCleanup && Rows.Any(r =>
+            IsCleanupAction(r.Action) &&
+            (Path.Combine(TargetRoot, r.OldPath).Length > MaxPathLength ||
+             PathShortener.HasInvalidOrLongSegment(r.OldPath) ||
+             r.OldPath.Split('\\', '/').Any(segment => segment.EndsWith('.'))));
         public int Conflicts => Rows.Count(r => r.Action is "conflict" or "missing" or "untracked");
         public int SourceFileCount { get; internal set; }
         public int SourceEntryCount { get; internal set; }
@@ -87,6 +97,7 @@ public static class TargetRepair
         {
             Pair = pair,
             TargetRoot = Path.GetFullPath(targetRoot),
+            MaxPathLength = limit,
             SourceFileCount = source.Values.Count(e => e.Kind == EntryKind.File),
             SourceEntryCount = source.Count
         };
@@ -270,7 +281,10 @@ public static class TargetRepair
             }
             else if (sameOwner)
             {
-                action = observedOld is null ? "drop-stale-state" : "recycle-duplicate-state";
+                action = observedOld is null ? "drop-stale-state" :
+                    observedNew is not null || plannedDestinations.ContainsKey(newPath)
+                        ? "recycle-duplicate-state" : "conflict";
+                if (action == "conflict") detail = "Canonical copy is absent; duplicate cannot be verified";
             }
             else if (observedOld is null)
             {
@@ -489,7 +503,7 @@ public static class TargetRepair
     {
         if (plan.HasWidespreadMappingFailures)
             throw new InvalidOperationException("Repair plan has widespread path-mapping failures; no changes were applied");
-        if (!RecycleBin.IsAvailableFor(plan.TargetRoot))
+        if (plan.IncludeDuplicateCleanup && !RecycleBin.IsAvailableFor(plan.TargetRoot))
             throw new InvalidOperationException("Target repair requires a local Recycle Bin");
 
         var total = plan.ActionCount;
@@ -501,7 +515,8 @@ public static class TargetRepair
                 progress?.Report(new RepairProgress("apply", done, total));
         }
 
-        foreach (var (row, source, recorded) in plan.Work.Where(w => w.State.Kind == EntryKind.File))
+        foreach (var (row, source, recorded) in plan.Work.Where(w => w.State.Kind == EntryKind.File &&
+                     (plan.IncludeDuplicateCleanup || !IsCleanupAction(w.Row.Action))))
         {
             var oldFull = Path.Combine(plan.TargetRoot, row.OldPath);
             var newFull = Path.Combine(plan.TargetRoot, row.NewPath);
@@ -580,7 +595,7 @@ public static class TargetRepair
             Report(row);
         }
 
-        foreach (var row in plan.Work.Where(w => w.State.Kind == EntryKind.Directory)
+        foreach (var row in plan.Work.Where(w => plan.IncludeDuplicateCleanup && w.State.Kind == EntryKind.Directory)
                      .OrderByDescending(w => w.Row.OldPath.Length).Select(w => w.Row))
         {
             var oldFull = Path.Combine(plan.TargetRoot, row.OldPath);
@@ -588,7 +603,7 @@ public static class TargetRepair
                 RecycleLongPath(plan.TargetRoot, oldFull, directory: true);
         }
 
-        foreach (var row in plan.Rows.Where(r => r.Action == "recycle-cloud-duplicate"))
+        foreach (var row in plan.Rows.Where(r => plan.IncludeDuplicateCleanup && r.Action == "recycle-cloud-duplicate"))
         {
             var oldFull = Path.Combine(plan.TargetRoot, row.OldPath);
             if (File.Exists(FsPath(oldFull)))
@@ -605,7 +620,7 @@ public static class TargetRepair
             Report(row);
         }
 
-        foreach (var row in plan.Rows.Where(r => r.Action == "recycle-empty-directory")
+        foreach (var row in plan.Rows.Where(r => plan.IncludeDuplicateCleanup && r.Action == "recycle-empty-directory")
                      .OrderByDescending(r => r.OldPath.Length))
         {
             var oldFull = Path.Combine(plan.TargetRoot, row.OldPath);
@@ -623,7 +638,7 @@ public static class TargetRepair
             Report(row);
         }
 
-        if (plan.Conflicts == 0)
+        if (plan.Conflicts == 0 && !plan.SkippedCleanupNeedsRepair)
             store.ClearRepairRequired(plan.Pair);
     }
 
@@ -633,7 +648,9 @@ public static class TargetRepair
         using var writer = new StreamWriter(reportPath, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         writer.WriteLine("old_path,new_path,action,detail");
         foreach (var row in plan.Rows)
-            writer.WriteLine(string.Join(",", Csv(row.OldPath), Csv(row.NewPath), Csv(row.Action), Csv(row.Detail ?? "")));
+            writer.WriteLine(string.Join(",", Csv(row.OldPath), Csv(row.NewPath),
+                Csv(!plan.IncludeDuplicateCleanup && IsCleanupAction(row.Action) ? "skip-" + row.Action : row.Action),
+                Csv(row.Detail ?? "")));
     }
 
     private static string Csv(string value) => "\"" + value.Replace("\"", "\"\"") + "\"";

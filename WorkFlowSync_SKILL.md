@@ -13,6 +13,8 @@
 
 ## Path repair update (2026-11-11)
 
+- Duplicate and empty-directory recycle during path repair is opt-in (`Plan.IncludeDuplicateCleanup`, GUI checkbox, CLI `--recycle-duplicates`). Never send files to Recycle Bin for the default path-only apply. Keep the repair marker if a skipped cleanup path still exceeds limits. CSV marks omitted cleanup rows with `skip-recycle-*`.
+
 - Retained state-tracked files whose source disappeared may be shortened with `move-retained`; preserve the state entry and its first-seen history.
 
 - Target-only files with overlong or invalid physical paths are planned as `move-target-only` after the known-copy pass. This is a same-root move with metadata recheck and destination collision guard; it never writes a sync state row. An exact non-tombstoned source copy may instead use the existing `adopt-untracked` path. Safe-length legacy hash names alone are not conflicts. Test long paths with temp roots, not the owner's OneDrive target.

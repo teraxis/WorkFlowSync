@@ -192,18 +192,19 @@ internal static class Program
         using var log = new FileSyncLog(logPath, keepDays: cfg.LogKeepDays);
         var runner = new RepairRunner(pair, cfg, opts.ConfigPath, statePath, log);
         using var plan = runner.Prepare();
+        plan.IncludeDuplicateCleanup = opts.RecycleDuplicates;
         if (opts.ReportPath is not null)
         {
             TargetRepair.WriteCsv(plan, opts.ReportPath);
             Console.WriteLine($"repair report: {Path.GetFullPath(opts.ReportPath)}");
         }
-        Console.WriteLine($"repair plan: keep={plan.KeepFiles} rename={plan.RenameFiles} recycle={plan.RecycleFiles} unresolved={plan.Conflicts}");
+        Console.WriteLine($"repair plan: keep={plan.KeepFiles} rename={plan.RenameFiles} recycle={(plan.IncludeDuplicateCleanup ? plan.RecycleFiles : 0)} optional_recycle={plan.RecycleFiles} unresolved={plan.Conflicts}");
         if (!opts.DryRun)
         {
             runner.Apply(plan);
             Console.WriteLine("repair applied; wait for cloud synchronization before resuming the pair");
         }
-        return plan.Conflicts == 0 ? 0 : 1;
+        return plan.Conflicts == 0 && !plan.SkippedCleanupNeedsRepair ? 0 : 1;
     }
 
     /// <summary>
@@ -530,8 +531,8 @@ internal static class Program
               wfs autostart on|off|status [--tray] [--config <path>]   Startup-folder shortcut at logon
                                                               (default: wfs sync --loop; --tray: the app in the notification area)
               wfs task on|off|status [--config <path>]        Task Scheduler task running `sync --once` every <interval>
-              wfs repair --pair <name> --dry-run [--report <csv>]
-              wfs repair --pair <name> [--report <csv>]  (pair must be paused)
+              wfs repair --pair <name> --dry-run [--report <csv>] [--recycle-duplicates]
+              wfs repair --pair <name> [--report <csv>] [--recycle-duplicates]  (pair must be paused)
               wfs version
 
             options:
@@ -546,6 +547,7 @@ internal static class Program
                                 updates only, never deletions. Needs one pair; not valid with --loop
               --watch <sec>     probe: listen for change notifications for this many seconds
               --report <path>   repair: write CSV report here
+              --recycle-duplicates  repair: also move verified duplicate files and empty folders to Recycle Bin
 
             exit codes: 0 ok, 1 error, 2 usage/config, 3 not implemented, 4 another pass is running
             """);
@@ -566,6 +568,7 @@ internal static class Program
                 case "--once": o.Once = true; break;
                 case "--loop": o.Loop = true; break;
                 case "--dry-run": o.DryRun = true; break;
+                case "--recycle-duplicates": o.RecycleDuplicates = true; break;
                 case "--backfill": o.Backfill = true; break;
                 case "--verbose": o.Verbose = true; break;
                 case "--tray": o.Tray = true; break;
@@ -604,6 +607,7 @@ internal static class Program
         public bool Once { get; set; }
         public bool Loop { get; set; }
         public bool DryRun { get; set; }
+        public bool RecycleDuplicates { get; set; }
         public bool Backfill { get; set; }
         public bool Verbose { get; set; }
         public bool Tray { get; set; }

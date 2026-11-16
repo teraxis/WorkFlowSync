@@ -171,7 +171,7 @@ public partial class MainWindow : Window
                     await Task.Run(() => runner.Apply(plan, applyProgress));
                     progressWindow.Close();
                     progressWindow = null;
-                    pair.RepairRequired = plan.Conflicts > 0;
+                    pair.RepairRequired = plan.Conflicts > 0 || plan.SkippedCleanupNeedsRepair;
                 }
             }
             var restored = 0;

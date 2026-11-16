@@ -2,13 +2,15 @@
         x:Class="WorkFlowSync.App.Views.RepairPreviewWindow" Width="860" Height="610"
         MinWidth="650" MinHeight="420" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource SurfaceCanvas}">
-    <Grid Margin="20" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="12">
         <TextBlock x:Name="SummaryText" Grid.Row="0" TextWrapping="Wrap" FontSize="16" />
         <TextBlock x:Name="HintText" Grid.Row="1" TextWrapping="Wrap" />
-        <TextBox x:Name="RowsText" Grid.Row="2" IsReadOnly="True" AcceptsReturn="True"
+        <CheckBox x:Name="DuplicateCleanupCheck" Grid.Row="2" IsChecked="False"
+                  Checked="OnCleanupChanged" Unchecked="OnCleanupChanged" />
+        <TextBox x:Name="RowsText" Grid.Row="3" IsReadOnly="True" AcceptsReturn="True"
                  TextWrapping="NoWrap" FontFamily="Consolas" ScrollViewer.HorizontalScrollBarVisibility="Auto"
                  ScrollViewer.VerticalScrollBarVisibility="Auto" />
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
             <Button x:Name="ExportButton" Click="OnExport" />
             <Button x:Name="CancelButton" Click="OnCancel" IsCancel="True" />
             <Button x:Name="ApplyButton" Classes="primary danger" Click="OnApply" />
