@@ -40,6 +40,96 @@ public sealed class TargetRepairTests : IDisposable
     }
 
     [Fact]
+    public void Deep_tree_does_not_mark_short_root_as_unmappable()
+    {
+        var targetRoot = @"C:\" + new string('R', 62);
+        var directories = Enumerable.Range(1, 10).Select(i => $"folder_{i:D2}_long_name").ToArray();
+        var deepFile = string.Join("\\", directories) + "\\document.txt";
+        var source = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 1; i <= directories.Length; i++)
+        {
+            var path = string.Join("\\", directories.Take(i));
+            source[path] = new ScanEntry { RelativePath = path, Kind = EntryKind.Directory };
+        }
+        source[deepFile] = new ScanEntry { RelativePath = deepFile, Kind = EntryKind.File };
+
+        var plan = TargetRepair.Build("pair", targetRoot, 240, source,
+            new Dictionary<string, ScanEntry>(), new Dictionary<string, StateEntry>());
+
+        Assert.DoesNotContain(plan.Rows, r => r.Action == "conflict" && r.OldPath == directories[0]);
+        Assert.Equal(0, plan.Conflicts);
+        Assert.Equal(source.Count, plan.CheckedPaths);
+        Assert.Equal(0, plan.TooLongPaths);
+    }
+
+    [Fact]
+    public void Impossible_deep_branch_does_not_hide_a_safe_sibling()
+    {
+        var targetRoot = @"C:\" + new string('R', 62);
+        var source = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Root"] = new() { RelativePath = "Root", Kind = EntryKind.Directory },
+            ["Root\\safe.txt"] = new() { RelativePath = "Root\\safe.txt", Kind = EntryKind.File }
+        };
+        var dir = "Root";
+        for (var i = 0; i < 12; i++)
+        {
+            dir += $"\\very_long_folder_{i:D2}";
+            source[dir] = new ScanEntry { RelativePath = dir, Kind = EntryKind.Directory };
+        }
+        source[dir + "\\deep.txt"] = new ScanEntry { RelativePath = dir + "\\deep.txt", Kind = EntryKind.File };
+
+        var plan = TargetRepair.Build("pair", targetRoot, 150, source,
+            new Dictionary<string, ScanEntry>(), new Dictionary<string, StateEntry>());
+
+        Assert.Contains(plan.Rows, r => r.Action == "conflict" && r.OldPath.EndsWith("deep.txt"));
+        Assert.DoesNotContain(plan.Rows, r => r.Action == "conflict" && r.OldPath == "Root");
+        Assert.Equal(0, plan.TooLongPaths);
+        Assert.False(plan.HasWidespreadMappingFailures);
+    }
+
+    [Fact]
+    public void Many_deep_branches_do_not_create_a_cascade_of_root_conflicts()
+    {
+        var source = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase);
+        for (var branch = 0; branch < 51; branch++)
+        {
+            var path = $"root_{branch:D2}";
+            source[path] = new ScanEntry { RelativePath = path, Kind = EntryKind.Directory };
+            for (var depth = 0; depth < 9; depth++)
+            {
+                path += $"\\nested_folder_{depth:D2}";
+                source[path] = new ScanEntry { RelativePath = path, Kind = EntryKind.Directory };
+            }
+            path += "\\document.txt";
+            source[path] = new ScanEntry { RelativePath = path, Kind = EntryKind.File };
+        }
+
+        var plan = TargetRepair.Build("pair", @"C:\" + new string('R', 62), 240, source,
+            new Dictionary<string, ScanEntry>(), new Dictionary<string, StateEntry>());
+
+        Assert.Equal(0, plan.MappingFailures);
+        Assert.Equal(source.Count, plan.CheckedPaths);
+        Assert.Equal(0, plan.TooLongPaths);
+    }
+
+    [Fact]
+    public void Widespread_mapping_failures_block_repair_before_any_write()
+    {
+        var targetRoot = @"C:\" + new string('R', 225);
+        var source = Enumerable.Range(0, 101).ToDictionary(i => $"long-file-{i:D3}.txt",
+            i => new ScanEntry { RelativePath = $"long-file-{i:D3}.txt", Kind = EntryKind.File });
+        var plan = TargetRepair.Build("pair", targetRoot, 240, source,
+            new Dictionary<string, ScanEntry>(), new Dictionary<string, StateEntry>());
+
+        Assert.True(plan.HasWidespreadMappingFailures);
+        Assert.Equal(101, plan.MappingFailures);
+        using var store = new StateStore(Path.Combine(_root, "guard-state.db"));
+        Assert.Throws<InvalidOperationException>(() => TargetRepair.Execute(plan, store));
+        Assert.Empty(store.Load("pair"));
+    }
+
+    [Fact]
     public void Untracked_legacy_hash_copy_is_recycled_after_tracked_copy_moves()
     {
         var original = new string('C', 100) + ".txt";
@@ -150,7 +240,8 @@ public sealed class TargetRepairTests : IDisposable
         var plan = TargetRepair.Build("pair", targetRoot, 240, source, target, state);
         Assert.Equal(54, plan.RenameFiles);
         Assert.Equal(54, plan.RecycleFiles);
-        Assert.Equal(2, plan.Rows.Count(r => r.Action == "recycle-empty-directory"));
+        Assert.Single(plan.Rows, r => r.Action == "recycle-empty-directory" && r.OldPath == oldDir);
+        Assert.DoesNotContain(plan.Rows, r => r.Action == "recycle-empty-directory" && r.OldPath == fullDir);
         Assert.Equal(0, plan.Conflicts);
         Assert.Equal(0, plan.TooLongPaths);
         Assert.Equal(0, plan.ShortHashes);
@@ -343,7 +434,7 @@ public sealed class TargetRepairTests : IDisposable
     }
 
     [Fact]
-    public void Tombstone_is_revived_to_active_and_relocated_if_physically_present()
+    public void Tombstone_remains_final_even_if_matching_file_is_physically_present()
     {
         var original = "VeryLongFolder_#1234\\test_doc.docx";
         var now = DateTimeOffset.UtcNow;
@@ -372,12 +463,40 @@ public sealed class TargetRepairTests : IDisposable
         } });
 
         var plan = TargetRepair.Build("pair", targetRoot, 200, source, target, store.Load("pair"));
-        Assert.Contains(plan.Rows, r => r.Action is "move" or "adopt-existing");
+        Assert.DoesNotContain(plan.Rows, r =>
+            (r.Action is "move" or "adopt-existing") && r.OldPath == original);
+        Assert.Equal(0, plan.ActionCount);
+        Assert.Equal(EntryStatus.Tombstone, Assert.Single(store.Load("pair").Values).Status);
+    }
 
-        TargetRepair.Execute(plan, store);
-        var state = store.Load("pair");
-        var active = Assert.Single(state.Values);
-        Assert.Equal(EntryStatus.Active, active.Status);
+    [Fact]
+    public void Untracked_legacy_variant_cannot_revive_a_tombstoned_source()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var original = "CCC" + new string('C', 100) + ".txt";
+        var legacy = "CCC_#12345678.txt";
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 5, MtimeUtc = now }
+        };
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [legacy] = new() { RelativePath = legacy, Kind = EntryKind.File, Size = 5, MtimeUtc = now }
+        };
+        var state = new Dictionary<string, StateEntry>
+        {
+            [original] = new()
+            {
+                PairName = "pair", RelativePath = original, TargetPath = original,
+                Status = EntryStatus.Tombstone, Kind = EntryKind.File,
+                FirstSeenUtc = now, CopiedSize = 5, CopiedMtimeUtc = now
+            }
+        };
+
+        var plan = TargetRepair.Build("pair", _root, _root.Length + 40, source, target, state);
+
+        Assert.Equal(0, plan.ActionCount);
+        Assert.DoesNotContain(plan.Rows, row => row.Action is "move" or "adopt-existing");
     }
 
     [Fact]
@@ -397,6 +516,22 @@ public sealed class TargetRepairTests : IDisposable
         var row = Assert.Single(plan.Rows);
         Assert.Equal("recycle-empty-directory", row.Action);
         Assert.Equal(0, plan.Conflicts);
+    }
+
+    [Fact]
+    public void Untracked_empty_folder_without_generated_hash_is_preserved()
+    {
+        var source = new Dictionary<string, ScanEntry>();
+        var target = new Dictionary<string, ScanEntry>
+        {
+            ["Personal notes"] = new() { RelativePath = "Personal notes", Kind = EntryKind.Directory }
+        };
+
+        var plan = TargetRepair.Build("pair", _root, 200, source, target,
+            new Dictionary<string, StateEntry>());
+
+        Assert.Equal(0, plan.ActionCount);
+        Assert.DoesNotContain(plan.Rows, row => row.Action == "recycle-empty-directory");
     }
 
     [Fact]

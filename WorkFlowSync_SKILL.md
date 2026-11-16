@@ -13,6 +13,8 @@
 
 ## Path repair update (2026-11-11)
 
+- The 2026-11-16 repair-plan fix reserves only the minimum hashed segment (3 stem + `_#` + 8 hex) per deeper directory plus a stable file allowance. Clamp each directory budget to its own minimum physical length so an impossible descendant does not invalidate an entire root. `TargetRepair` never revives tombstones, preserves unrelated empty folders, and blocks apply when at least 100 mapping failures exceed 20% of scanned source entries. Test against temporary trees only; the user's CSV is diagnostic evidence, not an apply plan.
+
 - Schema v5 stores `target_path`; v4 migration creates `state.db.v4-backup` before changing rows. Do not recompute recorded target names when path settings change.
 - `PathShortener.MapEntries` reserves each directory's deepest descendant tail before mapping it. Generated hashes have at least eight hex characters; a file collision gets a longer exact-case hash. `PathLimits` caps the configured limit by Windows and OneDrive constraints.
 - The separate Repair long paths task action previews counts and applies confirmed safe moves. `wfs repair --pair NAME --dry-run` prints counts; CSV export is opt-in via `--report`. The repair plan stays in memory and is cleared when the action completes, while `state.db` remains persistent. Applying repair requires the pair to be paused. Conflicts and untracked items remain untouched. Never test apply against the owner's real pair.

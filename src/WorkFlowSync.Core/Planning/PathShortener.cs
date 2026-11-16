@@ -297,22 +297,14 @@ public static class PathShortener
             .ThenBy(d => d, StringComparer.OrdinalIgnoreCase)
             .ThenBy(d => d, StringComparer.Ordinal).ToArray();
 
-        // Reserve enough space for the deepest descendant before mapping any directory. Otherwise
-        // a directory mapped for a short child can leave no room for a later long file name.
-        var requiredTail = sortedDirs.ToDictionary(d => d, _ => 0, StringComparer.OrdinalIgnoreCase);
-        foreach (var (path, entry) in source)
-        {
-            if (entry.Kind == EntryKind.Directory) continue;
-            var parent = Path.GetDirectoryName(path);
-            if (parent is null || !requiredTail.ContainsKey(parent)) continue;
-            var extension = Path.GetExtension(path);
-            requiredTail[parent] = Math.Max(requiredTail[parent], 1 + 3 + 2 + 16 + extension.Length);
-        }
+        // Reserve the minimum hashed name for each deeper directory and a stable file-name allowance.
+        // Reserving a longer collision hash at every level makes otherwise valid deep trees impossible.
+        var requiredTail = sortedDirs.ToDictionary(d => d, _ => 32, StringComparer.OrdinalIgnoreCase);
         foreach (var dir in sortedDirs.AsEnumerable().Reverse())
         {
             var parent = Path.GetDirectoryName(dir);
             if (parent is not null && requiredTail.ContainsKey(parent))
-                requiredTail[parent] = Math.Max(requiredTail[parent], 1 + 3 + 2 + 16 + requiredTail[dir]);
+                requiredTail[parent] = Math.Max(requiredTail[parent], 1 + 3 + 10 + requiredTail[dir]);
         }
 
         foreach (var dir in sortedDirs)
@@ -341,8 +333,19 @@ public static class PathShortener
                         mappedParent = parent;
 
                     var candidate = string.IsNullOrEmpty(mappedParent) ? baseDir : Path.Combine(mappedParent, baseDir);
-                    dirMap[dir] = enabled ? MapDirectory(targetRoot, candidate, origDir,
-                        maxPathLength - Math.Max(requiredTail[dir], 32)) : candidate;
+                    if (enabled)
+                    {
+                        var parentLength = Path.Combine(targetRoot, mappedParent).Length;
+                        var trimmedLength = baseDir.Trim().Length;
+                        var minimumNameLength = trimmedLength == 0 ? 13 : Math.Min(trimmedLength, 13);
+                        var minimumBudget = parentLength + 1 + minimumNameLength;
+                        var budget = Math.Clamp(maxPathLength - requiredTail[dir], minimumBudget, maxPathLength);
+                        dirMap[dir] = MapDirectory(targetRoot, candidate, origDir, budget);
+                    }
+                    else
+                    {
+                        dirMap[dir] = candidate;
+                    }
                 }
                 if (mappedDirOwners.TryGetValue(dirMap[dir], out var owner) &&
                     !owner.Equals(origDir, StringComparison.OrdinalIgnoreCase))
@@ -359,8 +362,11 @@ public static class PathShortener
                     {
                         try
                         {
+                            var alternativeParentLength = Path.Combine(targetRoot, mappedParent).Length;
+                            var alternativeBudget = Math.Min(maxPathLength,
+                                Math.Max(maxPathLength - requiredTail[dir], alternativeParentLength + 1 + 3 + 2 + hashLength));
                             var alternative = MapDirectory(targetRoot, candidate, origDir,
-                                maxPathLength - Math.Max(requiredTail[dir], 32), hashLength, forceShorten: true);
+                                alternativeBudget, hashLength, forceShorten: true);
                             if (mappedDirOwners.ContainsKey(alternative)) continue;
                             dirMap[dir] = alternative;
                             break;

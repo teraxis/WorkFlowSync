@@ -4,6 +4,14 @@ This is the immutable archive of published user-facing changes. During a release
 entries from `docs/pending-release-notes.md` under a new `vX.Y.Z (YYYY-MM-DD)` heading, omit empty
 sections, and reset the pending file for the next cycle.
 
+## v0.3.22 (2026-11-16)
+
+### Виправлено
+
+- Усунуто хибні масові конфлікти ремонту для коротких тек із глибокими вкладеннями.
+- Ремонт шляхів не відновлює автоматично раніше видалені файли та не надсилає до Кошика сторонні порожні теки.
+- Застосування плану з масовими помилками побудови шляхів блокується до повторної перевірки.
+
 ## v0.3.21 (2026-11-13)
 
 ### Виправлено

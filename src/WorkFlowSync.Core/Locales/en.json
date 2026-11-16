@@ -28,6 +28,7 @@
   "troubleshoot.kind_Conflict": "Conflict",
   "repair.preview_title": "Repair preview",
   "repair.preview_hint": "The first 100 planned actions and unresolved items are shown. Save the full list separately.",
+  "repair.preview_mapping_failure": "Widespread path-mapping failures were found. Applying this unreliable plan is blocked. Check the path limit and rebuild the plan.",
   "repair.preview_summary": "Keep: {0:N0} files, {1} GB\nRename: {2:N0} files, {3} GB\nRecycle: {4:N0} files, {5} GB\nUnresolved: {6:N0}; path >260: {7:N0}; segment >240 bytes: {8:N0}; >200 bytes: {9:N0}",
   "app.title": "WorkFlowSync",
   "tasks.repair_target": "Repair long paths",

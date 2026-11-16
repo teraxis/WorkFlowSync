@@ -16,11 +16,12 @@ public partial class RepairPreviewWindow : Window
     {
         var window = new RepairPreviewWindow { _plan = plan };
         window.Title = I18n.T("repair.preview_title");
-        window.HintText.Text = I18n.T("repair.preview_hint");
+        window.HintText.Text = I18n.T(plan.HasWidespreadMappingFailures
+            ? "repair.preview_mapping_failure" : "repair.preview_hint");
         window.ExportButton.Content = I18n.T("troubleshoot.export");
         window.CancelButton.Content = I18n.T("common.cancel");
         window.ApplyButton.Content = I18n.T("troubleshoot.apply_paths");
-        window.ApplyButton.IsEnabled = plan.ActionCount > 0;
+        window.ApplyButton.IsEnabled = plan.ActionCount > 0 && !plan.HasWidespreadMappingFailures;
         static string Gb(long bytes) => (bytes / 1_000_000_000d).ToString("N2");
         var full = plan.Rows.Count(r => r.OldPath.Length > 260 || r.NewPath.Length > 260);
         var segments240 = plan.Rows.Count(r => r.OldPath.Split('\\').Any(s => System.Text.Encoding.UTF8.GetByteCount(s) > 240));

@@ -24,6 +24,10 @@ public static class TargetRepair
         public int ActionCount => Work.Count + Rows.Count(r => r.Action is "recycle-cloud-duplicate" or "recycle-empty-directory");
         public int Conflicts => Rows.Count(r => r.Action is "conflict" or "missing" or "untracked");
         public int SourceFileCount { get; internal set; }
+        public int SourceEntryCount { get; internal set; }
+        public int MappingFailures { get; internal set; }
+        public bool HasWidespreadMappingFailures => MappingFailures >= 100 &&
+            MappingFailures * 5L > SourceEntryCount;
         public int CheckedPaths { get; internal set; }
         public int TooLongPaths { get; internal set; }
         public int DuplicatePaths { get; internal set; }
@@ -81,10 +85,12 @@ public static class TargetRepair
         {
             Pair = pair,
             TargetRoot = Path.GetFullPath(targetRoot),
-            SourceFileCount = source.Values.Count(e => e.Kind == EntryKind.File)
+            SourceFileCount = source.Values.Count(e => e.Kind == EntryKind.File),
+            SourceEntryCount = source.Count
         };
         var canonical = PathShortener.MapEntries(source, targetRoot, true, limit, null, null,
             out var mappedToSource, (path, detail) => plan.Rows.Add(new Row(path, "", "conflict", detail)));
+        plan.MappingFailures = plan.Rows.Count;
         plan.CheckedPaths = canonical.Count;
         plan.TooLongPaths = canonical.Keys.Count(p => Path.Combine(targetRoot, p).Length > limit ||
             p.Split('\\', '/').Any(s => s.EndsWith(' ') || s.EndsWith('.')));
@@ -99,7 +105,10 @@ public static class TargetRepair
         var sourceToCanonical = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var targetFilesBySize = target.Where(kvp => kvp.Value.Kind == EntryKind.File)
             .GroupBy(kvp => kvp.Value.Size).ToDictionary(g => g.Key, g => g.ToList());
-        var sourceFilesBySignature = source.Where(kvp => kvp.Value.Kind == EntryKind.File)
+        var tombstonedSources = state.Values.Where(e => e.Status == EntryStatus.Tombstone)
+            .Select(e => e.RemoteId ?? e.RelativePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var sourceFilesBySignature = source.Where(kvp => kvp.Value.Kind == EntryKind.File &&
+                !tombstonedSources.Contains(kvp.Key))
             .GroupBy(kvp => FileSignature(kvp.Key, kvp.Value.Size))
             .ToDictionary(g => g.Key, g => g.ToList());
         foreach (var path in canonical.Keys)
@@ -125,12 +134,7 @@ public static class TargetRepair
             var sourcePath = entry.RemoteId ?? entry.RelativePath;
             var oldPath = entry.TargetPath ?? entry.RelativePath;
 
-            if (entry.Status == EntryStatus.Tombstone)
-            {
-                if (!sourceToCanonical.TryGetValue(sourcePath, out _))
-                    continue;
-            }
-            else if (entry.Status != EntryStatus.Active)
+            if (entry.Status != EntryStatus.Active)
             {
                 continue;
             }
@@ -139,14 +143,6 @@ public static class TargetRepair
 
             if (oldPath.Equals(newPath, StringComparison.OrdinalIgnoreCase))
             {
-                if (entry.Status == EntryStatus.Tombstone && target.TryGetValue(newPath, out var obsTombstone) && Matches(obsTombstone, entry))
-                {
-                    var reviveRow = new Row(oldPath, newPath, "adopt-existing", "revive-tombstone");
-                    plan.Rows.Add(reviveRow);
-                    plan.Work.Add((reviveRow, sourcePath, entry));
-                    plannedDestinations[newPath] = entry;
-                    tracked.Add(newPath);
-                }
                 continue;
             }
 
@@ -339,9 +335,12 @@ public static class TargetRepair
                         }
                     }
                 }
+                // Only generated hash variants belong to repair. An unrelated empty target folder
+                // may be user-created and must remain untouched.
                 if (!remainingDirectories.Contains(path))
                 {
-                    plan.Rows.Add(new Row(path, "", "recycle-empty-directory", "empty directory"));
+                    if (Regex.IsMatch(Path.GetFileName(path), @"_#[0-9a-f]{4,64}$", RegexOptions.IgnoreCase))
+                        plan.Rows.Add(new Row(path, "", "recycle-empty-directory", "empty directory"));
                     continue;
                 }
             }
@@ -365,6 +364,8 @@ public static class TargetRepair
     public static void Execute(Plan plan, StateStore store,
         IProgress<RepairProgress>? progress = null, Action<Row>? completed = null)
     {
+        if (plan.HasWidespreadMappingFailures)
+            throw new InvalidOperationException("Repair plan has widespread path-mapping failures; no changes were applied");
         if (!RecycleBin.IsAvailableFor(plan.TargetRoot))
             throw new InvalidOperationException("Target repair requires a local Recycle Bin");
 
@@ -391,9 +392,7 @@ public static class TargetRepair
                 File.Move(FsPath(oldFull), FsPath(newFull));
                 try
                 {
-                    if (recorded.Status == EntryStatus.Tombstone)
-                        store.ReviveTombstone(plan.Pair, row.OldPath, row.NewPath, source);
-                    else if (row.Detail == "adopt-untracked")
+                    if (row.Detail == "adopt-untracked")
                         store.Upsert(new[] { recorded with { RelativePath = row.NewPath,
                             TargetPath = row.NewPath, RemoteId = source } });
                     else
@@ -419,8 +418,6 @@ public static class TargetRepair
                 {
                     if (row.Action == "recycle-duplicate-state")
                         store.Delete(plan.Pair, new[] { row.OldPath });
-                    else if (recorded.Status == EntryStatus.Tombstone)
-                        store.ReviveTombstone(plan.Pair, row.OldPath, row.NewPath, source);
                     else
                         store.RelocateTarget(plan.Pair, row.OldPath, row.NewPath, source);
                 }
@@ -431,9 +428,7 @@ public static class TargetRepair
             {
                 if (!File.Exists(FsPath(newFull)) || !Matches(new FileInfo(FsPath(newFull)), recorded))
                     throw new IOException($"Repair destination disappeared after planning: {newFull}");
-                if (recorded.Status == EntryStatus.Tombstone)
-                    store.ReviveTombstone(plan.Pair, row.OldPath, row.NewPath, source);
-                else if (row.Detail == "adopt-untracked")
+                if (row.Detail == "adopt-untracked")
                     store.Upsert(new[] { recorded with { RelativePath = row.NewPath,
                         TargetPath = row.NewPath, RemoteId = source } });
                 else
