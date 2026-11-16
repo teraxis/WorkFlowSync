@@ -34,8 +34,10 @@ public static class TargetRepair
         public int ShortHashes { get; internal set; }
         public int KeepFiles { get; internal set; }
         public long KeepBytes { get; internal set; }
-        public int RenameFiles => Work.Count(w => w.State.Kind == EntryKind.File && w.Row.Action == "move");
-        public long RenameBytes => Work.Where(w => w.State.Kind == EntryKind.File && w.Row.Action == "move")
+        public int RenameFiles => Work.Count(w => w.State.Kind == EntryKind.File &&
+            w.Row.Action is "move" or "move-retained" or "move-target-only");
+        public long RenameBytes => Work.Where(w => w.State.Kind == EntryKind.File &&
+            w.Row.Action is "move" or "move-retained" or "move-target-only")
             .Sum(w => w.State.CopiedSize ?? 0);
         public int RecycleFiles => Work.Count(w => w.State.Kind == EntryKind.File &&
             w.Row.Action is "recycle-duplicate" or "recycle-duplicate-state" or "recycle-duplicate-untracked") +
@@ -124,6 +126,36 @@ public static class TargetRepair
             tracked.Add(c);
         }
 
+        bool NeedsShortening(string path) => Path.Combine(targetRoot, path).Length > limit ||
+            PathShortener.HasInvalidOrLongSegment(path) ||
+            path.Split('\\', '/').Any(segment => segment.EndsWith('.'));
+        var targetOnlyFiles = target.Where(kvp => kvp.Value.Kind == EntryKind.File &&
+                !tracked.Contains(kvp.Key) && NeedsShortening(kvp.Key))
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+        var targetOnlyFailures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var shortenedTargetOnly = PathShortener.MapEntries(targetOnlyFiles, targetRoot, true, limit,
+            null, null, out var targetOnlyOwners,
+            (path, reason) => targetOnlyFailures[path] = reason);
+        var targetOnlyDestinations = shortenedTargetOnly.Keys.ToDictionary(
+            path => targetOnlyOwners.GetValueOrDefault(path) ?? path,
+            path => path, StringComparer.OrdinalIgnoreCase);
+        var retainedSources = state.Values.Where(entry => entry.Kind == EntryKind.File &&
+                entry.Status != EntryStatus.Tombstone &&
+                NeedsShortening(entry.TargetPath ?? entry.RelativePath) &&
+                !sourceToCanonical.ContainsKey(entry.RemoteId ?? entry.RelativePath))
+            .Select(entry => entry.RemoteId ?? entry.RelativePath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(path => path,
+                path => new ScanEntry { RelativePath = path, Kind = EntryKind.File },
+                StringComparer.OrdinalIgnoreCase);
+        var retainedFailures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var shortenedRetained = PathShortener.MapEntries(retainedSources, targetRoot, true, limit,
+            null, null, out var retainedOwners,
+            (path, reason) => retainedFailures[path] = reason);
+        var retainedDestinations = shortenedRetained.Keys.ToDictionary(
+            path => retainedOwners.GetValueOrDefault(path) ?? path,
+            path => path, StringComparer.OrdinalIgnoreCase);
+
         var plannedDestinations = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
         var processed = 0;
         foreach (var entry in state.Values.OrderBy(e => e.Kind == EntryKind.Directory ? 1 : 0)
@@ -134,12 +166,50 @@ public static class TargetRepair
             var sourcePath = entry.RemoteId ?? entry.RelativePath;
             var oldPath = entry.TargetPath ?? entry.RelativePath;
 
-            if (entry.Status != EntryStatus.Active)
+            var hasCanonical = sourceToCanonical.TryGetValue(sourcePath, out var mappedPath);
+            if (entry.Status != EntryStatus.Active || !hasCanonical)
             {
+                if (entry.Kind != EntryKind.File || entry.Status == EntryStatus.Tombstone ||
+                    !NeedsShortening(oldPath)) continue;
+                string retainedDestination;
+                if (hasCanonical)
+                    retainedDestination = mappedPath!;
+                else if (!retainedDestinations.TryGetValue(sourcePath, out retainedDestination!))
+                {
+                    plan.Rows.Add(new Row(oldPath, "", "conflict",
+                        retainedFailures.GetValueOrDefault(sourcePath) ?? "Retained copy cannot be shortened"));
+                    continue;
+                }
+                if (oldPath.Equals(retainedDestination, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!target.TryGetValue(oldPath, out var retainedOld) || retainedOld.Kind != EntryKind.File)
+                {
+                    plan.Rows.Add(new Row(oldPath, retainedDestination, "missing", "Retained copy is absent"));
+                    continue;
+                }
+                var canonicalSource = mappedToSource.GetValueOrDefault(retainedDestination);
+                var destinationBlocked = target.ContainsKey(retainedDestination) ||
+                    plannedDestinations.ContainsKey(retainedDestination) ||
+                    (canonicalSource is not null &&
+                     !canonicalSource.Equals(sourcePath, StringComparison.OrdinalIgnoreCase)) ||
+                    state.ContainsKey(retainedDestination);
+                if (destinationBlocked)
+                {
+                    plan.Rows.Add(new Row(oldPath, retainedDestination, "conflict", "Retained destination is occupied or reserved"));
+                    continue;
+                }
+                var verification = entry with
+                {
+                    CopiedSize = retainedOld.Size,
+                    CopiedMtimeUtc = retainedOld.MtimeUtc
+                };
+                var retainedRow = new Row(oldPath, retainedDestination, "move-retained", "preserve recorded copy");
+                plan.Rows.Add(retainedRow);
+                plan.Work.Add((retainedRow, sourcePath, verification));
+                plannedDestinations[retainedDestination] = entry;
                 continue;
             }
 
-            if (!sourceToCanonical.TryGetValue(sourcePath, out var newPath)) continue;
+            var newPath = mappedPath!;
 
             if (oldPath.Equals(newPath, StringComparison.OrdinalIgnoreCase))
             {
@@ -244,9 +314,14 @@ public static class TargetRepair
                     }
                 }
 
-                if (Regex.IsMatch(path, "_#[0-9a-f]{4,64}(?:\\.|\\\\|$)"))
+                var exactSourceCopy = source.TryGetValue(path, out var exactSource) &&
+                    exactSource.Kind == EntryKind.File && !tombstonedSources.Contains(path) &&
+                    exactSource.Size == item.Size &&
+                    Math.Abs((exactSource.MtimeUtc - item.MtimeUtc).TotalSeconds) <= 2;
+                if (exactSourceCopy || Regex.IsMatch(path, "_#[0-9a-f]{4,64}(?:\\.|\\\\|$)"))
                 {
-                    var matches = sourceFilesBySignature.GetValueOrDefault(FileSignature(path, item.Size))?.Where(s =>
+                    var matches = exactSourceCopy ? Array.Empty<KeyValuePair<string, ScanEntry>>() :
+                        sourceFilesBySignature.GetValueOrDefault(FileSignature(path, item.Size))?.Where(s =>
                         Math.Abs((s.Value.MtimeUtc - item.MtimeUtc).TotalSeconds) <= 2 &&
                         LooksLikeShortenedCopy(path, s.Key)).Take(2).ToArray() ?? Array.Empty<KeyValuePair<string, ScanEntry>>();
                     if (matches.Length > 1)
@@ -254,7 +329,7 @@ public static class TargetRepair
                         plan.Rows.Add(new Row(path, "", "conflict", "Legacy copy matches multiple source files"));
                         continue;
                     }
-                    var matchedSource = matches.Length == 1 ? matches[0].Key : null;
+                    var matchedSource = exactSourceCopy ? path : matches.Length == 1 ? matches[0].Key : null;
 
                     if (matchedSource is not null && sourceToCanonical.TryGetValue(matchedSource, out var canonPath))
                     {
@@ -315,11 +390,54 @@ public static class TargetRepair
                         }
                     }
                 }
+
+                if (targetOnlyDestinations.TryGetValue(path, out var destination))
+                {
+                    var blocked = tracked.Contains(destination) || target.ContainsKey(destination) ||
+                        plannedDestinations.ContainsKey(destination);
+                    var parent = Path.GetDirectoryName(destination);
+                    while (!blocked && !string.IsNullOrEmpty(parent))
+                    {
+                        blocked = target.TryGetValue(parent, out var existingParent) &&
+                            existingParent.Kind != EntryKind.Directory;
+                        parent = Path.GetDirectoryName(parent);
+                    }
+                    if (blocked)
+                    {
+                        plan.Rows.Add(new Row(path, destination, "conflict",
+                            "Target-only destination is already occupied or reserved"));
+                        continue;
+                    }
+
+                    var recorded = new StateEntry
+                    {
+                        PairName = pair,
+                        RelativePath = path,
+                        TargetPath = path,
+                        Kind = EntryKind.File,
+                        Status = EntryStatus.Active,
+                        FirstSeenUtc = item.MtimeUtc,
+                        CopiedSize = item.Size,
+                        CopiedMtimeUtc = item.MtimeUtc
+                    };
+                    var row = new Row(path, destination, "move-target-only", "shorten target-only file");
+                    plan.Rows.Add(row);
+                    plan.Work.Add((row, path, recorded));
+                    tracked.Add(path);
+                    plannedDestinations[destination] = recorded;
+                    continue;
+                }
+                if (targetOnlyFailures.TryGetValue(path, out var reason))
+                {
+                    plan.Rows.Add(new Row(path, "", "conflict", reason));
+                    continue;
+                }
             }
             else if (item.Kind == EntryKind.Directory)
             {
                 plannedRemovedFiles ??= plan.Work.Where(w => w.State.Kind == EntryKind.File &&
-                    w.Row.Action is "move" or "recycle-duplicate" or "recycle-duplicate-state" or "recycle-duplicate-untracked")
+                    w.Row.Action is "move" or "move-retained" or "move-target-only" or "recycle-duplicate" or
+                        "recycle-duplicate-state" or "recycle-duplicate-untracked")
                     .Select(w => w.Row.OldPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 if (remainingDirectories is null)
                 {
@@ -351,8 +469,7 @@ public static class TargetRepair
                 if (trackedFileDirectories!.Contains(path)) continue;
             }
 
-            if (Path.Combine(targetRoot, path).Length <= limit &&
-                !Regex.IsMatch(path, "_#[0-9a-f]{4,64}(?:\\.|\\\\|$)", RegexOptions.IgnoreCase)) continue;
+            if (!NeedsShortening(path)) continue;
             plan.Rows.Add(new Row(path, "", "untracked", item.Kind.ToString()));
         }
         var touched = plan.Work.Where(w => w.State.Kind == EntryKind.File)
@@ -388,7 +505,7 @@ public static class TargetRepair
         {
             var oldFull = Path.Combine(plan.TargetRoot, row.OldPath);
             var newFull = Path.Combine(plan.TargetRoot, row.NewPath);
-            if (row.Action == "move")
+            if (row.Action is "move" or "move-retained" or "move-target-only")
             {
                 if (!Matches(new FileInfo(FsPath(oldFull)), recorded))
                     throw new IOException($"Repair source changed after planning: {oldFull}");
@@ -396,6 +513,11 @@ public static class TargetRepair
                 if (File.Exists(FsPath(newFull)))
                     throw new IOException($"Repair destination appeared after planning: {newFull}");
                 File.Move(FsPath(oldFull), FsPath(newFull));
+                if (row.Action == "move-target-only")
+                {
+                    Report(row);
+                    continue;
+                }
                 try
                 {
                     if (row.Detail == "adopt-untracked")

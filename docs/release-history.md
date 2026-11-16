@@ -4,6 +4,13 @@ This is the immutable archive of published user-facing changes. During a release
 entries from `docs/pending-release-notes.md` under a new `vX.Y.Z (YYYY-MM-DD)` heading, omit empty
 sections, and reset the pending file for the next cycle.
 
+## v0.3.24 (2026-11-16)
+
+### Виправлено
+
+- Ремонт скорочує шляхи вже наявних файлів у цілі, які спричиняють помилки OneDrive, зокрема файлів без запису в базі та копій, джерело яких зникло.
+- Цільові файли переміщуються без перезапису; збережені копії не втрачають історії в базі, а вже коротка стара хешована назва сама по собі не блокує ремонт.
+
 ## v0.3.23 (2026-11-16)
 
 ### Виправлено

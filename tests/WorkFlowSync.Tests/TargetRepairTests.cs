@@ -572,6 +572,179 @@ public sealed class TargetRepairTests : IDisposable
     }
 
     [Fact]
+    public void Overlong_target_only_file_is_shortened_without_claiming_a_source_or_state_entry()
+    {
+        var targetRoot = Path.Combine(_root, "target-only");
+        Directory.CreateDirectory(targetRoot);
+        var original = new string('L', 90) + ".txt";
+        var oldFull = Path.Combine(targetRoot, original);
+        File.WriteAllText(oldFull, "local");
+        var mtime = new DateTimeOffset(File.GetLastWriteTimeUtc(oldFull), TimeSpan.Zero);
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 5, MtimeUtc = mtime }
+        };
+        using var store = new StateStore(Path.Combine(_root, "target-only-state.db"));
+
+        var plan = TargetRepair.Build("pair", targetRoot, targetRoot.Length + 45,
+            new Dictionary<string, ScanEntry>(), target, store.Load("pair"));
+
+        var row = Assert.Single(plan.Rows);
+        Assert.Equal("move-target-only", row.Action);
+        Assert.Equal(0, plan.Conflicts);
+        Assert.True(Path.Combine(targetRoot, row.NewPath).Length <= targetRoot.Length + 45);
+        TargetRepair.Execute(plan, store);
+        Assert.False(File.Exists(oldFull));
+        Assert.Equal("local", File.ReadAllText(Path.Combine(targetRoot, row.NewPath)));
+        Assert.Empty(store.Load("pair"));
+        var nextTarget = new Dictionary<string, ScanEntry>
+        {
+            [row.NewPath] = new()
+            {
+                RelativePath = row.NewPath,
+                Kind = EntryKind.File,
+                Size = 5,
+                MtimeUtc = new DateTimeOffset(File.GetLastWriteTimeUtc(Path.Combine(targetRoot, row.NewPath)), TimeSpan.Zero)
+            }
+        };
+        var nextPlan = TargetRepair.Build("pair", targetRoot, targetRoot.Length + 45,
+            new Dictionary<string, ScanEntry>(), nextTarget, store.Load("pair"));
+        Assert.Empty(nextPlan.Rows);
+    }
+
+    [Fact]
+    public void Target_only_file_beyond_windows_max_path_is_moved_with_extended_paths()
+    {
+        var targetRoot = Path.Combine(_root, "target-only-deep");
+        Directory.CreateDirectory(targetRoot);
+        var original = Path.Combine(new string('A', 80), new string('B', 80), new string('C', 90) + ".txt");
+        var oldFull = Path.Combine(targetRoot, original);
+        Directory.CreateDirectory(@"\\?\" + Path.GetDirectoryName(oldFull)!);
+        File.WriteAllText(@"\\?\" + oldFull, "deep");
+        var mtime = new DateTimeOffset(File.GetLastWriteTimeUtc(@"\\?\" + oldFull), TimeSpan.Zero);
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 4, MtimeUtc = mtime }
+        };
+        using var store = new StateStore(Path.Combine(_root, "target-only-deep-state.db"));
+
+        var plan = TargetRepair.Build("pair", targetRoot, 240,
+            new Dictionary<string, ScanEntry>(), target, store.Load("pair"));
+
+        var row = Assert.Single(plan.Rows);
+        Assert.Equal("move-target-only", row.Action);
+        Assert.True(oldFull.Length > 259);
+        TargetRepair.Execute(plan, store);
+        Assert.False(File.Exists(@"\\?\" + oldFull));
+        Assert.Equal("deep", File.ReadAllText(Path.Combine(targetRoot, row.NewPath)));
+        Assert.Empty(store.Load("pair"));
+    }
+
+    [Fact]
+    public void Safe_length_target_only_hash_copy_is_left_alone()
+    {
+        var path = "legacy_#12345678.txt";
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [path] = new() { RelativePath = path, Kind = EntryKind.File }
+        };
+
+        var plan = TargetRepair.Build("pair", _root, 200,
+            new Dictionary<string, ScanEntry>(), target, new Dictionary<string, StateEntry>());
+
+        Assert.Empty(plan.Rows);
+        Assert.Equal(0, plan.Conflicts);
+    }
+
+    [Fact]
+    public void Target_only_move_cannot_claim_a_canonical_source_destination()
+    {
+        var original = new string('L', 90) + ".txt";
+        var now = DateTimeOffset.UtcNow;
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 10, MtimeUtc = now }
+        };
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 5, MtimeUtc = now }
+        };
+
+        var plan = TargetRepair.Build("pair", _root, _root.Length + 45, source, target,
+            new Dictionary<string, StateEntry>());
+
+        Assert.Contains(plan.Rows, row => row.OldPath == original && row.Action == "conflict");
+        Assert.Equal(0, plan.ActionCount);
+    }
+
+    [Fact]
+    public void Exact_long_source_copy_without_state_is_adopted_and_shortened()
+    {
+        var targetRoot = Path.Combine(_root, "adopt-long");
+        Directory.CreateDirectory(targetRoot);
+        var original = new string('S', 90) + ".txt";
+        var oldFull = Path.Combine(targetRoot, original);
+        File.WriteAllText(oldFull, "known");
+        var mtime = new DateTimeOffset(File.GetLastWriteTimeUtc(oldFull), TimeSpan.Zero);
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 5, MtimeUtc = mtime }
+        };
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 5, MtimeUtc = mtime }
+        };
+        using var store = new StateStore(Path.Combine(_root, "adopt-long-state.db"));
+
+        var plan = TargetRepair.Build("pair", targetRoot, targetRoot.Length + 45,
+            source, target, store.Load("pair"));
+
+        var row = Assert.Single(plan.Rows);
+        Assert.Equal("move", row.Action);
+        Assert.Equal("adopt-untracked", row.Detail);
+        TargetRepair.Execute(plan, store);
+        Assert.False(File.Exists(oldFull));
+        Assert.True(File.Exists(Path.Combine(targetRoot, row.NewPath)));
+        Assert.Equal(original, Assert.Single(store.Load("pair").Values).RemoteId);
+    }
+
+    [Fact]
+    public void Retained_copy_whose_source_disappeared_is_shortened_without_losing_state()
+    {
+        var targetRoot = Path.Combine(_root, "retained-long");
+        Directory.CreateDirectory(targetRoot);
+        var original = new string('R', 90) + ".txt";
+        var oldFull = Path.Combine(targetRoot, original);
+        File.WriteAllText(oldFull, "saved");
+        var mtime = new DateTimeOffset(File.GetLastWriteTimeUtc(oldFull), TimeSpan.Zero);
+        var firstSeen = mtime.AddDays(-10);
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 5, MtimeUtc = mtime }
+        };
+        using var store = new StateStore(Path.Combine(_root, "retained-long-state.db"));
+        store.Upsert(new[] { new StateEntry
+        {
+            PairName = "pair", RelativePath = original, TargetPath = original,
+            Kind = EntryKind.File, Status = EntryStatus.Active,
+            FirstSeenUtc = firstSeen, CopiedSize = 5, CopiedMtimeUtc = mtime
+        } });
+
+        var plan = TargetRepair.Build("pair", targetRoot, targetRoot.Length + 45,
+            new Dictionary<string, ScanEntry>(), target, store.Load("pair"));
+
+        var row = Assert.Single(plan.Rows);
+        Assert.Equal("move-retained", row.Action);
+        TargetRepair.Execute(plan, store);
+        Assert.False(File.Exists(oldFull));
+        Assert.Equal("saved", File.ReadAllText(Path.Combine(targetRoot, row.NewPath)));
+        var retained = Assert.Single(store.Load("pair").Values);
+        Assert.Equal(original, retained.RemoteId);
+        Assert.Equal(firstSeen.ToUnixTimeMilliseconds(), retained.FirstSeenUtc.ToUnixTimeMilliseconds());
+        Assert.Equal(EntryStatus.Active, retained.Status);
+    }
+
+    [Fact]
     public void Cloud_duplicate_parenthesized_copy_is_recycled()
     {
         var targetRoot = Path.Combine(_root, "cloud-dup-target");
