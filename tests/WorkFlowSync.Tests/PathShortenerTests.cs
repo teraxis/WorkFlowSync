@@ -12,7 +12,71 @@ public sealed class PathShortenerTests
     private const string TargetRoot = @"C:\Users\teraxis\OneDrive - SuperLongOrganizationName\Documents\SyncedShare";
 
     [Fact]
-    public void Deep_sibling_files_keep_eight_character_hashes_and_share_shortened_ancestors()
+    public void Long_descriptive_name_keeps_a_readable_ending()
+    {
+        var name = "Матеріали_для_розгляду_справи_судді_Мовчана";
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [name] = new() { RelativePath = name, Kind = EntryKind.Directory }
+        };
+
+        var mapped = PathShortener.MapEntries(source, @"C:\Target", true, 40, null, null, out _);
+        var shortened = Assert.Single(mapped.Keys);
+
+        Assert.StartsWith("Матеріали", shortened);
+        Assert.EndsWith("Мовчана", shortened);
+        Assert.Contains("…", shortened);
+        Assert.DoesNotContain("_#", shortened);
+    }
+
+    [Fact]
+    public void Numeric_names_are_stable_and_preserve_recorded_mappings()
+    {
+        var first = new string('С', 45) + "Мовчан.docx";
+        var second = new string('С', 45) + "Кваша.docx";
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [first] = new() { RelativePath = first, Kind = EntryKind.File },
+            [second] = new() { RelativePath = second, Kind = EntryKind.File }
+        };
+        var firstPass = PathShortener.MapEntries(source, @"C:\Target", true, 45, null, null,
+            out var owners);
+        var pinned = firstPass.ToDictionary(kvp => kvp.Key, kvp => new StateEntry
+        {
+            PairName = "pair",
+            RelativePath = kvp.Key,
+            TargetPath = kvp.Key,
+            RemoteId = owners[kvp.Key],
+            Kind = EntryKind.File,
+            FirstSeenUtc = DateTimeOffset.UtcNow
+        });
+        var reversed = source.Reverse().ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        var secondPass = PathShortener.MapEntries(reversed, @"C:\Target", true, 45, pinned, null, out _);
+
+        Assert.Equal(firstPass.Keys.Order(), secondPass.Keys.Order());
+        Assert.Contains(firstPass.Keys, path => path.EndsWith(" (2).docx"));
+        Assert.All(firstPass.Keys, path => Assert.DoesNotContain("_#", path));
+    }
+
+    [Fact]
+    public void Shortened_file_uses_available_space_for_readable_name()
+    {
+        var name = new string('А', 100) + ".docx";
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [name] = new() { RelativePath = name, Kind = EntryKind.File }
+        };
+
+        var mapped = PathShortener.MapEntries(source, @"C:\Target", true, 100, null, null, out _);
+        var result = Assert.Single(mapped.Keys);
+
+        Assert.True(Path.GetFileNameWithoutExtension(result).Length > 40, result);
+        Assert.DoesNotContain("_#", result);
+        Assert.True(Path.Combine(@"C:\Target", result).Length <= 100);
+    }
+
+    [Fact]
+    public void Deep_sibling_files_keep_readable_names_and_share_shortened_ancestors()
     {
         var root = @"C:\" + new string('R', 62);
         var directories = new[] { new string('A', 17), new string('B', 70),
@@ -30,11 +94,12 @@ public sealed class PathShortenerTests
         Assert.All(mapped.Keys, path =>
         {
             Assert.True(Path.Combine(root, path).Length <= 240, path);
-            Assert.Matches(@"_#[0-9a-f]{8}\.xlsx$", path);
-            Assert.DoesNotMatch(@"_#[0-9a-f]{1,7}(?:\.|\\|$)", path);
+            Assert.EndsWith(".xlsx", path);
+            Assert.DoesNotContain("_#", path);
         });
         Assert.Single(mapped.Keys.Select(Path.GetDirectoryName).Distinct(StringComparer.OrdinalIgnoreCase));
-        Assert.Contains("_#", Path.GetDirectoryName(mapped.Keys.First())!);
+        Assert.All(Path.GetDirectoryName(mapped.Keys.First())!.Split('\\'),
+            segment => Assert.DoesNotContain("_#", segment));
     }
 
     [Fact]
@@ -65,7 +130,7 @@ public sealed class PathShortenerTests
         var path = Assert.Single(mapped.Where(kvp => kvp.Value.Kind == EntryKind.File).Select(kvp => kvp.Key));
         Assert.True(Path.Combine(root, path).Length <= 240, path);
         Assert.EndsWith(extension, path);
-        Assert.Matches(@"_#[0-9a-f]{8}\.", Path.GetFileName(path));
+        Assert.DoesNotContain("_#", path);
     }
 
     [Fact]
@@ -82,8 +147,8 @@ public sealed class PathShortenerTests
         var mapped = PathShortener.MapEntries(source, root, true, 240, null, null, out _);
         var path = Assert.Single(mapped.Keys);
         Assert.True(Path.Combine(root, path).Length <= 240);
-        Assert.True(path.Split('\\').Take(3).Count(p => p.Contains("_#")) >= 2);
-        Assert.DoesNotMatch(@"_#[0-9a-f]{1,7}(?:\.|\\|$)", path);
+        Assert.True(path.Split('\\').Take(3).Count(p => p.Length < 90) >= 2);
+        Assert.DoesNotContain("_#", path);
     }
 
     [Fact]
@@ -121,13 +186,13 @@ public sealed class PathShortenerTests
     }
 
     [Fact]
-    public void Directory_hash_collision_uses_a_longer_hash()
+    public void Directory_name_collision_uses_numeric_suffix()
     {
         var root = @"C:\" + new string('R', 62);
         var names = new[]
         {
-            "ABCDEFG007144" + new string('X', 40),
-            "ABCDEFG044148" + new string('X', 40),
+            "ABCDEFG" + new string('X', 40) + "007144",
+            "ABCDEFG" + new string('X', 40) + "044148",
         };
         var source = names.ToDictionary(n => n, n => new ScanEntry
         {
@@ -135,22 +200,22 @@ public sealed class PathShortenerTests
             Kind = EntryKind.Directory
         });
 
-        var mapped = PathShortener.MapEntries(source, root, true, 115, null, null, out _);
+        var mapped = PathShortener.MapEntries(source, root, true, 108, null, null, out _);
 
         Assert.Equal(2, mapped.Count);
-        Assert.All(mapped.Keys, path => Assert.True(Path.Combine(root, path).Length <= 115));
-        Assert.Contains(mapped.Keys, path => System.Text.RegularExpressions.Regex.IsMatch(path,
-            @"_#[0-9a-f]{12}$"));
+        Assert.All(mapped.Keys, path => Assert.True(Path.Combine(root, path).Length <= 108));
+        Assert.Contains(mapped.Keys, path => path.EndsWith(" (2)", StringComparison.OrdinalIgnoreCase));
+        Assert.All(mapped.Keys, path => Assert.DoesNotContain("_#", path));
     }
 
     [Fact]
-    public void File_hash_collision_uses_a_longer_hash()
+    public void File_name_collision_uses_numeric_suffix()
     {
         var root = @"C:\" + new string('R', 62);
         var names = new[]
         {
-            "ABCDEFG054205" + new string('X', 40) + ".xlsx",
-            "ABCDEFG074589" + new string('X', 40) + ".xlsx",
+            "ABCDEFG" + new string('X', 40) + "054205.xlsx",
+            "ABCDEFG" + new string('X', 40) + "074589.xlsx",
         };
         var source = names.ToDictionary(n => n, n => new ScanEntry
         {
@@ -162,8 +227,7 @@ public sealed class PathShortenerTests
 
         Assert.Equal(2, mapped.Count);
         Assert.All(mapped.Keys, path => Assert.True(Path.Combine(root, path).Length <= 88));
-        Assert.Contains(mapped.Keys, path => System.Text.RegularExpressions.Regex.IsMatch(path,
-            @"_#[0-9a-f]{12}\.xlsx$"));
+        Assert.Contains(mapped.Keys, path => path.EndsWith(" (2).xlsx", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -200,7 +264,7 @@ public sealed class PathShortenerTests
         Assert.Equal(2, mapped.Count);
         Assert.Equal(second, owners[claimed]);
         Assert.Contains(mapped.Keys, path => !path.Equals(claimed, StringComparison.OrdinalIgnoreCase) &&
-            System.Text.RegularExpressions.Regex.IsMatch(path, @"_#[0-9a-f]{12}\.xlsx$"));
+            path.EndsWith(" (2).xlsx", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -215,7 +279,7 @@ public sealed class PathShortenerTests
     }
 
     [Fact]
-    public void ShortenFilePath_WhenExceedsLimit_ShortensFileNameOnly_PreservesExtensionAndAppendsHash()
+    public void ShortenFilePath_WhenExceedsLimit_PreservesExtensionWithoutHash()
     {
         var dir = @"Department\FinancialReports\QuarterlyAudits";
         var baseName = "Quarterly_Financial_Performance_Audit_Report_For_Q3_2026_Final_Approved_Signed_Document";
@@ -231,27 +295,33 @@ public sealed class PathShortenerTests
 
         Assert.True(fullTarget.Length <= maxLen, $"Expected length <= {maxLen}, got {fullTarget.Length} for '{fullTarget}'");
         Assert.EndsWith(ext, shortened, StringComparison.OrdinalIgnoreCase);
-        Assert.StartsWith(dir + "\\", shortened, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("_#", shortened);
+        Assert.DoesNotContain("_#", shortened);
         Assert.StartsWith("Quarterly", Path.GetFileName(shortened), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void ShortenFilePath_TwoDifferentLongFiles_ProduceDifferentHashes_NoCollision()
+    public void MapEntries_TwoDifferentLongFiles_UseNumericSuffix_NoCollision()
     {
         var dir = @"Department\Reports";
         var fileA = Path.Combine(dir, "Very_Long_Document_Name_That_Exceeds_Limits_Version_A.pdf");
         var fileB = Path.Combine(dir, "Very_Long_Document_Name_That_Exceeds_Limits_Version_B.pdf");
         var maxLen = 120;
 
-        var shortenedA = PathShortener.ShortenFilePath(TargetRoot, fileA, maxLen);
-        var shortenedB = PathShortener.ShortenFilePath(TargetRoot, fileB, maxLen);
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [fileA] = new() { RelativePath = fileA, Kind = EntryKind.File },
+            [fileB] = new() { RelativePath = fileB, Kind = EntryKind.File }
+        };
+        var mapped = PathShortener.MapEntries(source, TargetRoot, true, maxLen, null, null, out var owners);
+        var shortenedA = owners.Single(pair => pair.Value == fileA).Key;
+        var shortenedB = owners.Single(pair => pair.Value == fileB).Key;
 
         Assert.NotEqual(shortenedA, shortenedB);
         Assert.True(Path.Combine(TargetRoot, shortenedA).Length <= maxLen);
         Assert.True(Path.Combine(TargetRoot, shortenedB).Length <= maxLen);
         Assert.EndsWith(".pdf", shortenedA);
         Assert.EndsWith(".pdf", shortenedB);
+        Assert.Contains(new[] { shortenedA, shortenedB }, path => path.EndsWith(" (2).pdf"));
     }
 
     [Fact]
@@ -268,7 +338,7 @@ public sealed class PathShortenerTests
 
         Assert.True(fullTarget.Length <= maxLen, $"Expected length <= {maxLen}, got {fullTarget.Length} for '{fullTarget}'");
         Assert.EndsWith(".txt", shortened, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("_#", shortened);
+        Assert.DoesNotContain("_#", shortened);
     }
 
     [Fact]
@@ -551,14 +621,14 @@ public sealed class PathShortenerTests
     }
 
     [Fact]
-    public void Same_directory_name_in_different_branches_has_different_hash()
+    public void Same_directory_name_in_different_branches_can_remain_equal()
     {
         var longName = new string('D', 90);
         var dirs = new[] { Path.Combine("Left", longName), Path.Combine("Right", longName) };
         var source = dirs.ToDictionary(d => d, d => new ScanEntry { RelativePath = d, Kind = EntryKind.Directory });
         var mapped = PathShortener.MapEntries(source, TargetRoot, true, 200, null, null, out _);
         Assert.Equal(2, mapped.Count);
-        Assert.NotEqual(Path.GetFileName(mapped.Values.First().RelativePath),
+        Assert.Equal(Path.GetFileName(mapped.Values.First().RelativePath),
             Path.GetFileName(mapped.Values.Last().RelativePath));
     }
 

@@ -125,7 +125,7 @@ public partial class MainWindow : Window
             var logPath = Vm.LogFullPath;
             Action<string> appendLog = Vm.Run.AppendLog;
             log = new FileSyncLog(logPath, (_, line) => appendLog(line), keepDays: Vm.LogKeepDays);
-            log.Info($"[{pair.Name}] troubleshoot start was_enabled={wasEnabled} paths={options.RepairPaths} audit={options.AuditMissing} restore={options.RestoreMissing}");
+            log.Info($"[{pair.Name}] troubleshoot start was_enabled={wasEnabled} paths={options.RepairPaths} legacy={options.RecoverLegacyHashes} audit={options.AuditMissing} restore={options.RestoreMissing}");
             if (wasEnabled)
             {
                 pair.Enabled = false;
@@ -174,6 +174,30 @@ public partial class MainWindow : Window
                     pair.RepairRequired = plan.Conflicts > 0 || plan.SkippedCleanupNeedsRepair;
                 }
             }
+
+            if (options.RecoverLegacyHashes)
+            {
+                progressWindow = new RepairProgressWindow();
+                var scanWindow = progressWindow;
+                var scanProgress = new Progress<RepairProgress>(p => Dispatcher.UIThread.Post(() => scanWindow.Update(p)));
+                progressWindow.Show(this);
+                using var plan = await Task.Run(() => runner.PrepareLegacyRecovery(scanProgress));
+                progressWindow.Close();
+                progressWindow = null;
+                Vm.StatusText = I18n.T("troubleshoot.legacy_preview_ready", plan.ActionCount, plan.Conflicts);
+                Vm.StatusIsError = false;
+                if (await RepairPreviewWindow.ShowAsync(this, plan, isLegacyRecovery: true) && plan.ActionCount > 0)
+                {
+                    progressWindow = new RepairProgressWindow();
+                    var applyWindow = progressWindow;
+                    var applyProgress = new Progress<RepairProgress>(p => Dispatcher.UIThread.Post(() => applyWindow.Update(p)));
+                    progressWindow.Show(this);
+                    await Task.Run(() => runner.ApplyLegacyRecovery(plan, applyProgress));
+                    progressWindow.Close();
+                    progressWindow = null;
+                }
+            }
+
             var restored = 0;
             var errors = 0;
             var skipped = 0;
@@ -201,8 +225,16 @@ public partial class MainWindow : Window
                     progressWindow = null;
                 }
             }
-            Vm.StatusText = I18n.T("troubleshoot.completed", restored, errors, skipped);
-            Vm.StatusIsError = errors > 0 || skipped > 0;
+            if (options.AuditMissing)
+            {
+                Vm.StatusText = I18n.T("troubleshoot.completed", restored, errors, skipped);
+                Vm.StatusIsError = errors > 0 || skipped > 0;
+            }
+            else
+            {
+                Vm.StatusText = I18n.T("troubleshoot.finished");
+                Vm.StatusIsError = false;
+            }
         }
         catch (Exception ex)
         {

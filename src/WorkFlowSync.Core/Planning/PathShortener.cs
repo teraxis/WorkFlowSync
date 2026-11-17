@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 using WorkFlowSync.Core.Model;
 using WorkFlowSync.Core.Scanning;
@@ -8,8 +7,8 @@ namespace WorkFlowSync.Core.Planning;
 /// <summary>
 /// Deterministic path shortening for Windows and cloud sync roots (e.g. OneDrive / SharePoint)
 /// where the combined path length exceeds OS or cloud client limits (MAX_PATH / 260 chars).
-/// Shortens file names first, then directory segments if necessary, appending a deterministic
-/// hash tag to avoid collisions and preserve file tracking across repeated passes.
+/// Shortens long names while retaining readable text. Collisions receive numeric suffixes;
+/// recorded target paths preserve file tracking across repeated passes.
 /// </summary>
 public static class PathShortener
 {
@@ -57,173 +56,28 @@ public static class PathShortener
         return false;
     }
 
-    /// <summary>
-    /// Computes an 8-character lowercase hexadecimal hash of the relative path
-    /// (normalized to lowercase invariant and backslashes) for collision-free shortening.
-    /// </summary>
-    public static string ComputeHash(string path, int length = 8)
-    {
-        var normalized = (path ?? "").Trim().Replace('/', '\\').ToLowerInvariant();
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
-        var hex = Convert.ToHexString(bytes).ToLowerInvariant();
-        return hex[..Math.Clamp(length, 4, hex.Length)];
-    }
-
-    /// <summary>
-    /// Shortens a relative file path so that <c>Path.Combine(targetRoot, shortenedPath).Length &lt;= maxPathLength</c>.
-    /// Preserves file extension. Shortens base file name first; if that is not enough, shortens parent directories.
-    /// </summary>
+    /// <summary>Maps a file path using the same readable naming rules as a sync pass.</summary>
     public static string ShortenFilePath(string targetRoot, string relativePath, int maxPathLength)
     {
         if (string.IsNullOrWhiteSpace(relativePath)) return relativePath;
-        var root = (targetRoot ?? "").TrimEnd('\\', '/');
-        var fullTarget = string.IsNullOrEmpty(root) ? relativePath : Path.Combine(root, relativePath);
-        if (fullTarget.Length <= maxPathLength && !HasInvalidOrLongSegment(relativePath)) return relativePath;
-
-        var dir = Path.GetDirectoryName(relativePath) ?? "";
-        var fileName = Path.GetFileName(relativePath).Trim();
-        var ext = Path.GetExtension(fileName);
-        var baseName = Path.GetFileNameWithoutExtension(fileName);
-        if (string.IsNullOrEmpty(baseName))
+        var source = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
         {
-            baseName = fileName;
-            ext = "";
-        }
-
-        if (!string.IsNullOrEmpty(dir) && HasInvalidOrLongSegment(dir))
-        {
-            dir = ShortenDirectoryPath(root, dir, maxPathLength);
-        }
-
-        var candidateRel = string.IsNullOrEmpty(dir) ? fileName : Path.Combine(dir, fileName);
-        fullTarget = string.IsNullOrEmpty(root) ? candidateRel : Path.Combine(root, candidateRel);
-        if (fullTarget.Length <= maxPathLength && Encoding.UTF8.GetByteCount(fileName) <= MaxSegmentUtf8Bytes)
-        {
-            return candidateRel;
-        }
-
-        var hash = ComputeHash(relativePath, 8);
-        var hashTag = "_#" + hash; // 10 chars
-        var suffixUtf8Bytes = Encoding.UTF8.GetByteCount(hashTag + ext);
-        var maxBaseUtf8Bytes = Math.Max(3, MaxSegmentUtf8Bytes - suffixUtf8Bytes);
-        var excess = Math.Max(0, fullTarget.Length - maxPathLength);
-
-        // Try shortening only the file name first (leaving at least 3 chars of base name)
-        var maxBaseLen = baseName.Length - excess - (excess > 0 ? hashTag.Length : 0);
-        if (maxBaseLen >= 3)
-        {
-            var shortenedBase = baseName[..Math.Min(baseName.Length, maxBaseLen)];
-            shortenedBase = TruncateToUtf8Bytes(shortenedBase, maxBaseUtf8Bytes).TrimEnd(' ', '.', '_');
-            if (shortenedBase.Length == 0) shortenedBase = TruncateToUtf8Bytes(baseName, Math.Max(2, maxBaseUtf8Bytes));
-            var newFileName = shortenedBase + hashTag + ext;
-            var candidate = string.IsNullOrEmpty(dir) ? newFileName : Path.Combine(dir, newFileName);
-            var candidateFull = string.IsNullOrEmpty(root) ? candidate : Path.Combine(root, candidate);
-            if (candidateFull.Length <= maxPathLength)
-            {
-                return candidate;
-            }
-        }
-
-        // If file name shortening alone is not enough, shorten directory segments first
-        var targetDir = dir;
-        if (!string.IsNullOrEmpty(dir))
-        {
-            // Reserve at least 3 chars base + 10 chars hash + ext.Length for file name
-            var minFileNameLen = 3 + hashTag.Length + ext.Length;
-            var maxDirFullLen = maxPathLength - minFileNameLen - 1; // 1 for separating backslash
-            targetDir = ShortenDirectoryPath(root, dir, maxDirFullLen);
-        }
-
-        // Recompute available characters for the file name under targetDir
-        var currentDirFull = string.IsNullOrEmpty(root)
-            ? targetDir
-            : (string.IsNullOrEmpty(targetDir) ? root : Path.Combine(root, targetDir));
-        var availableForFileName = maxPathLength - currentDirFull.Length - 1;
-
-        var availableForBase = availableForFileName - hashTag.Length - ext.Length;
-        if (availableForBase >= 3)
-        {
-            var keepLen = Math.Min(baseName.Length, availableForBase);
-            var shortenedBase = TruncateToUtf8Bytes(baseName[..keepLen], maxBaseUtf8Bytes).TrimEnd(' ', '.', '_');
-            if (shortenedBase.Length == 0) shortenedBase = baseName[..1];
-            var newFileName = shortenedBase + hashTag + ext;
-            return string.IsNullOrEmpty(targetDir) ? newFileName : Path.Combine(targetDir, newFileName);
-        }
-
-        throw new InvalidOperationException($"Path cannot fit with an eight-character hash: {relativePath}");
+            [relativePath] = new ScanEntry { RelativePath = relativePath, Kind = EntryKind.File }
+        };
+        return MapEntries(source, targetRoot, true, maxPathLength, null, null, out _).Keys.Single();
     }
 
-    /// <summary>
-    /// Shortens a relative directory path so that <c>Path.Combine(targetRoot, shortenedDir).Length &lt;= maxDirectoryLength</c>
-    /// and every directory segment fits within <see cref="MaxSegmentUtf8Bytes"/> UTF-8 bytes without leading/trailing spaces.
-    /// Shortens individual directory segments starting from the deepest subfolder.
-    /// </summary>
+    /// <summary>Maps a directory path using the same readable naming rules as a sync pass.</summary>
     public static string ShortenDirectoryPath(string targetRoot, string directoryRelativePath, int maxDirectoryLength)
     {
         if (string.IsNullOrWhiteSpace(directoryRelativePath)) return directoryRelativePath;
-        var root = (targetRoot ?? "").TrimEnd('\\', '/');
-        var fullTarget = string.IsNullOrEmpty(root) ? directoryRelativePath : Path.Combine(root, directoryRelativePath);
-        if (fullTarget.Length <= maxDirectoryLength && !HasInvalidOrLongSegment(directoryRelativePath)) return directoryRelativePath;
-
-        var segments = directoryRelativePath.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length == 0) return directoryRelativePath;
-
-        // Cumulative path to compute stable segment hashes
-        var cumulative = new string[segments.Length];
-        for (var i = 0; i < segments.Length; i++)
+        var source = new Dictionary<string, ScanEntry>(StringComparer.OrdinalIgnoreCase)
         {
-            cumulative[i] = i == 0 ? segments[0] : cumulative[i - 1] + "\\" + segments[i];
-        }
-
-        // Normalize leading/trailing spaces and enforce UTF-8 byte limit per segment
-        for (var i = 0; i < segments.Length; i++)
-        {
-            var seg = segments[i].Trim();
-            if (seg.Length == 0) seg = "_#" + ComputeHash(cumulative[i], 6);
-
-            if (Encoding.UTF8.GetByteCount(seg) > MaxSegmentUtf8Bytes)
-            {
-                var segHash = "_#" + ComputeHash(cumulative[i], 8);
-                var maxBaseBytes = Math.Max(4, MaxSegmentUtf8Bytes - segHash.Length);
-                var shortenedBase = TruncateToUtf8Bytes(seg, maxBaseBytes).TrimEnd(' ', '.', '_');
-                if (shortenedBase.Length == 0) shortenedBase = seg[..1];
-                seg = shortenedBase + segHash;
-            }
-            segments[i] = seg;
-        }
-
-        var normalizedRel = string.Join("\\", segments);
-        fullTarget = string.IsNullOrEmpty(root) ? normalizedRel : Path.Combine(root, normalizedRel);
-        if (fullTarget.Length <= maxDirectoryLength) return normalizedRel;
-
-        var excess = fullTarget.Length - maxDirectoryLength;
-
-        // First pass: shorten segments longer than 12 chars from deepest to shallowest
-        for (var i = segments.Length - 1; i >= 0 && excess > 0; i--)
-        {
-            var seg = segments[i];
-            if (seg.Length <= 12) continue;
-
-            var segHash = "_#" + ComputeHash(cumulative[i], 8);
-            var canReduce = seg.Length - 3 - segHash.Length;
-            if (canReduce <= 0) continue;
-
-            var toReduce = Math.Min(excess, canReduce);
-            var keepLen = seg.Length - toReduce - segHash.Length;
-            var newSeg = seg[..keepLen].TrimEnd(' ', '.', '_') + segHash;
-            var achieved = seg.Length - newSeg.Length;
-            if (achieved > 0)
-            {
-                segments[i] = newSeg;
-                excess -= achieved;
-            }
-        }
-
-        if (excess > 0)
-            throw new InvalidOperationException($"Directory cannot fit with eight-character hashes: {directoryRelativePath}");
-        return string.Join("\\", segments);
+            [directoryRelativePath] = new ScanEntry { RelativePath = directoryRelativePath, Kind = EntryKind.Directory }
+        };
+        var mapped = MapEntries(source, targetRoot, true, maxDirectoryLength, null, null, out _);
+        return mapped.Keys.Single();
     }
-
     /// <summary>
     /// Projects source entries so that long file and directory paths are represented by their shortened
     /// relative target paths. Uses <paramref name="state"/> to preserve existing mappings for already synchronized files.
@@ -276,6 +130,7 @@ public static class PathShortener
         var invalidDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var invalidDirReasons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var mappedDirOwners = new Dictionary<string, string>(pinnedDirectories, StringComparer.OrdinalIgnoreCase);
+        var nextDirectoryOrdinal = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<string, ScanEntry>(source.Count, StringComparer.OrdinalIgnoreCase);
 
         // Pre-map all parent directories deterministically from shallowest to deepest
@@ -297,23 +152,28 @@ public static class PathShortener
             .ThenBy(d => d, StringComparer.OrdinalIgnoreCase)
             .ThenBy(d => d, StringComparer.Ordinal).ToArray();
 
-        // Reserve the minimum hashed name for each deeper directory and enough room for the
+        // Reserve a minimum readable name for each deeper directory and enough room for the
         // longest file extension in that branch. A fixed allowance can strand a file whose
         // extension alone exceeds it, even when shortening its ancestors would make it fit.
-        var requiredTail = sortedDirs.ToDictionary(d => d, _ => 32, StringComparer.OrdinalIgnoreCase);
+        var requiredTail = sortedDirs.ToDictionary(d => d, _ => 0, StringComparer.OrdinalIgnoreCase);
+        var preferredTail = sortedDirs.ToDictionary(d => d, _ => 0, StringComparer.OrdinalIgnoreCase);
         foreach (var (path, entry) in source)
         {
             if (entry.Kind != EntryKind.File) continue;
             var parent = Path.GetDirectoryName(path);
             if (parent is null || !requiredTail.ContainsKey(parent)) continue;
             var extension = Path.GetExtension(Path.GetFileName(path).Trim());
-            requiredTail[parent] = Math.Max(requiredTail[parent], 1 + 3 + 10 + extension.Length);
+            requiredTail[parent] = Math.Max(requiredTail[parent], 1 + 3 + extension.Length);
+            preferredTail[parent] = Math.Max(preferredTail[parent], 1 + 20 + extension.Length);
         }
         foreach (var dir in sortedDirs.AsEnumerable().Reverse())
         {
             var parent = Path.GetDirectoryName(dir);
             if (parent is not null && requiredTail.ContainsKey(parent))
-                requiredTail[parent] = Math.Max(requiredTail[parent], 1 + 3 + 10 + requiredTail[dir]);
+            {
+                requiredTail[parent] = Math.Max(requiredTail[parent], 1 + 8 + requiredTail[dir]);
+                preferredTail[parent] = Math.Max(preferredTail[parent], 1 + 20 + preferredTail[dir]);
+            }
         }
 
         foreach (var dir in sortedDirs)
@@ -346,9 +206,11 @@ public static class PathShortener
                     {
                         var parentLength = Path.Combine(targetRoot, mappedParent).Length;
                         var trimmedLength = baseDir.Trim().Length;
-                        var minimumNameLength = trimmedLength == 0 ? 13 : Math.Min(trimmedLength, 13);
+                        var minimumNameLength = trimmedLength == 0 ? 3 : Math.Min(trimmedLength, 8);
                         var minimumBudget = parentLength + 1 + minimumNameLength;
-                        var budget = Math.Clamp(maxPathLength - requiredTail[dir], minimumBudget, maxPathLength);
+                        var reserved = Math.Max(requiredTail[dir],
+                            Math.Min(preferredTail[dir], maxPathLength - minimumBudget));
+                        var budget = Math.Clamp(maxPathLength - reserved, minimumBudget, maxPathLength);
                         dirMap[dir] = MapDirectory(targetRoot, candidate, origDir, budget);
                     }
                     else
@@ -367,17 +229,20 @@ public static class PathShortener
                         ? mp : parent ?? "";
                     var candidate = string.IsNullOrEmpty(mappedParent)
                         ? Path.GetFileName(dir) : Path.Combine(mappedParent, Path.GetFileName(dir));
-                    foreach (var hashLength in new[] { 12, 16 })
+                    var firstOrdinal = nextDirectoryOrdinal.GetValueOrDefault(collision, 2);
+                    for (var ordinal = firstOrdinal; ordinal <= sortedDirs.Length + pinnedDirectories.Count + 1; ordinal++)
                     {
                         try
                         {
                             var alternativeParentLength = Path.Combine(targetRoot, mappedParent).Length;
+                            var suffixLength = $" ({ordinal})".Length;
                             var alternativeBudget = Math.Min(maxPathLength,
-                                Math.Max(maxPathLength - requiredTail[dir], alternativeParentLength + 1 + 3 + 2 + hashLength));
+                                Math.Max(maxPathLength - requiredTail[dir], alternativeParentLength + 1 + 3 + suffixLength));
                             var alternative = MapDirectory(targetRoot, candidate, origDir,
-                                alternativeBudget, hashLength, forceShorten: true);
+                                alternativeBudget, ordinal);
                             if (mappedDirOwners.ContainsKey(alternative)) continue;
                             dirMap[dir] = alternative;
+                            nextDirectoryOrdinal[collision] = ordinal + 1;
                             break;
                         }
                         catch (InvalidOperationException) { }
@@ -402,6 +267,7 @@ public static class PathShortener
             .ThenBy(kvp => kvp.Key.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries).Length)
             .ThenBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
             .ThenBy(kvp => kvp.Key, StringComparer.Ordinal);
+        var nextFileOrdinal = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         bool OccupiedByOther(string targetPath, string sourcePath) =>
             result.ContainsKey(targetPath) ||
             (pinnedTargets.TryGetValue(targetPath, out var owner) &&
@@ -453,13 +319,15 @@ public static class PathShortener
                     var parent = Path.GetDirectoryName(targetRel) ?? "";
                     var candidate = string.IsNullOrEmpty(parent)
                         ? Path.GetFileName(path) : Path.Combine(parent, Path.GetFileName(path));
-                    foreach (var hashLength in new[] { 12, 16, 24, 32, 64 })
+                    var firstOrdinal = nextFileOrdinal.GetValueOrDefault(targetRel, 2);
+                    for (var ordinal = firstOrdinal; ordinal <= source.Count + pinnedTargets.Count + 1; ordinal++)
                     {
                         var alternative = MapFile(targetRoot, candidate, originalSourcePath, maxPathLength,
-                            hashLength, forceShorten: true, exactCaseHash: true);
+                            ordinal);
                         if (!OccupiedByOther(alternative, originalSourcePath))
                         {
                             targetRel = alternative;
+                            nextFileOrdinal[MapFile(targetRoot, candidate, originalSourcePath, maxPathLength)] = ordinal + 1;
                             break;
                         }
                     }
@@ -503,58 +371,66 @@ public static class PathShortener
     }
 
     private static string MapDirectory(string root, string candidate, string sourcePath, int budget,
-        int hashLength = 8, bool forceShorten = false)
+        int ordinal = 1)
     {
         var parent = Path.GetDirectoryName(candidate) ?? "";
         var originalName = Path.GetFileName(candidate);
         var name = originalName.Trim();
         var parentLength = Path.Combine(root, parent).Length;
         var normalized = Path.Combine(parent, name);
-        if (!forceShorten && name.Length > 0 && Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes &&
+        if (ordinal == 1 && name.Length > 0 && Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes &&
             Path.Combine(root, normalized).Length <= budget)
             return normalized;
-        if (!forceShorten && Path.Combine(root, candidate).Length <= budget &&
-            Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes && name.Length > 0 && name == originalName)
-            return candidate;
-
-        var tag = "_#" + (forceShorten
-            ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sourcePath.Replace('/', '\\'))))
-                .ToLowerInvariant()[..hashLength]
-            : ComputeHash(sourcePath, hashLength));
+        var suffix = ordinal == 1 ? "" : $" ({ordinal})";
         var allowed = budget - parentLength - 1;
-        if (allowed < tag.Length + 3)
-            throw new InvalidOperationException($"Directory cannot fit with an eight-character hash: {sourcePath}");
-        var keep = Math.Max(3, Math.Min(40, allowed - tag.Length));
-        var stem = TruncateToUtf8Bytes(name[..Math.Min(name.Length, keep)], MaxSegmentUtf8Bytes - tag.Length)
-            .TrimEnd(' ', '.', '_');
-        if (stem.Length == 0) stem = "_";
-        var mapped = Path.Combine(parent, stem + tag);
-        return mapped;
+        if (allowed < suffix.Length + 3)
+            throw new InvalidOperationException($"Directory cannot fit with a readable name: {sourcePath}");
+        var stem = ReadableStem(name, allowed - suffix.Length,
+            MaxSegmentUtf8Bytes - Encoding.UTF8.GetByteCount(suffix));
+        return Path.Combine(parent, stem + suffix);
     }
 
     private static string MapFile(string root, string candidate, string sourcePath, int limit,
-        int hashLength = 8, bool forceShorten = false, bool exactCaseHash = false)
+        int ordinal = 1)
     {
         var parent = Path.GetDirectoryName(candidate) ?? "";
         var name = Path.GetFileName(candidate).Trim();
-        if (!forceShorten && Path.Combine(root, candidate).Length <= limit &&
+        if (ordinal == 1 && Path.Combine(root, candidate).Length <= limit &&
             Encoding.UTF8.GetByteCount(name) <= MaxSegmentUtf8Bytes && name.Length > 0)
             return candidate;
 
         var ext = Path.GetExtension(name);
         var stem = Path.GetFileNameWithoutExtension(name);
-        var tag = "_#" + (exactCaseHash
-            ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sourcePath.Replace('/', '\\'))))
-                .ToLowerInvariant()[..hashLength]
-            : ComputeHash(sourcePath, hashLength));
+        var suffix = ordinal == 1 ? "" : $" ({ordinal})";
         var allowed = limit - Path.Combine(root, parent).Length - (root.Length > 0 || parent.Length > 0 ? 1 : 0);
-        if (allowed < tag.Length + ext.Length + 3)
-            throw new InvalidOperationException($"File cannot fit with an eight-character hash: {sourcePath}");
-        var keep = Math.Max(3, Math.Min(40, allowed - tag.Length - ext.Length));
-        var shortStem = TruncateToUtf8Bytes(stem[..Math.Min(stem.Length, keep)],
-            MaxSegmentUtf8Bytes - Encoding.UTF8.GetByteCount(tag + ext)).TrimEnd(' ', '.', '_');
-        if (shortStem.Length == 0) shortStem = "_";
-        var mapped = Path.Combine(parent, shortStem + tag + ext);
-        return mapped;
+        if (allowed < suffix.Length + ext.Length + 3)
+            throw new InvalidOperationException($"File cannot fit with a readable name: {sourcePath}");
+        var shortStem = ReadableStem(stem, allowed - suffix.Length - ext.Length,
+            MaxSegmentUtf8Bytes - Encoding.UTF8.GetByteCount(suffix + ext));
+        return Path.Combine(parent, shortStem + suffix + ext);
+    }
+
+    private static string ReadableStem(string name, int maxChars, int maxBytes)
+    {
+        var trimmed = name.Trim().TrimEnd('.');
+        if (trimmed.Length == 0) trimmed = "_";
+        var keep = Math.Min(trimmed.Length, maxChars);
+        var stem = TruncateToUtf8Bytes(trimmed[..keep], maxBytes).TrimEnd(' ', '.', '_');
+        if (stem.Length < trimmed.Length && maxChars >= 16)
+        {
+            var lastBreak = trimmed.LastIndexOfAny(new[] { ' ', '_', '-' });
+            var lastWord = lastBreak < 0 ? "" : trimmed[(lastBreak + 1)..];
+            if (lastWord.Length >= 4 && lastWord.Length <= maxChars / 2)
+            {
+                var prefixLength = Math.Min(trimmed.Length, maxChars - lastWord.Length - 1);
+                var prefix = trimmed[..prefixLength].TrimEnd(' ', '.', '_', '-');
+                var withEnding = prefix + "…" + lastWord;
+                if (prefix.Length >= 4 && Encoding.UTF8.GetByteCount(withEnding) <= maxBytes)
+                    stem = withEnding;
+            }
+        }
+        if (stem.Length == 0)
+            throw new InvalidOperationException($"Name cannot fit: {name}");
+        return stem;
     }
 }

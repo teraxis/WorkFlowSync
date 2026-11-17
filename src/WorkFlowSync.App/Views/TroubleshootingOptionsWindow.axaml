@@ -7,6 +7,8 @@
         <TextBlock x:Name="ExplanationText" TextWrapping="Wrap" />
         <CheckBox x:Name="PathsCheck" Checked="OnSelectionChanged" Unchecked="OnSelectionChanged" />
         <TextBlock x:Name="PathsUnavailableText" IsVisible="False" Margin="26,-8,0,0" TextWrapping="Wrap" FontSize="12" />
+        <CheckBox x:Name="LegacyHashesCheck" Checked="OnSelectionChanged" Unchecked="OnSelectionChanged" />
+        <TextBlock x:Name="LegacyHashesUnavailableText" IsVisible="False" Margin="26,-8,0,0" TextWrapping="Wrap" FontSize="12" />
         <CheckBox x:Name="AuditCheck" Checked="OnSelectionChanged" Unchecked="OnSelectionChanged" />
         <CheckBox x:Name="RestoreCheck" Checked="OnSelectionChanged" Unchecked="OnSelectionChanged" />
         <TextBlock x:Name="AuditUnavailableText" IsVisible="False" Margin="26,-8,0,0" TextWrapping="Wrap" FontSize="12" />

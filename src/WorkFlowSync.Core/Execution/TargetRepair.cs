@@ -87,6 +87,30 @@ public static class TargetRepair
             source.Entries, target.Entries, state, progress);
     }
 
+    public static Plan PrepareLegacyRecovery(FolderPair pair, SyncConfig config, StateStore store,
+        IProgress<RepairProgress>? progress = null)
+    {
+        if (pair.Mode != SyncMode.Mirror || !pair.ShortenLongPaths)
+            throw new InvalidOperationException("Legacy hash recovery requires a mirror pair with shortening enabled");
+        if (pair.FreeUpSpaceAfterCopy && !CloudFiles.IsSyncRoot(pair.Target))
+            throw new IOException("Waiting for OneDrive / Files On-Demand target");
+        var state = store.Load(pair.Name);
+        bool TombstoneDir(string rel) => state.TryGetValue(rel, out var e) &&
+            e.Kind == EntryKind.Directory && e.Status == EntryStatus.Tombstone;
+        progress?.Report(new RepairProgress("scan_source"));
+        var source = new TreeScanner(config.ScanBufferSize, config.ScanParallelism, pair.Links,
+            new ExcludeMatcher(pair.Exclude), TombstoneDir).Scan(pair.Source);
+        progress?.Report(new RepairProgress("scan_target"));
+        var target = new TreeScanner(config.ScanBufferSize, config.ScanParallelism, LinkMode.Skip,
+            new ExcludeMatcher(pair.Exclude)).Scan(pair.Target);
+        if (source.Warnings.Any(w => w.Contains("cannot list", StringComparison.OrdinalIgnoreCase)) ||
+            target.Warnings.Any(w => w.Contains("cannot list", StringComparison.OrdinalIgnoreCase)))
+            throw new IOException("Repair stopped because a directory could not be scanned completely");
+        progress?.Report(new RepairProgress("build"));
+        return BuildLegacyRecovery(pair.Name, pair.Target, PathLimits.Effective(pair.Target, pair.MaxPathLength),
+            source.Entries, target.Entries, state, progress);
+    }
+
     public static Plan Build(string pair, string targetRoot, int limit,
         IReadOnlyDictionary<string, ScanEntry> source,
         IReadOnlyDictionary<string, ScanEntry> target,
@@ -640,6 +664,256 @@ public static class TargetRepair
 
         if (plan.Conflicts == 0 && !plan.SkippedCleanupNeedsRepair)
             store.ClearRepairRequired(plan.Pair);
+    }
+
+    public static bool HasLegacyHash(string targetPath, string? sourcePath = null)
+    {
+        if (string.IsNullOrWhiteSpace(targetPath)) return false;
+        const string pattern = @"_#[0-9a-f]{4,64}(?:\.|\\|/|$)";
+        if (!Regex.IsMatch(targetPath, pattern, RegexOptions.IgnoreCase))
+            return false;
+
+        if (sourcePath is not null && Regex.IsMatch(sourcePath, pattern, RegexOptions.IgnoreCase))
+        {
+            var targetSegments = targetPath.Split('\\', '/');
+            var sourceSegments = sourcePath.Split('\\', '/');
+            var allIdentical = true;
+            for (var i = 0; i < targetSegments.Length; i++)
+            {
+                var tSeg = targetSegments[i];
+                if (Regex.IsMatch(tSeg, @"_#[0-9a-f]{4,64}(?:\.|$)", RegexOptions.IgnoreCase))
+                {
+                    if (i >= sourceSegments.Length || !string.Equals(tSeg, sourceSegments[i], StringComparison.OrdinalIgnoreCase))
+                    {
+                        allIdentical = false;
+                        break;
+                    }
+                }
+            }
+            if (allIdentical) return false;
+        }
+        return true;
+    }
+
+    public static Plan BuildLegacyRecovery(
+        string pair,
+        string targetRoot,
+        int limit,
+        IReadOnlyDictionary<string, ScanEntry> source,
+        IReadOnlyDictionary<string, ScanEntry> target,
+        IReadOnlyDictionary<string, StateEntry> state,
+        IProgress<RepairProgress>? progress = null)
+    {
+        var plan = new Plan
+        {
+            Pair = pair,
+            TargetRoot = Path.GetFullPath(targetRoot),
+            MaxPathLength = limit,
+            SourceFileCount = source.Values.Count(e => e.Kind == EntryKind.File),
+            SourceEntryCount = source.Count,
+            IncludeDuplicateCleanup = false
+        };
+
+        var canonical = PathShortener.MapEntries(source, targetRoot, true, limit, null, null,
+            out var mappedToSource, (path, detail) => plan.Rows.Add(new Row(path, "", "conflict", detail)));
+        plan.MappingFailures = plan.Rows.Count;
+        plan.CheckedPaths = canonical.Count;
+        plan.TooLongPaths = canonical.Keys.Count(p => Path.Combine(targetRoot, p).Length > limit ||
+            p.Split('\\', '/').Any(s => s.EndsWith(' ') || s.EndsWith('.')));
+        plan.DuplicatePaths = canonical.Count - canonical.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        if (plan.TooLongPaths != 0 || plan.DuplicatePaths != 0)
+            throw new InvalidOperationException("Repair canonical path self-check failed");
+
+        var sourceToCanonical = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in canonical.Keys)
+            sourceToCanonical[mappedToSource.GetValueOrDefault(path) ?? path] = path;
+
+        var plannedDestinations = new Dictionary<string, StateEntry>(StringComparer.OrdinalIgnoreCase);
+        var processed = 0;
+
+        foreach (var entry in state.Values.OrderBy(e => e.Kind == EntryKind.Directory ? 0 : 1)
+                     .ThenBy(e => e.RelativePath, StringComparer.OrdinalIgnoreCase))
+        {
+            if (++processed % 5000 == 0)
+                progress?.Report(new RepairProgress("build", processed, state.Count));
+
+            var sourcePath = entry.RemoteId ?? entry.RelativePath;
+            var oldPath = entry.TargetPath ?? entry.RelativePath;
+
+            if (!HasLegacyHash(oldPath, sourcePath))
+                continue;
+
+            if (entry.Status == EntryStatus.Tombstone)
+                continue;
+
+            if (entry.Status == EntryStatus.LocalModified)
+            {
+                plan.Rows.Add(new Row(oldPath, "", "conflict", "Local-modified entry cannot be renamed safely"));
+                continue;
+            }
+
+            if (entry.Status != EntryStatus.Active)
+            {
+                plan.Rows.Add(new Row(oldPath, "", "conflict", $"Status conflict: {entry.Status}"));
+                continue;
+            }
+
+            if (!sourceToCanonical.TryGetValue(sourcePath, out var newPath))
+            {
+                plan.Rows.Add(new Row(oldPath, "", "conflict", "Source entry is missing from source tree"));
+                continue;
+            }
+
+            if (oldPath.Equals(newPath, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!target.TryGetValue(oldPath, out var observedOld))
+            {
+                plan.Rows.Add(new Row(oldPath, newPath, "conflict", "Recorded copy is absent from target disk"));
+                continue;
+            }
+
+            if (entry.Kind == EntryKind.File && !Matches(observedOld, entry))
+            {
+                plan.Rows.Add(new Row(oldPath, newPath, "conflict", "Recorded copy differs from target disk"));
+                continue;
+            }
+
+            if (entry.Kind == EntryKind.Directory && observedOld.Kind != EntryKind.Directory)
+            {
+                plan.Rows.Add(new Row(oldPath, newPath, "conflict", "Recorded directory is not a directory on target disk"));
+                continue;
+            }
+
+            var fullNew = Path.Combine(targetRoot, newPath);
+            var fullRoot = Path.GetFullPath(targetRoot).TrimEnd('\\', '/');
+            var fullNewNormalized = Path.GetFullPath(fullNew);
+            if (!fullNewNormalized.StartsWith(fullRoot + "\\", StringComparison.OrdinalIgnoreCase) &&
+                !fullNewNormalized.Equals(fullRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                plan.Rows.Add(new Row(oldPath, newPath, "conflict", "Target path escapes target root"));
+                continue;
+            }
+
+            if (fullNew.Length > limit || PathShortener.HasInvalidOrLongSegment(newPath))
+            {
+                plan.Rows.Add(new Row(oldPath, newPath, "conflict", "Target path exceeds limit or has invalid segment"));
+                continue;
+            }
+
+            if (target.TryGetValue(newPath, out _) && !string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
+            {
+                plan.Rows.Add(new Row(oldPath, newPath, "conflict", "Destination already exists on target disk"));
+                continue;
+            }
+
+            if (plannedDestinations.TryGetValue(newPath, out _))
+            {
+                plan.Rows.Add(new Row(oldPath, newPath, "conflict", "Destination is reserved by another item"));
+                continue;
+            }
+
+            if (state.TryGetValue(newPath, out var existingOwner) &&
+                !string.Equals(existingOwner.RemoteId ?? existingOwner.RelativePath, sourcePath, StringComparison.OrdinalIgnoreCase))
+            {
+                plan.Rows.Add(new Row(oldPath, newPath, "conflict", "Destination belongs to another tracked source"));
+                continue;
+            }
+
+            var row = new Row(oldPath, newPath, "move", "migrate-legacy-hash");
+            plan.Rows.Add(row);
+            plan.Work.Add((row, sourcePath, entry));
+            plannedDestinations[newPath] = entry;
+        }
+
+        return plan;
+    }
+
+    public static void ExecuteLegacyRecovery(Plan plan, StateStore store,
+        IProgress<RepairProgress>? progress = null, Action<Row>? completed = null)
+    {
+        if (plan.HasWidespreadMappingFailures)
+            throw new InvalidOperationException("Repair plan has widespread path-mapping failures; no changes were applied");
+
+        var total = plan.ActionCount;
+        var done = 0;
+        void Report(Row row)
+        {
+            completed?.Invoke(row);
+            if (++done % 50 == 0 || done == total)
+                progress?.Report(new RepairProgress("apply", done, total));
+        }
+
+        var physicalDirMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        string ResolvePhysicalPath(string relativePath)
+        {
+            var current = relativePath;
+            foreach (var (oldDir, newDir) in physicalDirMap.OrderByDescending(kv => kv.Key.Length))
+            {
+                if (current.Equals(oldDir, StringComparison.OrdinalIgnoreCase))
+                    return newDir;
+                if (current.StartsWith(oldDir + "\\", StringComparison.OrdinalIgnoreCase))
+                    return newDir + current.Substring(oldDir.Length);
+            }
+            return current;
+        }
+
+        // 1. Move all files first
+        foreach (var (row, source, recorded) in plan.Work.Where(w => w.State.Kind == EntryKind.File))
+        {
+            var actualOld = ResolvePhysicalPath(row.OldPath);
+            var oldFull = Path.Combine(plan.TargetRoot, actualOld);
+            var newFull = Path.Combine(plan.TargetRoot, row.NewPath);
+
+            var fi = new FileInfo(FsPath(oldFull));
+            if (!Matches(fi, recorded))
+                throw new IOException($"Repair source changed after planning: {oldFull}");
+
+            Directory.CreateDirectory(FsPath(Path.GetDirectoryName(newFull)!));
+            if (File.Exists(FsPath(newFull)))
+                throw new IOException($"Repair destination appeared after planning: {newFull}");
+
+            File.Move(FsPath(oldFull), FsPath(newFull));
+            try
+            {
+                store.RelocateTarget(plan.Pair, row.OldPath, row.NewPath, source);
+            }
+            catch
+            {
+                File.Move(FsPath(newFull), FsPath(oldFull));
+                throw;
+            }
+            Report(row);
+        }
+
+        // 2. Relocate directories in state and ensure target directory exists
+        foreach (var (row, source, _) in plan.Work.Where(w => w.State.Kind == EntryKind.Directory)
+                     .OrderBy(w => w.Row.OldPath.Length))
+        {
+            var newFull = Path.Combine(plan.TargetRoot, row.NewPath);
+            Directory.CreateDirectory(FsPath(newFull));
+            store.RelocateTarget(plan.Pair, row.OldPath, row.NewPath, source);
+            Report(row);
+        }
+
+        // 3. Clean up empty old directories from deepest to shallowest
+        foreach (var (row, _, _) in plan.Work.Where(w => w.State.Kind == EntryKind.Directory)
+                     .OrderByDescending(w => w.Row.OldPath.Length))
+        {
+            var actualOld = ResolvePhysicalPath(row.OldPath);
+            var oldFull = Path.Combine(plan.TargetRoot, actualOld);
+            var newFull = Path.Combine(plan.TargetRoot, row.NewPath);
+            if (Directory.Exists(FsPath(oldFull)) &&
+                !string.Equals(oldFull, newFull, StringComparison.OrdinalIgnoreCase) &&
+                !Directory.EnumerateFileSystemEntries(FsPath(oldFull)).Any())
+            {
+                if (RecycleBin.IsAvailableFor(plan.TargetRoot))
+                    RecycleLongPath(plan.TargetRoot, oldFull, directory: true);
+                else
+                    Directory.Delete(FsPath(oldFull));
+            }
+        }
     }
 
     public static void WriteCsv(Plan plan, string reportPath)

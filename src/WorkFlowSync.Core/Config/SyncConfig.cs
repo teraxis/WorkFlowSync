@@ -305,7 +305,7 @@ public sealed class FolderPair
 
     /// <summary>
     /// When true, long file paths exceeding <see cref="MaxPathLength"/> are shortened for Windows and OneDrive compatibility
-    /// with deterministic hash suffixes to avoid collisions, preserving file mapping across runs.
+    /// with readable names and numeric collision suffixes, preserving file mapping across runs.
     /// </summary>
     public bool ShortenLongPaths { get; set; }
 

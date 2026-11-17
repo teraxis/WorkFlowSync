@@ -18,10 +18,48 @@ public sealed class TargetRepairTests : IDisposable
     }
 
     [Fact]
+    public void Repair_previews_moving_a_safe_length_legacy_hash_copy_to_a_readable_name()
+    {
+        var original = new string('С', 70) + ".pdf";
+        var legacy = "ССС_#12345678.pdf";
+        var now = DateTimeOffset.UtcNow;
+        var source = new Dictionary<string, ScanEntry>
+        {
+            [original] = new() { RelativePath = original, Kind = EntryKind.File, Size = 5, MtimeUtc = now }
+        };
+        var target = new Dictionary<string, ScanEntry>
+        {
+            [legacy] = new() { RelativePath = legacy, Kind = EntryKind.File, Size = 5, MtimeUtc = now }
+        };
+        var state = new Dictionary<string, StateEntry>
+        {
+            [legacy] = new()
+            {
+                PairName = "pair",
+                RelativePath = legacy,
+                TargetPath = legacy,
+                RemoteId = original,
+                Kind = EntryKind.File,
+                Status = EntryStatus.Active,
+                FirstSeenUtc = now,
+                CopiedSize = 5,
+                CopiedMtimeUtc = now
+            }
+        };
+
+        var plan = TargetRepair.Build("pair", _root, _root.Length + 40, source, target, state);
+        var move = Assert.Single(plan.Rows, row => row.Action == "move");
+
+        Assert.Equal(legacy, move.OldPath);
+        Assert.DoesNotContain("_#", move.NewPath);
+        Assert.True(Path.Combine(_root, move.NewPath).Length <= _root.Length + 40);
+    }
+
+    [Fact]
     public void Unmappable_file_becomes_a_plan_conflict_without_hiding_safe_work()
     {
-        var targetRoot = @"C:\" + new string('R', 225);
-        var safe = "safe.txt";
+        var targetRoot = @"C:\" + new string('R', 230);
+        var safe = "ok";
         var impossible = new string('L', 80) + ".xlsx";
         var source = new Dictionary<string, ScanEntry>
         {
@@ -116,7 +154,7 @@ public sealed class TargetRepairTests : IDisposable
     [Fact]
     public void Widespread_mapping_failures_block_repair_before_any_write()
     {
-        var targetRoot = @"C:\" + new string('R', 225);
+        var targetRoot = @"C:\" + new string('R', 230);
         var source = Enumerable.Range(0, 101).ToDictionary(i => $"long-file-{i:D3}.txt",
             i => new ScanEntry { RelativePath = $"long-file-{i:D3}.txt", Kind = EntryKind.File });
         var plan = TargetRepair.Build("pair", targetRoot, 240, source,

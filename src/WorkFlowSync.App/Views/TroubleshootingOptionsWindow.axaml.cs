@@ -4,7 +4,11 @@ using WorkFlowSync.Core.I18n;
 
 namespace WorkFlowSync.App.Views;
 
-public sealed record TroubleshootingOptions(bool RepairPaths, bool AuditMissing, bool RestoreMissing);
+public sealed record TroubleshootingOptions(
+    bool RepairPaths,
+    bool AuditMissing,
+    bool RestoreMissing,
+    bool RecoverLegacyHashes = false);
 
 public partial class TroubleshootingOptionsWindow : Window
 {
@@ -22,6 +26,11 @@ public partial class TroubleshootingOptionsWindow : Window
         window.PathsCheck.IsChecked = mirror && shortenEnabled && repairRequired;
         window.PathsUnavailableText.Text = I18n.T(mirror ? "troubleshoot.paths_enable_shortening" : "troubleshoot.mirror_only");
         window.PathsUnavailableText.IsVisible = !window.PathsCheck.IsEnabled;
+        window.LegacyHashesCheck.Content = I18n.T("troubleshoot.legacy_hashes");
+        window.LegacyHashesCheck.IsEnabled = mirror && shortenEnabled;
+        window.LegacyHashesCheck.IsChecked = false;
+        window.LegacyHashesUnavailableText.Text = I18n.T(mirror ? "troubleshoot.paths_enable_shortening" : "troubleshoot.mirror_only");
+        window.LegacyHashesUnavailableText.IsVisible = !window.LegacyHashesCheck.IsEnabled;
         window.AuditCheck.Content = I18n.T("troubleshoot.audit");
         window.AuditCheck.IsEnabled = mirror;
         window.AuditCheck.IsChecked = false;
@@ -42,7 +51,9 @@ public partial class TroubleshootingOptionsWindow : Window
     private void UpdateContinue()
     {
         if (ContinueButton is null) return;
-        ContinueButton.IsEnabled = PathsCheck?.IsChecked == true || AuditCheck?.IsChecked == true ||
+        ContinueButton.IsEnabled = PathsCheck?.IsChecked == true ||
+            LegacyHashesCheck?.IsChecked == true ||
+            AuditCheck?.IsChecked == true ||
             RestoreCheck?.IsChecked == true;
     }
 
@@ -51,8 +62,9 @@ public partial class TroubleshootingOptionsWindow : Window
     private void OnContinue(object? sender, RoutedEventArgs e)
     {
         var paths = PathsCheck.IsEnabled && PathsCheck.IsChecked == true;
+        var legacy = LegacyHashesCheck.IsEnabled && LegacyHashesCheck.IsChecked == true;
         var restore = RestoreCheck.IsChecked == true;
         var audit = AuditCheck.IsChecked == true || restore;
-        Close(paths || audit ? new TroubleshootingOptions(paths, audit, restore) : null);
+        Close(paths || legacy || audit ? new TroubleshootingOptions(paths, audit, restore, legacy) : null);
     }
 }

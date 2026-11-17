@@ -563,7 +563,7 @@ public sealed class SyncExecutor
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var dstFileName = Path.GetFileName(dst);
         var tmp = System.Text.Encoding.UTF8.GetByteCount(dstFileName) > PathShortener.MaxSegmentUtf8Bytes && !string.IsNullOrEmpty(dir)
-            ? Path.Combine(dir, $".~wfs-{PathShortener.ComputeHash(dstFileName, 12)}.wfs-tmp")
+            ? Path.Combine(dir, $".~wfs-{Guid.NewGuid().ToString("N")[..12]}.wfs-tmp")
             : dst + ".wfs-tmp";
         if (neverOverwrite && !string.IsNullOrEmpty(dir))
             tmp = Path.Combine(dir, $".~wfs-recovery-{Guid.NewGuid():N}.tmp");

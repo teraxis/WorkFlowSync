@@ -66,6 +66,50 @@ public sealed class RepairRunner
         }
     }
 
+    public TargetRepair.Plan PrepareLegacyRecovery(IProgress<RepairProgress>? progress = null)
+    {
+        _log.Info($"[{_pair.Name}] legacy recovery start phase=plan");
+        try
+        {
+            using var gate = PassLock.TryAcquire(_configPath, _pair.Name);
+            if (!gate.Acquired) throw new IOException("Another pass is running for this pair");
+            using var store = new StateStore(_statePath, readOnly: true);
+            var plan = TargetRepair.PrepareLegacyRecovery(_pair, _config, store, progress);
+            _log.Info($"[{_pair.Name}] legacy recovery check paths={plan.CheckedPaths} mapping_failures={plan.MappingFailures} blocked={plan.HasWidespreadMappingFailures}");
+            foreach (var row in plan.Rows.Where(r => r.Action == "conflict"))
+                _log.Warn($"[{_pair.Name}] legacy recovery conflict source={row.OldPath} target={row.NewPath} detail={row.Detail}");
+            _log.Info($"[{_pair.Name}] legacy recovery plan rename={plan.RenameFiles} conflicts={plan.Conflicts}");
+            return plan;
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"[{_pair.Name}] legacy recovery ERROR {ex}");
+            throw;
+        }
+    }
+
+    public void ApplyLegacyRecovery(TargetRepair.Plan plan, IProgress<RepairProgress>? progress = null)
+    {
+        _log.Info($"[{_pair.Name}] legacy recovery start phase=apply actions={plan.ActionCount}");
+        try
+        {
+            if (_pair.Enabled) throw new InvalidOperationException("Pause the pair before applying legacy recovery");
+            if (!string.Equals(plan.Pair, _pair.Name, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Legacy recovery plan belongs to another pair");
+            using var gate = PassLock.TryAcquire(_configPath, _pair.Name);
+            if (!gate.Acquired) throw new IOException("Another pass is running for this pair");
+            using var store = new StateStore(_statePath);
+            TargetRepair.ExecuteLegacyRecovery(plan, store, progress,
+                row => _log.Info($"[{_pair.Name}] legacy recovery action={row.Action} old={row.OldPath} new={row.NewPath}"));
+            _log.Info($"[{_pair.Name}] legacy recovery done actions={plan.ActionCount} conflicts={plan.Conflicts}");
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"[{_pair.Name}] legacy recovery ERROR {ex}");
+            throw;
+        }
+    }
+
     public MissingFilePlan PrepareMissing(IProgress<RepairProgress>? progress = null)
     {
         _log.Info($"[{_pair.Name}] recovery audit start");
